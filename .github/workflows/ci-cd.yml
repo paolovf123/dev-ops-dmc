@@ -31,9 +31,7 @@ jobs:
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
       - name: Run tests
-        run: |
-          echo "Running tests..."
-          python -m pytest tests/ -v --tb=short 2>/dev/null || echo "No tests found yet - pipeline is ready"
+        run: python -m pytest tests/ -v --tb=short
 
       - name: Build check
         run: |
