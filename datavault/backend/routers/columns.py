@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from database import get_db
@@ -21,14 +21,27 @@ async def _get_dataset(dataset_id: uuid.UUID, db: AsyncSession):
 @router.get("", response_model=list[ColumnOut])
 async def list_columns(
     dataset_id: uuid.UUID,
+    response: Response,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(200, le=500),
     _: User = Depends(require_viewer),
     db: AsyncSession = Depends(get_db),
 ):
     await _get_dataset(dataset_id, db)
+    from sqlalchemy import func as sqlfunc
+    total_result = await db.execute(
+        select(sqlfunc.count()).where(ColumnDefinition.dataset_id == dataset_id)
+    )
+    total = total_result.scalar_one()
+    response.headers["X-Total-Count"] = str(total)
+    response.headers["Access-Control-Expose-Headers"] = "X-Total-Count"
+
     result = await db.execute(
         select(ColumnDefinition)
         .where(ColumnDefinition.dataset_id == dataset_id)
         .order_by(ColumnDefinition.position)
+        .offset(skip)
+        .limit(limit)
     )
     return result.scalars().all()
 

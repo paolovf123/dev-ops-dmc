@@ -22,11 +22,13 @@ export function useRealtimeSync(datasetId: string | undefined) {
     function connect() {
       if (!active) return;
       const token = localStorage.getItem("dv_token") ?? "";
-      const url = `${WS_BASE}/ws/${datasetId}${token ? `?token=${token}` : ""}`;
+      const url = `${WS_BASE}/ws/${datasetId}`;
       const ws = new WebSocket(url);
       wsRef.current = ws;
 
       ws.onopen = () => {
+        // Send token as first message for authentication
+        if (token) ws.send(token);
         if (active) setConnected(true);
         // Heartbeat every 25s to keep the connection alive through proxies
         const ping = setInterval(() => {

@@ -6,7 +6,7 @@ from typing import Optional
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status, Query
+from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -39,11 +39,19 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
+def decode_token(token: str) -> dict | None:
+    """Decode and validate a JWT token. Returns payload dict or None."""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload if payload.get("sub") else None
+    except JWTError:
+        return None
+
+
 async def _resolve_token(
     header_token: Optional[str] = Depends(oauth2_scheme),
-    ws_token: Optional[str] = Query(None, alias="token"),  # for WebSocket
 ) -> Optional[str]:
-    return header_token or ws_token
+    return header_token
 
 
 async def get_current_user(

@@ -144,7 +144,9 @@ export default function DatasetView() {
       const sourceRecs = sourceQueries[srcIdx]?.data ?? [];
       const lookup = new Map(
         sourceRecs.map((r) => [
-          String(r.data[def.sourcePkKey] ?? ""),
+          def.sourcePkKey === "__id__" || def.sourcePkKey === "id"
+            ? r.id
+            : String(r.data[def.sourcePkKey] ?? ""),
           String(r.data[def.displayKey] ?? ""),
         ])
       );

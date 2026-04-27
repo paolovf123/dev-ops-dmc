@@ -43,6 +43,20 @@ export default function CellEditor({ column, value, onCommit, onCancel }: Props)
     background: "var(--color-surface)",
   };
 
+  if (column.data_type === "boolean") {
+    const boolVal = draft === true || String(draft).toLowerCase() === "true";
+    return (
+      <select ref={ref} value={boolVal ? "true" : "false"}
+        onChange={(e) => { const v = e.target.value === "true"; setDraft(v); onCommit(v); }}
+        onBlur={() => onCommit(draft)}
+        onKeyDown={handleKey}
+        style={style}>
+        <option value="true">Sí</option>
+        <option value="false">No</option>
+      </select>
+    );
+  }
+
   if (column.data_type === "enum") {
     return (
       <select ref={ref} value={String(draft)}

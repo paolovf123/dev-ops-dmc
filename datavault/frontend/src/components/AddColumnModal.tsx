@@ -7,10 +7,11 @@ interface Props {
 }
 
 const TYPE_OPTIONS: { value: ColumnDefinition["data_type"]; label: string; icon: string; desc: string; color: string }[] = [
-  { value: "text",   label: "Texto",   icon: "Aa", desc: "Nombres, descripciones",  color: "#64748B" },
-  { value: "number", label: "Número",  icon: "#",  desc: "Cantidades, importes",    color: "#2563EB" },
-  { value: "date",   label: "Fecha",   icon: "▦",  desc: "Fechas y horarios",       color: "#7C3AED" },
-  { value: "enum",   label: "Lista",   icon: "≡",  desc: "Opciones predefinidas",   color: "#D97706" },
+  { value: "text",    label: "Texto",    icon: "Aa", desc: "Nombres, descripciones",  color: "#64748B" },
+  { value: "number",  label: "Número",   icon: "#",  desc: "Cantidades, importes",    color: "#2563EB" },
+  { value: "date",    label: "Fecha",    icon: "▦",  desc: "Fechas y horarios",       color: "#7C3AED" },
+  { value: "enum",    label: "Lista",    icon: "≡",  desc: "Opciones predefinidas",   color: "#D97706" },
+  { value: "boolean", label: "Booleano", icon: "✓",  desc: "Sí / No, verdadero / falso", color: "#059669" },
 ];
 
 export default function AddColumnModal({ onSave, onClose }: Props) {

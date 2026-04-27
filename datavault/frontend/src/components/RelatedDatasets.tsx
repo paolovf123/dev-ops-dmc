@@ -36,7 +36,7 @@ function RelCard({
           {isLoading
             ? <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>cargando...</span>
             : count !== null
-              ? <span className="related-count-badge">{count} {count === 1 ? "registro" : "registros"}</span>
+              ? <span className="related-count-badge">{count} {(count as number) === 1 ? "registro" : "registros"}</span>
               : null}
         </div>
       </div>
@@ -164,7 +164,7 @@ export default function RelatedDatasets({ currentDatasetId, currentDatasetName, 
               <div className="related-grid">
                 {parentRels.map(({ ds, fkKey }, i) => (
                   <RelCard key={ds.id} name={ds.name} fkKey={fkKey}
-                    count={recQueries[i]?.data?.length ?? null}
+                    count={recQueries[i]?.data ?? null}
                     isLoading={!!recQueries[i]?.isLoading}
                     direction="parent"
                     onClick={() => navigate(`/datasets/${ds.id}`)} />
@@ -183,7 +183,7 @@ export default function RelatedDatasets({ currentDatasetId, currentDatasetName, 
               <div className="related-grid">
                 {childRels.map(({ ds, fkKey }, i) => (
                   <RelCard key={ds.id} name={ds.name} fkKey={fkKey}
-                    count={recQueries[parentRels.length + i]?.data?.length ?? null}
+                    count={recQueries[parentRels.length + i]?.data ?? null}
                     isLoading={!!recQueries[parentRels.length + i]?.isLoading}
                     direction="child"
                     onClick={() => navigate(`/datasets/${ds.id}`)} />

@@ -1,5 +1,6 @@
-from __future__ import annotations
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from database import get_db
@@ -13,12 +14,14 @@ from models import ChangeHistory, Record, Dataset
 import uuid
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+limiter = Limiter(key_func=get_remote_address)
 
 VALID_ROLES = {"admin", "editor", "viewer"}
 
 
 @router.post("/register", response_model=Token, status_code=201)
-async def register(body: UserRegister, db: AsyncSession = Depends(get_db)):
+@limiter.limit("5/minute")
+async def register(request: Request, body: UserRegister, db: AsyncSession = Depends(get_db)):
     # Check email unique
     existing = await db.execute(select(User).where(User.email == body.email.lower()))
     if existing.scalar_one_or_none():
@@ -43,7 +46,8 @@ async def register(body: UserRegister, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
-async def login(body: UserLogin, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def login(request: Request, body: UserLogin, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == body.email.lower()))
     user = result.scalar_one_or_none()
     if not user or not verify_password(body.password, user.hashed_password):

@@ -10,7 +10,7 @@ export interface ColumnDefinition {
   dataset_id: string;
   name: string;
   field_key: string;
-  data_type: "text" | "number" | "date" | "enum";
+  data_type: "text" | "number" | "date" | "enum" | "boolean";
   rules: {
     required?: boolean;
     min?: number;

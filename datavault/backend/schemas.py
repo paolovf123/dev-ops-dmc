@@ -45,6 +45,11 @@ class DatasetCreate(BaseModel):
     description: str | None = None
 
 
+class DatasetUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
 class DatasetOut(BaseModel):
     id: uuid.UUID
     name: str

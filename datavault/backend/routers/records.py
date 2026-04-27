@@ -49,6 +49,10 @@ def _validate(data: dict, columns: list[ColumnDefinition], skip_required: bool =
             if value not in options:
                 errors.append(f"'{col.name}' must be one of {options}")
 
+        if col.data_type == "boolean":
+            if not isinstance(value, bool) and str(value).lower() not in ("true", "false", "1", "0"):
+                errors.append(f"'{col.name}' must be true or false")
+
     return errors
 
 

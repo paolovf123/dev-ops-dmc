@@ -1,16 +1,25 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
+import os
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from routers import datasets, columns, records
 from routers.auth import router as auth_router
 from routers.permissions import router as permissions_router
+from auth import decode_token
 import json
+
+
+# ── Rate limiter ──────────────────────────────────────────────────────────────
+
+limiter = Limiter(key_func=get_remote_address)
 
 
 # ── WebSocket connection manager ──────────────────────────────────────────────
 
 class ConnectionManager:
     def __init__(self):
-        # dataset_id (str) → set of active WebSocket connections
         self._conns: dict[str, set[WebSocket]] = {}
 
     async def connect(self, dataset_id: str, ws: WebSocket):
@@ -37,10 +46,14 @@ manager = ConnectionManager()
 # ── App ───────────────────────────────────────────────────────────────────────
 
 app = FastAPI(title="DataVault API")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+allowed_origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -61,17 +74,22 @@ async def health():
 # ── WebSocket endpoint ────────────────────────────────────────────────────────
 
 @app.websocket("/ws/{dataset_id}")
-async def ws_endpoint(
-    websocket: WebSocket,
-    dataset_id: str,
-    token: str | None = Query(None),
-):
-    # Validate token before accepting (optional — prevents unauthorized listening)
-    # For now we accept any connection; auth happens at the HTTP layer
-    await manager.connect(dataset_id, websocket)
+async def ws_endpoint(websocket: WebSocket, dataset_id: str):
+    await websocket.accept()
+    # First message must be the JWT token
+    try:
+        first = await websocket.receive_text()
+        payload = decode_token(first.strip())
+        if not payload:
+            await websocket.close(code=4001)
+            return
+    except Exception:
+        await websocket.close(code=4001)
+        return
+
+    manager._conns.setdefault(dataset_id, set()).add(websocket)
     try:
         while True:
-            # Keep the connection alive; clients send pings as plain text
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(dataset_id, websocket)

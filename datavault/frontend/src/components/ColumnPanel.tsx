@@ -64,13 +64,13 @@ export default function ColumnPanel({
     const srcKw = keyword(selectedDs?.name ?? "");
     const fwdLocal = columns.find((c) => c.field_key === `id_${srcKw}`);
     if (fwdLocal) {
-      const srcPk = srcColumns.find((c) => c.field_key === "id") ?? srcColumns[0];
-      return { localKey: fwdLocal.field_key, srcKey: srcPk?.field_key ?? "id", type: "forward" as const };
+      // FK local stores the source record's UUID (r.id), not a data field
+      return { localKey: fwdLocal.field_key, srcKey: "__id__", type: "forward" as const };
     }
     const revSrc = srcColumns.find((c) => c.field_key === `id_${curKw}` || c.field_key.includes(curKw));
     if (revSrc) {
-      const localPk = columns.find((c) => c.field_key === "id") ?? columns[0];
-      return { localKey: localPk?.field_key ?? "id", srcKey: revSrc.field_key, type: "reverse" as const };
+      // Current record is identified by its own UUID (r.id), not a data field
+      return { localKey: "__id__", srcKey: revSrc.field_key, type: "reverse" as const };
     }
     return null;
   }, [selectedDsId, srcColumns, columns, currentDatasetName, selectedDs]);
@@ -249,9 +249,13 @@ export default function ColumnPanel({
                           ✓ Vínculo detectado automáticamente
                         </div>
                         <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-                          <code style={{ background: "var(--pm-green-100)", padding: "1px 5px", borderRadius: 3 }}>{effectiveLocalKey}</code>
+                          <code style={{ background: "var(--pm-green-100)", padding: "1px 5px", borderRadius: 3 }}>
+                            {effectiveLocalKey === "__id__" ? "id (registro)" : effectiveLocalKey}
+                          </code>
                           {" ↔ "}
-                          <code style={{ background: "var(--pm-green-100)", padding: "1px 5px", borderRadius: 3 }}>{effectiveSrcKey}</code>
+                          <code style={{ background: "var(--pm-green-100)", padding: "1px 5px", borderRadius: 3 }}>
+                            {effectiveSrcKey === "__id__" ? "id (registro)" : effectiveSrcKey}
+                          </code>
                         </div>
                         <button onClick={() => setShowOverride(true)}
                           style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11,
@@ -271,6 +275,7 @@ export default function ColumnPanel({
                           <span className="panel-form-label">Clave local</span>
                           <select value={overrideLocalKey} onChange={(e) => setOverrideLocalKey(e.target.value)}>
                             <option value="">Seleccionar...</option>
+                            <option value="__id__">(ID del registro)</option>
                             {columns.map((c) => <option key={c.id} value={c.field_key}>{c.name}</option>)}
                           </select>
                         </div>
@@ -278,6 +283,7 @@ export default function ColumnPanel({
                           <span className="panel-form-label">Clave en "{selectedDs?.name}"</span>
                           <select value={overrideSrcKey} onChange={(e) => setOverrideSrcKey(e.target.value)}>
                             <option value="">Seleccionar...</option>
+                            <option value="__id__">(ID del registro)</option>
                             {srcColumns.map((c) => <option key={c.id} value={c.field_key}>{c.name}</option>)}
                           </select>
                         </div>

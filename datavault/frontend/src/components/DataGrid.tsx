@@ -400,7 +400,11 @@ export default function DataGrid({
                           onCancel={() => { setEditing(null); setFocused({ recordId: rec.id, fieldKey: col.field_key }); }} />
                       ) : (
                         <span className="cell-inner">
-                          {cellVal != null ? String(cellVal) : "—"}
+                          {col.data_type === "boolean" && cellVal != null
+                            ? (cellVal === true || String(cellVal).toLowerCase() === "true"
+                                ? <span style={{ color: "var(--pm-green-600)", fontWeight: 600 }}>Sí</span>
+                                : <span style={{ color: "var(--color-text-muted)" }}>No</span>)
+                            : cellVal != null ? String(cellVal) : "—"}
                           {validationError && (
                             <span className="cell-warn" title={validationError}>⚠</span>
                           )}
@@ -412,7 +416,7 @@ export default function DataGrid({
 
                 {extraColumns.map((ec) => (
                   <td key={ec.uid} className="td-joined">
-                    {ec.lookup.get(String(rec.data[ec.fkKey] ?? "")) ?? <span style={{ color: "var(--color-text-muted)" }}>—</span>}
+                    {ec.lookup.get(ec.fkKey === "__id__" ? rec.id : String(rec.data[ec.fkKey] ?? "")) ?? <span style={{ color: "var(--color-text-muted)" }}>—</span>}
                   </td>
                 ))}
 
