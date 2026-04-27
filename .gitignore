@@ -60,4 +60,4 @@ build/
 *.zip
 *.tar.gz
 
-.claude
+.claude/settings.local.json
