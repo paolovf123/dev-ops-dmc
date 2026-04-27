@@ -26,6 +26,8 @@ interface Props {
   onDeleteColumn?: (columnId: string) => void;
   onEditColumn?: (column: ColumnDefinition) => void;
   onReorderColumns?: (fromKey: string, toKey: string) => void;
+  onReorderExtraColumns?: (fromUid: string, toUid: string) => void;
+  onReorderFormulaCols?: (fromUid: string, toUid: string) => void;
   onRemoveFormula?: (uid: string) => void;
   onShowHistory?: (recordId: string) => void;
   selectedIds?: Set<string>;
@@ -66,7 +68,7 @@ export default function DataGrid({
   columns, records, extraColumns = [], formulaCols = [],
   showFilterRow, columnFilters = {}, onFilterChange,
   onCellChange, onAddRow, onDeleteRow, onDeleteColumn, onEditColumn,
-  onReorderColumns, onRemoveFormula,
+  onReorderColumns, onReorderExtraColumns, onReorderFormulaCols, onRemoveFormula,
   onShowHistory,
   selectedIds, onSelectionChange,
 }: Props) {
@@ -300,16 +302,59 @@ export default function DataGrid({
               ))}
 
               {extraColumns.map((ec) => (
-                <th key={ec.uid} className="th-joined">
-                  🔗 {ec.header}
+                <th key={ec.uid}
+                  className={`th-joined${dragOverKey === `ec:${ec.uid}` ? " th-drag-over" : ""}`}
+                  draggable={!!onReorderExtraColumns}
+                  onDragStart={onReorderExtraColumns ? (e) => {
+                    dragColKey.current = `ec:${ec.uid}`;
+                    e.dataTransfer.effectAllowed = "move";
+                  } : undefined}
+                  onDragOver={onReorderExtraColumns ? (e) => { e.preventDefault(); setDragOverKey(`ec:${ec.uid}`); } : undefined}
+                  onDragLeave={onReorderExtraColumns ? () => setDragOverKey(null) : undefined}
+                  onDrop={onReorderExtraColumns ? (e) => {
+                    e.preventDefault(); setDragOverKey(null);
+                    const from = dragColKey.current;
+                    if (from && from !== `ec:${ec.uid}` && from.startsWith("ec:"))
+                      onReorderExtraColumns(from.slice(3), ec.uid);
+                    dragColKey.current = null;
+                  } : undefined}
+                  onDragEnd={onReorderExtraColumns ? () => { dragColKey.current = null; setDragOverKey(null); } : undefined}
+                >
+                  <span className="th-inner">
+                    {onReorderExtraColumns && (
+                      <span className="col-drag-handle" title="Arrastrar para reordenar">⠿</span>
+                    )}
+                    <span>🔗 {ec.header}</span>
+                  </span>
                   <button onClick={ec.onRemove} title="Quitar columna vinculada" className="col-del-btn"
                     style={{ color: "var(--pm-orange-600)" }}>×</button>
                 </th>
               ))}
 
               {formulaCols.map((fc) => (
-                <th key={fc.uid} className="th-formula" title={`=${fc.formula}`}>
+                <th key={fc.uid}
+                  className={`th-formula${dragOverKey === `fc:${fc.uid}` ? " th-drag-over" : ""}`}
+                  title={`=${fc.formula}`}
+                  draggable={!!onReorderFormulaCols}
+                  onDragStart={onReorderFormulaCols ? (e) => {
+                    dragColKey.current = `fc:${fc.uid}`;
+                    e.dataTransfer.effectAllowed = "move";
+                  } : undefined}
+                  onDragOver={onReorderFormulaCols ? (e) => { e.preventDefault(); setDragOverKey(`fc:${fc.uid}`); } : undefined}
+                  onDragLeave={onReorderFormulaCols ? () => setDragOverKey(null) : undefined}
+                  onDrop={onReorderFormulaCols ? (e) => {
+                    e.preventDefault(); setDragOverKey(null);
+                    const from = dragColKey.current;
+                    if (from && from !== `fc:${fc.uid}` && from.startsWith("fc:"))
+                      onReorderFormulaCols(from.slice(3), fc.uid);
+                    dragColKey.current = null;
+                  } : undefined}
+                  onDragEnd={onReorderFormulaCols ? () => { dragColKey.current = null; setDragOverKey(null); } : undefined}
+                >
                   <span className="th-inner">
+                    {onReorderFormulaCols && (
+                      <span className="col-drag-handle" title="Arrastrar para reordenar">⠿</span>
+                    )}
                     <span><span style={{ marginRight: 4 }}>ƒ</span>{fc.name}</span>
                   </span>
                   {onRemoveFormula && (

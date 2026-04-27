@@ -247,6 +247,28 @@ export default function DatasetView() {
     setColumnFilters((prev) => ({ ...prev, [key]: val }));
   const handleAddJoin = (def: Omit<JoinedColDef, "uid">) =>
     setJoinedCols((prev) => [...prev, { ...def, uid: crypto.randomUUID() }]);
+
+  const handleReorderExtraColumns = (fromUid: string, toUid: string) =>
+    setJoinedCols((prev) => {
+      const arr = [...prev];
+      const from = arr.findIndex((j) => j.uid === fromUid);
+      const to   = arr.findIndex((j) => j.uid === toUid);
+      if (from === -1 || to === -1) return prev;
+      const [item] = arr.splice(from, 1);
+      arr.splice(to, 0, item);
+      return arr;
+    });
+
+  const handleReorderFormulaCols = (fromUid: string, toUid: string) =>
+    setFormulaCols((prev) => {
+      const arr = [...prev];
+      const from = arr.findIndex((f) => f.uid === fromUid);
+      const to   = arr.findIndex((f) => f.uid === toUid);
+      if (from === -1 || to === -1) return prev;
+      const [item] = arr.splice(from, 1);
+      arr.splice(to, 0, item);
+      return arr;
+    });
   const handleAddFormula = (def: Omit<FormulaColDef, "uid">) =>
     setFormulaCols((prev) => [...prev, { ...def, uid: crypto.randomUUID() }]);
   const toggleFilters = () => { setShowFilterRow((v) => { if (v) setColumnFilters({}); return !v; }); };
@@ -694,6 +716,8 @@ export default function DatasetView() {
               onDeleteColumn={isAdmin ? (colId) => delColMut.mutate(colId) : undefined}
               onEditColumn={isAdmin ? setEditingColumn : undefined}
               onReorderColumns={isAdmin ? (fromKey, toKey) => reorderColMut.mutate({ fromKey, toKey }) : undefined}
+              onReorderExtraColumns={handleReorderExtraColumns}
+              onReorderFormulaCols={handleReorderFormulaCols}
               onRemoveFormula={(uid) => setFormulaCols((prev) => prev.filter((f) => f.uid !== uid))}
               onShowHistory={setHistoryRecordId}
               selectedIds={selectedIds}
