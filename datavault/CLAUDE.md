@@ -7,12 +7,14 @@ Gestor de datos tabulares dinámicos (similar a Airtable). Permite crear dataset
 | Capa | Tecnología |
 |------|-----------|
 | Backend | Python 3.11 + FastAPI (async) |
-| Base de datos | PostgreSQL 16 (columnas dinámicas via JSONB) |
+| Base de datos | PostgreSQL 16 (RDS) + Redis (ElastiCache) |
 | Frontend | React 19 + Vite + TypeScript |
 | ORM / Migraciones | SQLAlchemy async + Alembic |
 | Auth | JWT (python-jose) + bcrypt/passlib |
-| Rate limiting | slowapi |
-| Contenerización | Docker Compose + Docker Desktop (Windows) |
+| Rate limiting | slowapi (Redis backend) |
+| Nube / Infra | AWS (ECS Fargate, S3, CloudFront, ALB) |
+| IaC | Terraform |
+| CI/CD | GitHub Actions (OIDC auth) |
 | Tests | pytest-asyncio + httpx + SQLite in-memory |
 
 ## Cómo levantar los servicios
@@ -223,7 +225,7 @@ ALLOWED_ORIGINS=http://localhost:5173
 
 ## Próximos pasos
 
-- [ ] Deploy a AWS ECS + RDS (o Railway/Render para demo rápido)
+- [x] Deploy a AWS ECS Fargate + RDS + S3 + CloudFront vía Terraform
 - [ ] Índice GIN en `records.data` cuando el volumen crezca
 - [ ] Permisos granulares por dataset desde la UI
 - [ ] Notificaciones en tiempo real por WebSocket para todos los cambios

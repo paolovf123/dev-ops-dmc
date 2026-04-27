@@ -9,7 +9,8 @@ DataVault es una aplicación web tipo Airtable que permite crear datasets con co
 | Capa | Tecnología | Version |
 |------|-----------|---------|
 | Backend | Python + FastAPI (async) | 3.11 / 0.115 |
-| Base de datos | PostgreSQL | 16 |
+| Base de datos | PostgreSQL 16 (RDS) | 16 |
+| Caché / WebSockets | ElastiCache Redis | 7.1 |
 | ORM / Migraciones | SQLAlchemy async + Alembic | 2.0 / 1.13 |
 | Auth | JWT (python-jose) + bcrypt (passlib) | 3.3 / 4.0.1 |
 | WebSockets | Starlette built-in | — |
@@ -17,7 +18,8 @@ DataVault es una aplicación web tipo Airtable que permite crear datasets con co
 | HTTP client | Axios | 1.15 |
 | State / cache | TanStack Query | 5 |
 | Charts | Recharts | 3 |
-| Contenerización | Docker Compose (WSL2 Ubuntu 24.04) | — |
+| Infraestructura | Terraform + AWS ECS Fargate + CloudFront + S3 | — |
+| CI/CD | GitHub Actions + OIDC | — |
 
 ---
 
@@ -205,13 +207,13 @@ WS     /ws/{dataset_id}?token=<jwt>
 
 ## CI/CD
 
-El pipeline de GitHub Actions (`.github/workflows/ci-cd.yml`) ejecuta:
+El pipeline de GitHub Actions (`.github/workflows/ci-cd.yml`) despliega la infraestructura en AWS (ECS, S3, CloudFront) con *zero-downtime* y autenticación sin contraseñas (OIDC):
 
 | Evento | Job |
 |--------|-----|
 | Push a `main` o `develop`, PR a `main` | `build` — lint (flake8) + tests (pytest) |
-| Push a `develop` | `deploy-staging` |
-| Push a `main` | `deploy-production` |
+| Push a `develop` | `deploy-staging` — build multi-stage, sync a S3/CloudFront, ECR push, Alembic one-shot task, ECS update |
+| Push a `main` | `deploy-production` — despliegue a entorno de producción |
 
 ---
 
@@ -255,9 +257,9 @@ docker compose exec db pg_dump -U dev --no-owner datavault > backup_$(date +%Y%m
 
 ## Pendientes
 
-- [ ] CI/CD con deploy real (AWS ECS + RDS o equivalente)
+- [x] CI/CD con deploy real (AWS ECS + RDS, S3, CloudFront, IaC con Terraform)
 - [ ] Tests de integracion para endpoints FastAPI
 - [ ] Rate limiting en `/auth/login` y `/auth/register`
 - [ ] Healthcheck en `docker-compose.yml` para el servicio `db`
-- [ ] Drag & drop para reordenar columnas (`@dnd-kit`)
-- [ ] Variables de entorno en `.env` (no en `docker-compose.yml`)
+- [x] Drag & drop unificado para reordenar cualquier tipo de columna
+- [x] Secretos guardados de forma segura en AWS SSM Parameter Store

@@ -1,0 +1,27 @@
+# Stage 1: Build y dependencias
+FROM python:3.11-slim AS builder
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --user --no-cache-dir -r requirements.txt
+
+# Stage 2: Imagen final de producción
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Crear un usuario no-root por seguridad
+RUN addgroup --system appgroup && adduser --system --group appuser
+
+# Copiar dependencias desde el builder
+COPY --from=builder /root/.local /home/appuser/.local
+ENV PATH=/home/appuser/.local/bin:$PATH
+
+# Copiar el código fuente y dar permisos
+COPY --chown=appuser:appgroup . .
+
+USER appuser
+EXPOSE 8000
+
+# Ejecutar Uvicorn con varios workers, sin --reload y respetando proxy-headers (para el ALB)
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--proxy-headers"]
