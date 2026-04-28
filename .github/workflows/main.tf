@@ -172,6 +172,7 @@ resource "aws_ecr_lifecycle_policy" "backend" {
 # ------------------------------------------------------------------------------
 resource "aws_s3_bucket" "frontend" {
   bucket = "datavault-frontend-${var.environment}-${data.aws_caller_identity.current.account_id}"
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_public_access_block" "frontend" {
@@ -500,6 +501,14 @@ resource "aws_ecs_task_definition" "backend" {
       { name = "DATABASE_URL", valueFrom = aws_ssm_parameter.database_url.arn },
       { name = "SECRET_KEY", valueFrom = aws_ssm_parameter.secret_key.arn }
     ]
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = "/ecs/datavault-backend-staging"
+        "awslogs-region"        = "us-east-1"
+        "awslogs-stream-prefix" = "ecs"
+      }
+    }
   }])
 }
 
