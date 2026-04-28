@@ -1,7 +1,12 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Text, Integer, ForeignKey, DateTime, Boolean
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import String, Text, Integer, ForeignKey, DateTime, Boolean, JSON
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB as _PG_JSONB
+
+# Usa JSONB en PostgreSQL (índices GIN) y JSON genérico en SQLite (tests)
+import sqlalchemy as sa
+JSONB = sa.types.JSON().with_variant(_PG_JSONB(), "postgresql")
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 
