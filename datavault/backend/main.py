@@ -1,4 +1,5 @@
 import os
+print("DataVault backend starting...")
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
