@@ -39,7 +39,6 @@ export default function CreateDataset() {
   const qc = useQueryClient();
   const [searchParams] = useSearchParams();
 
-  const linkedTo   = searchParams.get("linkedTo")   ?? "";
   const linkedName = searchParams.get("linkedName") ?? "";
 
   const fkPreset: ColDraft | null = linkedName

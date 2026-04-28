@@ -36,7 +36,7 @@ const BOX_COLORS = [
 function normKw(s: string) { return s.toLowerCase().replace(/\s+/g, "_"); }
 function kw(s: string) { const p = normKw(s).split("_"); return p[p.length - 1]; }
 
-interface Dataset { id: string; name: string; description?: string }
+interface Dataset { id: string; name: string; description?: string | null }
 
 // Compact inline SVG map (no column details, just boxes + lines)
 function SchemaPreview({
@@ -373,7 +373,7 @@ export default function DatasetList() {
             {datasets.map((ds, i) => {
               const color = dsColor(ds.name);
               const colCount = colQueries[i]?.data?.length ?? null;
-              const recCount = recQueries[i]?.data?.length ?? null;
+              const recCount = recQueries[i]?.data ?? null;
               const initial = ds.name.charAt(0).toUpperCase();
 
               return (

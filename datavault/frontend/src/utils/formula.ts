@@ -73,7 +73,9 @@ function tokenize(expr: string): Token[] {
 
 class Parser {
   private pos = 0;
-  constructor(private toks: Token[], private ctx: Ctx) {}
+  private toks: Token[];
+  private ctx: Ctx;
+  constructor(toks: Token[], ctx: Ctx) { this.toks = toks; this.ctx = ctx; }
   private cur() { return this.toks[this.pos]; }
   private peek(t: string) { return this.cur().type === t; }
   private eat(t: string) {
@@ -93,10 +95,10 @@ class Parser {
       switch (op) {
         case '==': left = ls === rs ? 1 : 0; break;
         case '!=': left = ls !== rs ? 1 : 0; break;
-        case '<':  left = +left < +right ? 1 : 0; break;
-        case '>':  left = +left > +right ? 1 : 0; break;
-        case '<=': left = +left <= +right ? 1 : 0; break;
-        case '>=': left = +left >= +right ? 1 : 0; break;
+        case '<':  left = +(left ?? 0) < +(right ?? 0) ? 1 : 0; break;
+        case '>':  left = +(left ?? 0) > +(right ?? 0) ? 1 : 0; break;
+        case '<=': left = +(left ?? 0) <= +(right ?? 0) ? 1 : 0; break;
+        case '>=': left = +(left ?? 0) >= +(right ?? 0) ? 1 : 0; break;
       }
     }
     return left;

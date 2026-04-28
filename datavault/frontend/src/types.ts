@@ -24,7 +24,7 @@ export interface ColumnDefinition {
 export interface Record {
   id: string;
   dataset_id: string;
-  data: Record<string, unknown>;
+  data: { [key: string]: unknown };
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

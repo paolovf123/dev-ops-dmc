@@ -10,7 +10,7 @@ interface Props {
 }
 
 const TYPE_COLORS: Record<ColumnDefinition["data_type"], string> = {
-  text: "#64748B", number: "#2563EB", date: "#7C3AED", enum: "#D97706",
+  text: "#64748B", number: "#2563EB", date: "#7C3AED", enum: "#D97706", boolean: "#10B981",
 };
 
 export default function CsvMappingModal({ file, columns, onConfirm, onClose }: Props) {

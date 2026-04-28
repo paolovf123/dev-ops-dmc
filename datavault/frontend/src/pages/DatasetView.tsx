@@ -273,27 +273,6 @@ export default function DatasetView() {
   const handleAddJoin = (def: Omit<JoinedColDef, "uid">) =>
     setJoinedCols((prev) => [...prev, { ...def, uid: crypto.randomUUID() }]);
 
-  const handleReorderExtraColumns = (fromUid: string, toUid: string) =>
-    setJoinedCols((prev) => {
-      const arr = [...prev];
-      const from = arr.findIndex((j) => j.uid === fromUid);
-      const to   = arr.findIndex((j) => j.uid === toUid);
-      if (from === -1 || to === -1) return prev;
-      const [item] = arr.splice(from, 1);
-      arr.splice(to, 0, item);
-      return arr;
-    });
-
-  const handleReorderFormulaCols = (fromUid: string, toUid: string) =>
-    setFormulaCols((prev) => {
-      const arr = [...prev];
-      const from = arr.findIndex((f) => f.uid === fromUid);
-      const to   = arr.findIndex((f) => f.uid === toUid);
-      if (from === -1 || to === -1) return prev;
-      const [item] = arr.splice(from, 1);
-      arr.splice(to, 0, item);
-      return arr;
-    });
   const handleAddFormula = (def: Omit<FormulaColDef, "uid">) =>
     setFormulaCols((prev) => [...prev, { ...def, uid: crypto.randomUUID() }]);
   const toggleFilters = () => { setShowFilterRow((v) => { if (v) setColumnFilters({}); return !v; }); };
@@ -766,7 +745,7 @@ export default function DatasetView() {
         )}
 
         {/* Pagination controls */}
-        {viewMode === "grid" && totalRecords > PAGE_SIZE && (
+        {viewMode === "table" && totalRecords > PAGE_SIZE && (
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:12, padding:"0 2px" }}>
             <span style={{ fontSize:12, color:"var(--color-text-muted)" }}>
               Mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, totalRecords)} de {totalRecords} registros
