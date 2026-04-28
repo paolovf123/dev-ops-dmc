@@ -196,12 +196,26 @@ resource "aws_cloudfront_distribution" "frontend" {
   is_ipv6_enabled     = true
   default_root_object = "index.html"
 
+  # Origin 1: S3 (frontend estático)
   origin {
     domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
     origin_id                = "S3-frontend"
     origin_access_control_id = aws_cloudfront_origin_access_control.frontend.id
   }
 
+  # Origin 2: ALB (backend API)
+  origin {
+    domain_name = aws_lb.main.dns_name
+    origin_id   = "ALB-backend"
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "http-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+  }
+
+  # Default behavior: servir frontend desde S3
   default_cache_behavior {
     allowed_methods  = ["GET", "HEAD", "OPTIONS"]
     cached_methods   = ["GET", "HEAD"]
@@ -218,6 +232,58 @@ resource "aws_cloudfront_distribution" "frontend" {
     min_ttl                = 0
     default_ttl            = 3600
     max_ttl                = 86400
+  }
+
+  # Backend API: rutas que se proxean al ALB
+  # Usamos managed policies: CachingDisabled + AllViewer
+  ordered_cache_behavior {
+    path_pattern             = "/auth/*"
+    target_origin_id         = "ALB-backend"
+    allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods           = ["GET", "HEAD"]
+    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # CachingDisabled
+    origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3" # AllViewer
+    viewer_protocol_policy   = "redirect-to-https"
+  }
+
+  ordered_cache_behavior {
+    path_pattern             = "/datasets/*"
+    target_origin_id         = "ALB-backend"
+    allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods           = ["GET", "HEAD"]
+    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
+    origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3"
+    viewer_protocol_policy   = "redirect-to-https"
+  }
+
+  ordered_cache_behavior {
+    path_pattern             = "/permissions/*"
+    target_origin_id         = "ALB-backend"
+    allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods           = ["GET", "HEAD"]
+    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
+    origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3"
+    viewer_protocol_policy   = "redirect-to-https"
+  }
+
+  ordered_cache_behavior {
+    path_pattern             = "/health"
+    target_origin_id         = "ALB-backend"
+    allowed_methods          = ["GET", "HEAD", "OPTIONS"]
+    cached_methods           = ["GET", "HEAD"]
+    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
+    origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3"
+    viewer_protocol_policy   = "redirect-to-https"
+  }
+
+  ordered_cache_behavior {
+    path_pattern             = "/ws/*"
+    target_origin_id         = "ALB-backend"
+    allowed_methods          = ["GET", "HEAD", "OPTIONS"]
+    cached_methods           = ["GET", "HEAD"]
+    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
+    origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3"
+    viewer_protocol_policy   = "redirect-to-https"
   }
 
   # SPA Fallback (React Router)
