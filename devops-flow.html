@@ -1,0 +1,1648 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DataVault — Flujo DevOps Interactivo</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --purple: #bc8cff;
+    --red: #f85149;
+    --teal: #39d353;
+    --yellow: #f0e68c;
+
+    --aws-orange: #FF9900;
+    --github-blue: #2088FF;
+    --docker-blue: #2496ED;
+    --terraform-purple: #7B42BC;
+    --python-blue: #3776AB;
+    --react-cyan: #61DAFB;
+    --postgres-blue: #4169E1;
+    --redis-red: #DC382D;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 40px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  header h1 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  header span {
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  .badge {
+    background: var(--border);
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    min-height: calc(100vh - 65px);
+  }
+
+  /* === CANVAS AREA === */
+  .canvas {
+    padding: 40px;
+    overflow-y: auto;
+    position: relative;
+  }
+
+  .flow-title {
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 32px;
+  }
+
+  /* === STAGE === */
+  .stage {
+    margin-bottom: 12px;
+    position: relative;
+  }
+
+  .stage-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+    padding-left: 4px;
+  }
+
+  .stage-row {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  /* === NODE === */
+  .node {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    min-width: 140px;
+    max-width: 220px;
+    position: relative;
+    user-select: none;
+  }
+
+  .node:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(88, 166, 255, 0.15);
+  }
+
+  .node.active {
+    border-color: var(--accent);
+    background: rgba(88, 166, 255, 0.06);
+    box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
+  }
+
+  .node-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+  }
+
+  .node-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .node-sub {
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+
+  .node-tag {
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 4px;
+    align-self: flex-start;
+    margin-top: 2px;
+    letter-spacing: 0.04em;
+  }
+
+  /* === CONNECTOR === */
+  .connector {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 6px 0;
+    color: var(--muted);
+    font-size: 1.2rem;
+    gap: 8px;
+  }
+
+  .connector-line {
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+    max-width: 60px;
+  }
+
+  .connector-label {
+    font-size: 0.7rem;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  /* === SIDE PANEL === */
+  .panel {
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    padding: 0;
+    overflow-y: auto;
+    position: sticky;
+    top: 65px;
+    height: calc(100vh - 65px);
+  }
+
+  .panel-header {
+    padding: 24px 24px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .panel-header h2 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .panel-header p {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .panel-body {
+    padding: 20px 24px;
+  }
+
+  .panel-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 300px;
+    color: var(--muted);
+    gap: 12px;
+    text-align: center;
+    padding: 24px;
+  }
+
+  .panel-empty .hint-icon {
+    font-size: 2.5rem;
+    opacity: 0.5;
+  }
+
+  .panel-empty p {
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+
+  /* === PANEL CONTENT === */
+  .info-section {
+    margin-bottom: 20px;
+  }
+
+  .info-section h3 {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .info-section p {
+    font-size: 0.85rem;
+    line-height: 1.65;
+    color: #c9d1d9;
+  }
+
+  .step-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .step-list li {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: #c9d1d9;
+  }
+
+  .step-num {
+    background: var(--border);
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .code-block {
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.75rem;
+    line-height: 1.6;
+    overflow-x: auto;
+    color: #e6edf3;
+    margin-top: 8px;
+  }
+
+  .code-comment { color: #8b949e; }
+  .code-keyword { color: #ff7b72; }
+  .code-string { color: #a5d6ff; }
+  .code-value { color: #79c0ff; }
+
+  .tag-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+  }
+
+  .tag {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 4px;
+    background: var(--border);
+    color: var(--muted);
+  }
+
+  .warning-box {
+    background: rgba(210, 153, 34, 0.1);
+    border: 1px solid rgba(210, 153, 34, 0.3);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 0.8rem;
+    color: var(--orange);
+    margin-top: 8px;
+    line-height: 1.5;
+  }
+
+  .success-box {
+    background: rgba(63, 185, 80, 0.1);
+    border: 1px solid rgba(63, 185, 80, 0.3);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 0.8rem;
+    color: var(--green);
+    margin-top: 8px;
+    line-height: 1.5;
+  }
+
+  /* === LEGEND === */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 28px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  /* === FLOW SUMMARY (bottom) === */
+  .flow-summary {
+    margin-top: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+  }
+
+  .flow-summary h3 {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+
+  .timeline {
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .tl-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 90px;
+    flex: 1;
+  }
+
+  .tl-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: var(--bg);
+    position: relative;
+    z-index: 1;
+  }
+
+  .tl-line {
+    width: 100%;
+    height: 2px;
+    background: var(--border);
+    margin-top: -7px;
+  }
+
+  .tl-step:last-child .tl-line { display: none; }
+
+  .tl-label {
+    font-size: 0.65rem;
+    color: var(--muted);
+    text-align: center;
+    margin-top: 6px;
+    line-height: 1.3;
+  }
+
+  .tl-time {
+    font-size: 0.6rem;
+    color: var(--border);
+    margin-top: 2px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span style="font-size:1.4rem">🚀</span>
+  <div>
+    <h1>DataVault — Flujo DevOps</h1>
+  </div>
+  <span class="badge" style="background:rgba(88,166,255,0.15);color:var(--accent)">Interactivo</span>
+  <span style="color:var(--muted);font-size:0.85rem;margin-left:auto">Haz click en cualquier nodo para aprender</span>
+</header>
+
+<div class="layout">
+
+  <!-- ═══════════ CANVAS ═══════════ -->
+  <div class="canvas">
+    <div class="flow-title">Flujo completo: Codigo → Produccion en AWS</div>
+
+    <!-- LEGEND -->
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#2088FF"></div> GitHub / Git</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#2496ED"></div> Docker</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#FF9900"></div> AWS</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#7B42BC"></div> Terraform IaC</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#3776AB"></div> Python / FastAPI</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#61DAFB"></div> React / Frontend</div>
+    </div>
+
+    <!-- STAGE 1: Developer -->
+    <div class="stage">
+      <div class="stage-label">1 — Desarrollador</div>
+      <div class="stage-row">
+        <div class="node" onclick="show('dev-local')" id="n-dev-local">
+          <div class="node-icon">💻</div>
+          <div class="node-name">Entorno local</div>
+          <div class="node-sub">Docker Compose</div>
+          <div class="node-tag" style="background:rgba(36,150,237,0.15);color:#2496ED">Docker</div>
+        </div>
+        <div class="node" onclick="show('git-commit')" id="n-git-commit">
+          <div class="node-icon">📝</div>
+          <div class="node-name">git push</div>
+          <div class="node-sub">branch: develop</div>
+          <div class="node-tag" style="background:rgba(32,136,255,0.15);color:#2088FF">Git</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector">
+      <div class="connector-line"></div>
+      <span>↓</span>
+      <div class="connector-label">webhook → GitHub Actions trigger</div>
+      <div class="connector-line"></div>
+    </div>
+
+    <!-- STAGE 2: CI -->
+    <div class="stage">
+      <div class="stage-label">2 — Integracion Continua (CI)</div>
+      <div class="stage-row">
+        <div class="node" onclick="show('ci-lint')" id="n-ci-lint">
+          <div class="node-icon">🔍</div>
+          <div class="node-name">Lint</div>
+          <div class="node-sub">flake8 E9,F63,F7,F82</div>
+          <div class="node-tag" style="background:rgba(55,118,171,0.15);color:#3776AB">Python</div>
+        </div>
+        <div class="node" onclick="show('ci-test')" id="n-ci-test">
+          <div class="node-icon">🧪</div>
+          <div class="node-name">Tests</div>
+          <div class="node-sub">pytest + SQLite in-memory</div>
+          <div class="node-tag" style="background:rgba(55,118,171,0.15);color:#3776AB">pytest</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector">
+      <div class="connector-line"></div>
+      <span>↓</span>
+      <div class="connector-label">si CI pasa → deploy-staging</div>
+      <div class="connector-line"></div>
+    </div>
+
+    <!-- STAGE 3: Auth -->
+    <div class="stage">
+      <div class="stage-label">3 — Autenticacion AWS (OIDC)</div>
+      <div class="stage-row">
+        <div class="node" onclick="show('oidc')" id="n-oidc">
+          <div class="node-icon">🔐</div>
+          <div class="node-name">OIDC Token</div>
+          <div class="node-sub">GitHub → AWS sin contraseñas</div>
+          <div class="node-tag" style="background:rgba(255,153,0,0.15);color:#FF9900">IAM</div>
+        </div>
+        <div class="node" onclick="show('iam-role')" id="n-iam-role">
+          <div class="node-icon">🎭</div>
+          <div class="node-name">Assume Role</div>
+          <div class="node-sub">sts:AssumeRoleWithWebIdentity</div>
+          <div class="node-tag" style="background:rgba(255,153,0,0.15);color:#FF9900">AWS IAM</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector">
+      <div class="connector-line"></div>
+      <span>↓</span>
+      <div class="connector-label">credenciales temporales (~1h)</div>
+      <div class="connector-line"></div>
+    </div>
+
+    <!-- STAGE 4: Build -->
+    <div class="stage">
+      <div class="stage-label">4 — Build y Push de Imagenes</div>
+      <div class="stage-row">
+        <div class="node" onclick="show('docker-build')" id="n-docker-build">
+          <div class="node-icon">🐳</div>
+          <div class="node-name">Docker Build</div>
+          <div class="node-sub">Multi-stage (builder + final)</div>
+          <div class="node-tag" style="background:rgba(36,150,237,0.15);color:#2496ED">Docker</div>
+        </div>
+        <div class="node" onclick="show('ecr-push')" id="n-ecr-push">
+          <div class="node-icon">📦</div>
+          <div class="node-name">ECR Push</div>
+          <div class="node-sub">:sha + :latest tags</div>
+          <div class="node-tag" style="background:rgba(255,153,0,0.15);color:#FF9900">AWS ECR</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector">
+      <div class="connector-line"></div>
+      <span>↓</span>
+      <div class="connector-line"></div>
+    </div>
+
+    <!-- STAGE 5: Frontend -->
+    <div class="stage">
+      <div class="stage-label">5 — Deploy Frontend</div>
+      <div class="stage-row">
+        <div class="node" onclick="show('vite-build')" id="n-vite-build">
+          <div class="node-icon">⚡</div>
+          <div class="node-name">Vite Build</div>
+          <div class="node-sub">npm ci + npm run build</div>
+          <div class="node-tag" style="background:rgba(97,218,251,0.15);color:#61DAFB">React</div>
+        </div>
+        <div class="node" onclick="show('s3-sync')" id="n-s3-sync">
+          <div class="node-icon">🪣</div>
+          <div class="node-name">S3 Sync</div>
+          <div class="node-sub">dist/ → s3://datavault-frontend</div>
+          <div class="node-tag" style="background:rgba(255,153,0,0.15);color:#FF9900">AWS S3</div>
+        </div>
+        <div class="node" onclick="show('cf-invalidation')" id="n-cf-invalidation">
+          <div class="node-icon">🌐</div>
+          <div class="node-name">CF Invalidation</div>
+          <div class="node-sub">borrar cache /* en bordes</div>
+          <div class="node-tag" style="background:rgba(255,153,0,0.15);color:#FF9900">CloudFront</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector">
+      <div class="connector-line"></div>
+      <span>↓</span>
+      <div class="connector-line"></div>
+    </div>
+
+    <!-- STAGE 6: Migrations -->
+    <div class="stage">
+      <div class="stage-label">6 — Migraciones de Base de Datos</div>
+      <div class="stage-row">
+        <div class="node" onclick="show('task-def')" id="n-task-def">
+          <div class="node-icon">📋</div>
+          <div class="node-name">Nueva Task Def</div>
+          <div class="node-sub">register-task-definition con nueva imagen</div>
+          <div class="node-tag" style="background:rgba(255,153,0,0.15);color:#FF9900">ECS</div>
+        </div>
+        <div class="node" onclick="show('alembic')" id="n-alembic">
+          <div class="node-icon">🗄️</div>
+          <div class="node-name">Alembic Migrate</div>
+          <div class="node-sub">ECS run-task one-shot</div>
+          <div class="node-tag" style="background:rgba(55,118,171,0.15);color:#3776AB">Alembic</div>
+        </div>
+        <div class="node" onclick="show('rds')" id="n-rds">
+          <div class="node-icon">🐘</div>
+          <div class="node-name">RDS PostgreSQL</div>
+          <div class="node-sub">db.t4g.micro en VPC privada</div>
+          <div class="node-tag" style="background:rgba(65,105,225,0.15);color:#4169E1">Postgres 16</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector">
+      <div class="connector-line"></div>
+      <span>↓</span>
+      <div class="connector-label">migracion exitosa → rolling deploy</div>
+      <div class="connector-line"></div>
+    </div>
+
+    <!-- STAGE 7: ECS Deploy -->
+    <div class="stage">
+      <div class="stage-label">7 — Deploy Backend (Zero Downtime)</div>
+      <div class="stage-row">
+        <div class="node" onclick="show('ecs-update')" id="n-ecs-update">
+          <div class="node-icon">🔄</div>
+          <div class="node-name">ECS Update Service</div>
+          <div class="node-sub">rolling deploy, 0 downtime</div>
+          <div class="node-tag" style="background:rgba(255,153,0,0.15);color:#FF9900">Fargate</div>
+        </div>
+        <div class="node" onclick="show('ssm')" id="n-ssm">
+          <div class="node-icon">🔑</div>
+          <div name="node-name" class="node-name">SSM Secrets</div>
+          <div class="node-sub">DATABASE_URL + SECRET_KEY</div>
+          <div class="node-tag" style="background:rgba(255,153,0,0.15);color:#FF9900">AWS SSM</div>
+        </div>
+        <div class="node" onclick="show('alb')" id="n-alb">
+          <div class="node-icon">⚖️</div>
+          <div class="node-name">ALB</div>
+          <div class="node-sub">health checks + target groups</div>
+          <div class="node-tag" style="background:rgba(255,153,0,0.15);color:#FF9900">Load Balancer</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector">
+      <div class="connector-line"></div>
+      <span>↓</span>
+      <div class="connector-label">usuario accede via HTTPS</div>
+      <div class="connector-line"></div>
+    </div>
+
+    <!-- STAGE 8: Production -->
+    <div class="stage">
+      <div class="stage-label">8 — Produccion (lo que ve el usuario)</div>
+      <div class="stage-row">
+        <div class="node" onclick="show('cloudfront')" id="n-cloudfront">
+          <div class="node-icon">🌍</div>
+          <div class="node-name">CloudFront</div>
+          <div class="node-sub">CDN + reverse proxy HTTPS</div>
+          <div class="node-tag" style="background:rgba(255,153,0,0.15);color:#FF9900">CDN / Edge</div>
+        </div>
+        <div class="node" onclick="show('fastapi')" id="n-fastapi">
+          <div class="node-icon">🐍</div>
+          <div class="node-name">FastAPI</div>
+          <div class="node-sub">4 workers uvicorn en Fargate</div>
+          <div class="node-tag" style="background:rgba(0,150,136,0.15);color:#009688">API</div>
+        </div>
+        <div class="node" onclick="show('react-app')" id="n-react-app">
+          <div class="node-icon">⚛️</div>
+          <div class="node-name">React App</div>
+          <div class="node-sub">SPA desde S3 via CloudFront</div>
+          <div class="node-tag" style="background:rgba(97,218,251,0.15);color:#61DAFB">React 19</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STAGE: Terraform -->
+    <div class="connector" style="margin-top:16px">
+      <div class="connector-line" style="max-width:200px"></div>
+      <span style="color:var(--purple)">⬡</span>
+      <div class="connector-label" style="color:var(--purple)">toda la infra definida como codigo</div>
+      <div class="connector-line" style="max-width:200px"></div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-label">Infraestructura como Codigo (IaC)</div>
+      <div class="stage-row">
+        <div class="node" onclick="show('terraform')" id="n-terraform">
+          <div class="node-icon">🏗️</div>
+          <div class="node-name">Terraform</div>
+          <div class="node-sub">main.tf — todos los recursos AWS</div>
+          <div class="node-tag" style="background:rgba(123,66,188,0.15);color:#bc8cff">IaC</div>
+        </div>
+        <div class="node" onclick="show('tf-state')" id="n-tf-state">
+          <div class="node-icon">📊</div>
+          <div class="node-name">TF State (S3)</div>
+          <div class="node-sub">datavault-tfstate-{account_id}</div>
+          <div class="node-tag" style="background:rgba(255,153,0,0.15);color:#FF9900">AWS S3</div>
+        </div>
+        <div class="node" onclick="show('cloudwatch')" id="n-cloudwatch">
+          <div class="node-icon">📈</div>
+          <div class="node-name">CloudWatch</div>
+          <div class="node-sub">logs + alarmas CPU/5xx</div>
+          <div class="node-tag" style="background:rgba(255,153,0,0.15);color:#FF9900">Observabilidad</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TIMELINE SUMMARY -->
+    <div class="flow-summary" style="margin-top:32px">
+      <h3>⏱ Duracion estimada de cada etapa</h3>
+      <div class="timeline">
+        <div class="tl-step">
+          <div class="tl-dot" style="border-color:#2088FF;background:#2088FF"></div>
+          <div class="tl-line" style="background:linear-gradient(to right,#2088FF,#2496ED)"></div>
+          <div class="tl-label">git push</div>
+          <div class="tl-time">~0s</div>
+        </div>
+        <div class="tl-step">
+          <div class="tl-dot" style="border-color:#3776AB;background:#3776AB"></div>
+          <div class="tl-line" style="background:linear-gradient(to right,#3776AB,#FF9900)"></div>
+          <div class="tl-label">CI lint + tests</div>
+          <div class="tl-time">~60s</div>
+        </div>
+        <div class="tl-step">
+          <div class="tl-dot" style="border-color:#FF9900;background:#FF9900"></div>
+          <div class="tl-line" style="background:linear-gradient(to right,#FF9900,#2496ED)"></div>
+          <div class="tl-label">OIDC auth</div>
+          <div class="tl-time">~5s</div>
+        </div>
+        <div class="tl-step">
+          <div class="tl-dot" style="border-color:#2496ED;background:#2496ED"></div>
+          <div class="tl-line" style="background:linear-gradient(to right,#2496ED,#61DAFB)"></div>
+          <div class="tl-label">Docker build + ECR</div>
+          <div class="tl-time">~90s</div>
+        </div>
+        <div class="tl-step">
+          <div class="tl-dot" style="border-color:#61DAFB;background:#61DAFB"></div>
+          <div class="tl-line" style="background:linear-gradient(to right,#61DAFB,#4169E1)"></div>
+          <div class="tl-label">Vite + S3 sync</div>
+          <div class="tl-time">~45s</div>
+        </div>
+        <div class="tl-step">
+          <div class="tl-dot" style="border-color:#4169E1;background:#4169E1"></div>
+          <div class="tl-line" style="background:linear-gradient(to right,#4169E1,#3fb950)"></div>
+          <div class="tl-label">Alembic migrations</div>
+          <div class="tl-time">~60s</div>
+        </div>
+        <div class="tl-step">
+          <div class="tl-dot" style="border-color:#3fb950;background:#3fb950"></div>
+          <div class="tl-line" style="background:var(--border)"></div>
+          <div class="tl-label">ECS rolling deploy</div>
+          <div class="tl-time">~120s</div>
+        </div>
+        <div class="tl-step">
+          <div class="tl-dot" style="border-color:#FF9900;background:#FF9900"></div>
+          <div class="tl-label">✅ Produccion</div>
+          <div class="tl-time">~6-7 min</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /canvas -->
+
+  <!-- ═══════════ SIDE PANEL ═══════════ -->
+  <div class="panel" id="panel">
+    <div class="panel-empty" id="panel-empty">
+      <div class="hint-icon">👆</div>
+      <p>Haz click en cualquier componente del diagrama para ver una explicacion detallada de como funciona y por que se usa.</p>
+    </div>
+    <div id="panel-content" style="display:none">
+      <div class="panel-header">
+        <h2 id="p-title"></h2>
+        <p id="p-subtitle"></p>
+      </div>
+      <div class="panel-body" id="p-body"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const DATA = {
+  'dev-local': {
+    title: 'Entorno local con Docker Compose',
+    subtitle: 'Desarrollo sin instalar Python, Node ni Postgres en la maquina',
+    sections: [
+      {
+        type: 'text',
+        heading: '¿Que hace?',
+        content: 'Docker Compose levanta tres contenedores: <b>db</b> (PostgreSQL 16), <b>backend</b> (FastAPI con --reload) y <b>frontend</b> (Vite dev server). Los tres se comunican en una red interna de Docker.'
+      },
+      {
+        type: 'code',
+        heading: 'Arrancar',
+        code: `<span class="code-comment"># Desde datavault/</span>
+docker compose up -d
+
+<span class="code-comment"># Primera vez: crear tablas</span>
+docker compose exec backend alembic upgrade head
+
+<span class="code-comment"># Ver logs en vivo</span>
+docker compose logs backend -f`
+      },
+      {
+        type: 'text',
+        heading: '¿Por que Docker Compose y no instalar directo?',
+        content: 'Garantiza que todos los colaboradores (y el CI) usen exactamente la misma version de Python, Postgres y dependencias. No hay "funciona en mi maquina".'
+      },
+      {
+        type: 'tags',
+        heading: 'Servicios que levanta',
+        tags: ['db:5432 (Postgres)', 'backend:8000 (FastAPI)', 'frontend:5173 (Vite)']
+      }
+    ]
+  },
+
+  'git-commit': {
+    title: 'git push → trigger del pipeline',
+    subtitle: 'Un push a develop inicia el deploy automatico a staging',
+    sections: [
+      {
+        type: 'text',
+        heading: '¿Como funciona el trigger?',
+        content: 'GitHub escucha el evento <code>push</code> a la rama <b>develop</b>. El archivo <code>.github/workflows/ci-cd.yml</code> define exactamente que ocurre. La rama <b>main</b> triggerea el deploy a produccion.'
+      },
+      {
+        type: 'code',
+        heading: 'Configuracion del trigger (ci-cd.yml)',
+        code: `<span class="code-keyword">on</span>:
+  <span class="code-keyword">push</span>:
+    <span class="code-keyword">branches</span>: [main, develop]
+  <span class="code-keyword">pull_request</span>:
+    <span class="code-keyword">branches</span>: [main]
+
+<span class="code-comment"># develop → deploy-staging</span>
+<span class="code-comment"># main    → deploy-production</span>`
+      },
+      {
+        type: 'warning',
+        content: '⚠️ Solo los commits a develop hacen deploy automatico. Las PRs solo ejecutan CI (lint + tests) sin deploy.'
+      }
+    ]
+  },
+
+  'ci-lint': {
+    title: 'Lint con flake8',
+    subtitle: 'Detecta errores de sintaxis y problemas graves antes de deployar',
+    sections: [
+      {
+        type: 'text',
+        heading: '¿Que verifica?',
+        content: 'flake8 corre en dos pasadas: la primera (<code>--select=E9,F63,F7,F82</code>) busca errores fatales que romperian el codigo en runtime. La segunda pasa con <code>--exit-zero</code> muestra advertencias de estilo pero no falla el pipeline.'
+      },
+      {
+        type: 'code',
+        heading: 'Comando en el pipeline',
+        code: `<span class="code-comment"># Errores que rompen el build (exit 1)</span>
+flake8 datavault/backend \\
+  --select=E9,F63,F7,F82 \\
+  --show-source
+
+<span class="code-comment"># Advertencias de estilo (no falla)</span>
+flake8 datavault/backend \\
+  --exit-zero \\
+  --max-line-length=127`
+      },
+      {
+        type: 'tags',
+        heading: 'Errores que detecta',
+        tags: ['E9: SyntaxError', 'F63: invalid assertion', 'F7: statements invalidos', 'F82: undefined names']
+      }
+    ]
+  },
+
+  'ci-test': {
+    title: 'Tests con pytest',
+    subtitle: 'Pruebas de integracion usando SQLite in-memory (sin necesitar AWS)',
+    sections: [
+      {
+        type: 'text',
+        heading: '¿Como funciona sin Postgres?',
+        content: 'El conftest.py crea un motor SQLite en memoria para cada test. Esto permite que los tests corran en el runner de GitHub sin levantar una base de datos real. La incompatibilidad de JSONB se maneja con un tipo JSON compatible.'
+      },
+      {
+        type: 'code',
+        heading: 'Fixture principal (conftest.py)',
+        code: `<span class="code-comment"># SQLite async en memoria</span>
+engine = create_async_engine(
+  <span class="code-string">"sqlite+aiosqlite:///:memory:"</span>
+)
+
+<span class="code-comment"># admin_client: cliente HTTP autenticado</span>
+@pytest.fixture
+async def admin_client():
+    <span class="code-comment"># crea usuario admin automáticamente</span>
+    ...`
+      },
+      {
+        type: 'tags',
+        heading: 'Suites de tests',
+        tags: ['test_auth.py', 'test_datasets.py', 'test_records.py']
+      },
+      {
+        type: 'success',
+        content: '✅ Los tests no necesitan credenciales AWS ni conexion a Postgres. Corren en cualquier CI runner.'
+      }
+    ]
+  },
+
+  'oidc': {
+    title: 'OIDC — Autenticacion sin contraseñas',
+    subtitle: 'GitHub Actions obtiene credenciales AWS temporales sin necesitar access keys',
+    sections: [
+      {
+        type: 'text',
+        heading: '¿Que problema resuelve?',
+        content: 'El metodo clasico requeria guardar AWS_ACCESS_KEY_ID y AWS_SECRET_ACCESS_KEY como secrets de GitHub. Con OIDC, GitHub emite un JWT firmado que AWS verifica directamente — sin credenciales de larga duracion que puedan filtrarse.'
+      },
+      {
+        type: 'text',
+        heading: '¿Como funciona el flujo?',
+        content: '1. GitHub Actions genera un JWT con el contexto del workflow (repo, rama, commit). 2. AWS IAM valida la firma del JWT contra el proveedor OIDC de GitHub. 3. Si el <i>condition</i> del rol coincide (repo + rama), AWS emite credenciales temporales (~1 hora).'
+      },
+      {
+        type: 'code',
+        heading: 'Proveedor OIDC en Terraform',
+        code: `resource <span class="code-string">"aws_iam_openid_connect_provider"</span> <span class="code-string">"github"</span> {
+  url            = <span class="code-string">"https://token.actions.githubusercontent.com"</span>
+  client_id_list = [<span class="code-string">"sts.amazonaws.com"</span>]
+  thumbprint_list = [
+    <span class="code-string">"6938fd4d98bab03faadb97b34396831e3780aea1"</span>
+  ]
+}`
+      },
+      {
+        type: 'success',
+        content: '✅ Las credenciales expiran automaticamente. No hay secrets de AWS que rotar ni que puedan filtrarse si el repositorio es comprometido.'
+      }
+    ]
+  },
+
+  'iam-role': {
+    title: 'IAM Role para GitHub Actions',
+    subtitle: 'Permisos minimos necesarios para el pipeline de CI/CD',
+    sections: [
+      {
+        type: 'text',
+        heading: '¿Que permisos tiene?',
+        content: 'El rol tiene exactamente los permisos que el pipeline necesita: push a ECR, sync a S3, invalidar CloudFront, registrar task definitions en ECS, ejecutar tasks y actualizar servicios.'
+      },
+      {
+        type: 'code',
+        heading: 'Condicion del rol (solo este repo + branch)',
+        code: `Condition = {
+  StringLike = {
+    <span class="code-string">"token.actions.githubusercontent.com:sub"</span>:
+      <span class="code-string">"repo:pvilcapoma/dev-ops-dmc:ref:refs/heads/develop"</span>
+  }
+}`
+      },
+      {
+        type: 'warning',
+        content: '⚠️ El ARN de este rol es el unico secret que va en GitHub (AWS_ROLE_ARN_STAGING). Es seguro porque sin el JWT firmado de GitHub, nadie puede asumir ese rol.'
+      }
+    ]
+  },
+
+  'docker-build': {
+    title: 'Docker Multi-Stage Build',
+    subtitle: 'Imagen final liviana sin herramientas de build ni cache de pip',
+    sections: [
+      {
+        type: 'text',
+        heading: '¿Por que multi-stage?',
+        content: 'La etapa <b>builder</b> instala todas las dependencias de Python. La etapa final solo copia los paquetes compilados — sin pip, sin gcc, sin cache. La imagen final pesa ~70% menos y tiene menos superficie de ataque.'
+      },
+      {
+        type: 'code',
+        heading: 'Dockerfile.prod',
+        code: `<span class="code-comment"># Stage 1: builder</span>
+FROM python:3.11-slim <span class="code-keyword">AS</span> builder
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir \\
+  --prefix=/install -r requirements.txt
+
+<span class="code-comment"># Stage 2: imagen final</span>
+FROM python:3.11-slim
+<span class="code-comment"># usuario no-root por seguridad</span>
+RUN addgroup --system appgroup && \\
+    adduser --system --group appuser
+<span class="code-comment"># solo los paquetes compilados</span>
+COPY --from=builder /install /usr/local
+COPY --chown=appuser:appgroup . .
+USER appuser
+CMD [<span class="code-string">"uvicorn"</span>, <span class="code-string">"main:app"</span>,
+     <span class="code-string">"--workers"</span>, <span class="code-string">"4"</span>,
+     <span class="code-string">"--proxy-headers"</span>]`
+      },
+      {
+        type: 'warning',
+        content: '⚠️ Truco clave: --prefix=/install en lugar de --user. Si usas --user como root, pip instala en /root/.local — cuando el contenedor corre como appuser, Python no encuentra los paquetes.'
+      }
+    ]
+  },
+
+  'ecr-push': {
+    title: 'Amazon ECR — Registro de imagenes Docker',
+    subtitle: 'Almacenamiento privado de imagenes dentro de la cuenta AWS',
+    sections: [
+      {
+        type: 'text',
+        heading: '¿Por que ECR y no Docker Hub?',
+        content: 'ECR vive dentro de tu cuenta AWS, por lo que ECS puede hacer pull de las imagenes sin credenciales adicionales. La latencia es minima porque ECR y ECS estan en la misma region. El costo es ~$0.10/GB/mes.'
+      },
+      {
+        type: 'code',
+        heading: 'Push en el pipeline',
+        code: `<span class="code-comment"># Login con credenciales temporales OIDC</span>
+aws ecr get-login-password | \\
+  docker login --username AWS \\
+  --password-stdin $ECR_REGISTRY
+
+<span class="code-comment"># Tags: SHA del commit + latest</span>
+docker build -t $IMAGE:$SHA -t $IMAGE:latest .
+docker push $IMAGE --all-tags`
+      },
+      {
+        type: 'tags',
+        heading: 'Politica de lifecycle',
+        tags: ['Maximo 10 imagenes', 'Las mas antiguas se borran', 'Ahorra costos de almacenamiento']
+      }
+    ]
+  },
+
+  'vite-build': {
+    title: 'Vite Build — Frontend de produccion',
+    subtitle: 'Bundle optimizado de React + TypeScript para deployment estatico',
+    sections: [
+      {
+        type: 'text',
+        heading: '¿Que produce Vite?',
+        content: 'Vite genera un directorio <code>dist/</code> con archivos HTML, JS y CSS completamente estaticos. El JS esta minificado, tree-shaken y con hashes en los nombres para cache-busting automatico.'
+      },
+      {
+        type: 'code',
+        heading: 'Variables de entorno en build time',
+        code: `<span class="code-comment"># Las variables VITE_ se inlining en el bundle</span>
+VITE_API_URL=https://d1abc.cloudfront.net
+VITE_WS_URL=wss://d1abc.cloudfront.net
+
+<span class="code-comment"># En el codigo React:</span>
+<span class="code-value">import.meta.env.VITE_API_URL</span>
+
+<span class="code-comment"># En el pipeline (desde GitHub Variables):</span>
+env:
+  VITE_API_URL: ${{ <span class="code-value">vars.VITE_API_URL</span> }}`
+      },
+      {
+        type: 'warning',
+        content: '⚠️ VITE_API_URL debe apuntar a CloudFront (HTTPS), no al ALB (HTTP). Si el frontend es HTTPS y el API es HTTP, el browser bloquea la peticion por Mixed Content.'
+      }
+    ]
+  },
+
+  's3-sync': {
+    title: 'S3 — Hosting del Frontend estatico',
+    subtitle: 'El bucket S3 sirve los archivos React directamente via CloudFront',
+    sections: [
+      {
+        type: 'text',
+        heading: '¿Como funciona?',
+        content: 'El bucket S3 tiene acceso publico bloqueado — solo CloudFront puede leerlo via OAC (Origin Access Control). Cuando el usuario pide un archivo, CloudFront lo sirve desde su edge location mas cercana.'
+      },
+      {
+        type: 'code',
+        heading: 'Sync en el pipeline',
+        code: `ACCOUNT_ID=$(aws sts get-caller-identity \\
+  --query Account --output text)
+BUCKET="datavault-frontend-staging-${ACCOUNT_ID}"
+
+<span class="code-comment"># --delete borra archivos viejos del bucket</span>
+aws s3 sync dist/ s3://$BUCKET --delete`
+      },
+      {
+        type: 'success',
+        content: '✅ S3 + CloudFront es extremadamente barato para hosting estatico. Una SPA React puede costar centavos al mes en CloudFront, independientemente del trafico.'
+      }
+    ]
+  },
+
+  'cf-invalidation': {
+    title: 'CloudFront Invalidation',
+    subtitle: 'Fuerza a los edge locations a servir la version nueva del frontend',
+    sections: [
+      {
+        type: 'text',
+        heading: '¿Por que es necesaria?',
+        content: 'CloudFront cachea los archivos en sus edge locations. Si subes una nueva version a S3 pero no invalidas, los usuarios seguiran viendo la version antigua hasta que el cache expire (por defecto 24h).'
+      },
+      {
+        type: 'code',
+        heading: 'Invalidation en el pipeline',
+        code: `<span class="code-comment"># Buscar ID de la distribucion</span>
+DIST_ID=$(aws cloudfront list-distributions \\
+  --query "DistributionList.Items[?
+    starts_with(Origins.Items[0].DomainName,
+    '$BUCKET')].Id | [0]" \\
+  --output text)
+
+<span class="code-comment"># Invalidar TODO el cache</span>
+aws cloudfront create-invalidation \\
+  --distribution-id $DIST_ID \\
+  --paths "/*"`
+      },
+      {
+        type: 'warning',
+        content: '⚠️ Las invalidaciones tienen costo: las primeras 1000/mes son gratis, despues ~$0.005 cada una. En produccion con muchos deploys, usa hashes en los nombres de archivo (Vite lo hace automaticamente) para minimizar invalidaciones.'
+      }
+    ]
+  },
+
+  'task-def': {
+    title: 'ECS Task Definition',
+    subtitle: 'Actualizar la imagen Docker antes de correr las migraciones',
+    sections: [
+      {
+        type: 'text',
+        heading: '¿Por que registrar una nueva task definition?',
+        content: 'ECS requiere una task definition inmutable con el ARN de imagen exacto. Para actualizar la imagen, el pipeline descarga la task definition actual via JSON, cambia el campo <code>image</code>, y registra una nueva revision. La nueva revision tiene la imagen con el SHA del commit actual.'
+      },
+      {
+        type: 'code',
+        heading: 'Actualizar imagen en la task definition',
+        code: `NEW=$(echo "$TASK_DEF_JSON" | jq \\
+  --arg IMAGE "$ECR/$REPO:$SHA" \\
+  --arg CONTAINER "backend" \\
+  <span class="code-string">'(.containerDefinitions[]
+    | select(.name == $CONTAINER)
+    | .image) |= $IMAGE
+   | del(.taskDefinitionArn,
+         .revision, .status,
+         .requiresAttributes,
+         .compatibilities,
+         .registeredAt)'</span>)
+
+NEW_ARN=$(aws ecs register-task-definition \\
+  --cli-input-json "$NEW" \\
+  --query 'taskDefinition.taskDefinitionArn' \\
+  --output text)`
+      }
+    ]
+  },
+
+  'alembic': {
+    title: 'Alembic Migrations — ECS one-shot task',
+    subtitle: 'Las migraciones de DB corren antes del deploy del servicio',
+    sections: [
+      {
+        type: 'text',
+        heading: '¿Por que correr las migraciones antes del deploy?',
+        content: 'Si el nuevo codigo asume una columna que no existe todavia, lanzaria errores 500 durante el rolling deploy. Al correr las migraciones primero, la DB esta siempre en el estado que el nuevo codigo espera.'
+      },
+      {
+        type: 'code',
+        heading: 'One-shot task en el pipeline',
+        code: `aws ecs run-task \\
+  --cluster datavault-staging \\
+  --task-definition $NEW_TASK_DEF_ARN \\
+  --launch-type FARGATE \\
+  --network-configuration "$NETWORK_CONFIG" \\
+  --overrides <span class="code-string">'{
+    "containerOverrides": [{
+      "name": "backend",
+      "command": ["alembic", "upgrade", "head"]
+    }]
+  }'</span>
+
+<span class="code-comment"># Esperar a que termine (bloquea el pipeline)</span>
+aws ecs wait tasks-stopped \\
+  --cluster datavault-staging \\
+  --tasks $TASK_ARN`
+      },
+      {
+        type: 'text',
+        heading: '¿Como accede Alembic a la DB?',
+        content: 'La task ECS inyecta DATABASE_URL desde SSM Parameter Store como variable de entorno. Alembic usa esa URL para conectarse a RDS y aplicar las migraciones. El contenedor termina despues de ejecutar el comando.'
+      },
+      {
+        type: 'success',
+        content: '✅ Si la migracion falla (exit code != 0), el pipeline falla aqui y el deploy no continua. La DB queda intacta.'
+      }
+    ]
+  },
+
+  'rds': {
+    title: 'Amazon RDS PostgreSQL 16',
+    subtitle: 'Base de datos gestionada con backups automaticos y alta disponibilidad',
+    sections: [
+      {
+        type: 'text',
+        heading: '¿Por que RDS y no Postgres en un contenedor?',
+        content: 'RDS gestiona backups automaticos, patches de seguridad, failover y monitoreo. Un Postgres en un contenedor ECS perderia todos los datos si el contenedor se reinicia sin un volumen persistente configurado correctamente.'
+      },
+      {
+        type: 'text',
+        heading: 'Configuracion de costo minimo',
+        content: 'Se usa <b>db.t4g.micro</b> (la instancia mas pequeña, ~$15/mes) con almacenamiento gp2 de 20GB. Para produccion real, considera db.t4g.small y Multi-AZ.'
+      },
+      {
+        type: 'code',
+        heading: 'Ubicacion en la VPC',
+        code: `<span class="code-comment"># RDS en subnets privadas (no accesible desde Internet)</span>
+resource "aws_db_subnet_group" "main" {
+  subnet_ids = module.vpc.private_subnets
+}
+
+<span class="code-comment"># Solo el security group de ECS puede conectarse</span>
+resource "aws_security_group" "rds" {
+  ingress {
+    from_port       = 5432
+    security_groups = [aws_security_group.ecs.id]
+  }
+}`
+      },
+      {
+        type: 'tags',
+        heading: 'Detalles',
+        tags: ['db.t4g.micro', 'PostgreSQL 16', 'Subnet privada', 'No Multi-AZ (staging)', 'Backups 7 dias']
+      }
+    ]
+  },
+
+  'ecs-update': {
+    title: 'ECS Update Service — Rolling Deploy',
+    subtitle: 'Zero downtime: ECS levanta la nueva version antes de bajar la vieja',
+    sections: [
+      {
+        type: 'text',
+        heading: '¿Como funciona el rolling deploy?',
+        content: 'ECS lanza una nueva tarea con la imagen nueva. Espera a que el ALB registre la nueva tarea como healthy (health check en /health). Solo entonces termina la tarea vieja. El servicio nunca queda sin instancias.'
+      },
+      {
+        type: 'code',
+        heading: 'Comando de update',
+        code: `<span class="code-comment"># Obtener la ultima task definition (recien registrada)</span>
+LATEST=$(aws ecs describe-task-definition \\
+  --task-definition datavault-backend-staging \\
+  --query 'taskDefinition.taskDefinitionArn' \\
+  --output text)
+
+<span class="code-comment"># Actualizar el servicio</span>
+aws ecs update-service \\
+  --cluster datavault-staging \\
+  --service datavault-backend \\
+  --task-definition $LATEST \\
+  --force-new-deployment`
+      },
+      {
+        type: 'text',
+        heading: 'lifecycle ignore_changes',
+        content: 'En el Terraform hay <code>lifecycle { ignore_changes = [task_definition] }</code>. Esto evita que Terraform quiera revertir la task definition al placeholder inicial cada vez que hace apply.'
+      }
+    ]
+  },
+
+  'ssm': {
+    title: 'AWS SSM Parameter Store',
+    subtitle: 'Secretos encriptados inyectados directamente en los contenedores ECS',
+    sections: [
+      {
+        type: 'text',
+        heading: '¿Por que SSM y no variables de entorno en Terraform?',
+        content: 'Si pones DATABASE_URL en el codigo Terraform, quedaria en el tfstate (que vive en S3). SSM Parameter Store encripta el valor con KMS y ECS lo inyecta directamente — el valor nunca aparece en logs ni en estado de Terraform.'
+      },
+      {
+        type: 'code',
+        heading: 'Secretos en la task definition',
+        code: `<span class="code-comment"># En la task definition de ECS</span>
+secrets = [
+  {
+    name      = <span class="code-string">"DATABASE_URL"</span>
+    valueFrom = <span class="code-string">"arn:aws:ssm:us-east-1:...</span>
+                 <span class="code-string">/datavault/staging/database_url"</span>
+  },
+  {
+    name      = <span class="code-string">"SECRET_KEY"</span>
+    valueFrom = <span class="code-string">"arn:aws:ssm:us-east-1:...</span>
+                 <span class="code-string">/datavault/staging/secret_key"</span>
+  }
+]`
+      },
+      {
+        type: 'success',
+        content: '✅ El contenedor recibe DATABASE_URL y SECRET_KEY como variables de entorno normales. Tu codigo en Python las lee con os.getenv(). Ningun secreto esta hardcodeado en el repositorio ni en GitHub.'
+      }
+    ]
+  },
+
+  'alb': {
+    title: 'Application Load Balancer',
+    subtitle: 'Distribuye trafico al backend y hace health checks continuos',
+    sections: [
+      {
+        type: 'text',
+        heading: '¿Que hace el ALB?',
+        content: 'El ALB recibe trafico desde CloudFront (en el puerto 80) y lo redirige a las tareas ECS activas. Hace health checks cada 30s contra <code>GET /health</code>. Si una tarea falla los health checks, el ALB la retira automaticamente.'
+      },
+      {
+        type: 'code',
+        heading: 'Health check configurado',
+        code: `resource "aws_lb_target_group" "backend" {
+  port     = 8000
+  protocol = "HTTP"
+
+  health_check {
+    path                = <span class="code-string">"/health"</span>
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    interval            = 30
+    timeout             = 10
+    matcher             = <span class="code-string">"200"</span>
+  }
+}`
+      },
+      {
+        type: 'text',
+        heading: '¿Por que CloudFront → ALB en lugar de directo?',
+        content: 'El frontend se sirve via HTTPS desde CloudFront. Si el API fuera HTTP (ALB directo), el navegador bloquearia las peticiones por <b>Mixed Content</b>. Al poner CloudFront como intermediario del ALB, toda la comunicacion es HTTPS end-to-end.'
+      }
+    ]
+  },
+
+  'cloudfront': {
+    title: 'CloudFront — CDN y Reverse Proxy',
+    subtitle: 'Una sola URL HTTPS sirve tanto el frontend (S3) como el backend (ALB)',
+    sections: [
+      {
+        type: 'text',
+        heading: '¿Como distingue frontend de backend?',
+        content: 'CloudFront usa <b>path patterns</b> para enrutar. Las rutas de API van al ALB, el resto va a S3.'
+      },
+      {
+        type: 'code',
+        heading: 'Cache behaviors por path',
+        code: `<span class="code-comment"># Rutas API → ALB (sin cache, todos los metodos)</span>
+/auth*        → ALB
+/datasets*    → ALB
+/permissions* → ALB
+/ws*          → ALB  <span class="code-comment">(WebSocket upgrade)</span>
+/health*      → ALB
+
+<span class="code-comment"># Default → S3 (React SPA)</span>
+/*            → S3`
+      },
+      {
+        type: 'text',
+        heading: 'Truco: /path* no /path/*',
+        content: 'CloudFront distingue entre <code>/datasets/*</code> (con slash: solo sub-rutas) y <code>/datasets*</code> (sin slash: tambien la ruta raiz). <code>GET /datasets</code> sin barra final NO matchea <code>/datasets/*</code> — usamos <code>/datasets*</code> para capturar ambas.'
+      },
+      {
+        type: 'tags',
+        heading: 'Politicas usadas',
+        tags: ['CachingDisabled (API)', 'AllViewer (headers forward)', 'HTTPS only', 'OAC para S3 (sin URLs firmadas)']
+      }
+    ]
+  },
+
+  'fastapi': {
+    title: 'FastAPI — Backend en ECS Fargate',
+    subtitle: 'API async de alto rendimiento con 4 workers Uvicorn',
+    sections: [
+      {
+        type: 'text',
+        heading: '¿Por que async?',
+        content: 'FastAPI + SQLAlchemy async + asyncpg permite manejar cientos de conexiones concurrentes con un solo proceso. Las operaciones de base de datos no bloquean el event loop — mientras una query corre, el proceso puede atender otras peticiones.'
+      },
+      {
+        type: 'code',
+        heading: 'Arranque en produccion',
+        code: `CMD [<span class="code-string">"uvicorn"</span>, <span class="code-string">"main:app"</span>,
+     <span class="code-string">"--host"</span>, <span class="code-string">"0.0.0.0"</span>,
+     <span class="code-string">"--port"</span>, <span class="code-string">"8000"</span>,
+     <span class="code-string">"--workers"</span>, <span class="code-string">"4"</span>,
+     <span class="code-string">"--proxy-headers"</span>]
+
+<span class="code-comment"># --proxy-headers: leer IP real del cliente</span>
+<span class="code-comment"># desde los headers que pone el ALB/CloudFront</span>`
+      },
+      {
+        type: 'tags',
+        heading: 'Componentes del backend',
+        tags: ['FastAPI', 'SQLAlchemy async', 'Alembic', 'python-jose (JWT)', 'passlib + bcrypt', 'slowapi (rate limit)', 'WebSocket (Starlette)']
+      }
+    ]
+  },
+
+  'react-app': {
+    title: 'React 19 — Frontend SPA',
+    subtitle: 'Single Page Application con TypeScript, Vite y TanStack Query',
+    sections: [
+      {
+        type: 'text',
+        heading: '¿Como se comunica con el backend?',
+        content: 'Axios hace peticiones HTTP al mismo dominio CloudFront (sin CORS porque es mismo origen). TanStack Query maneja el caching, refetching y estado de carga. Los WebSockets usan <code>wss://</code> al mismo dominio CloudFront que los redirige al ALB.'
+      },
+      {
+        type: 'code',
+        heading: 'Cliente HTTP (api/client.ts)',
+        code: `<span class="code-comment"># VITE_API_URL se inlinea en build time</span>
+const client = axios.create({
+  baseURL: import.meta.env.VITE_API_URL
+           ?? <span class="code-string">"http://localhost:8000"</span>
+})
+
+<span class="code-comment"># JWT en cada peticion</span>
+client.interceptors.request.use(config => {
+  const token = localStorage.getItem(<span class="code-string">"dv_token"</span>)
+  if (token) config.headers.Authorization =
+    <span class="code-string">\`Bearer \${token}\`</span>
+  return config
+})`
+      },
+      {
+        type: 'tags',
+        heading: 'Vistas principales',
+        tags: ['DatasetList', 'DatasetView', 'DataGrid (tabla editable)', 'Vista Kanban', 'Vista Graficos', 'Admin Panel']
+      }
+    ]
+  },
+
+  'terraform': {
+    title: 'Terraform — Infraestructura como Codigo',
+    subtitle: 'main.tf define todos los recursos AWS. Un solo comando crea todo.',
+    sections: [
+      {
+        type: 'text',
+        heading: '¿Que recursos crea terraform apply?',
+        content: 'Un solo <code>terraform apply</code> crea toda la infraestructura: VPC, subnets, security groups, ECR, S3, CloudFront, ALB, RDS, ECS cluster + service + task definition, IAM roles, SSM parameters, CloudWatch logs y alarmas.'
+      },
+      {
+        type: 'code',
+        heading: 'Comandos basicos',
+        code: `cd .github/workflows
+
+<span class="code-comment"># Inicializar (descarga providers, configura backend)</span>
+terraform init
+
+<span class="code-comment"># Ver que va a crear/modificar/destruir</span>
+terraform plan
+
+<span class="code-comment"># Aplicar (crea la infra)</span>
+terraform apply
+
+<span class="code-comment"># Ver estado actual</span>
+terraform show
+
+<span class="code-comment"># Destruir TODO (cuidado!)</span>
+terraform destroy`
+      },
+      {
+        type: 'warning',
+        content: '⚠️ terraform destroy elimina todos los recursos incluyendo RDS (datos) y el tfstate queda vacio. Siempre hacer backup de la DB antes de destruir.'
+      }
+    ]
+  },
+
+  'tf-state': {
+    title: 'Terraform State en S3',
+    subtitle: 'El estado de la infraestructura guardado de forma remota y segura',
+    sections: [
+      {
+        type: 'text',
+        heading: '¿Que es el tfstate?',
+        content: 'Terraform mantiene un archivo JSON que mapea cada recurso de tu codigo a su ID real en AWS (ej: "aws_ecs_cluster.main" → "datavault-staging"). Sin este archivo, Terraform no sabe que recursos existen y los intentaria crear de nuevo.'
+      },
+      {
+        type: 'code',
+        heading: 'Backend configurado en main.tf',
+        code: `terraform {
+  backend <span class="code-string">"s3"</span> {
+    bucket = <span class="code-string">"datavault-tfstate-{account_id}"</span>
+    key    = <span class="code-string">"staging/terraform.tfstate"</span>
+    region = <span class="code-string">"us-east-1"</span>
+  }
+}`
+      },
+      {
+        type: 'text',
+        heading: '¿Por que en S3 y no local?',
+        content: 'Si el tfstate es local, solo tu maquina puede hacer apply. En S3, cualquier miembro del equipo (con permisos) puede ejecutar Terraform. Ademas S3 tiene versionado — si el state se corrompe, puedes recuperar una version anterior.'
+      },
+      {
+        type: 'success',
+        content: '✅ El bucket de tfstate es el unico recurso que NO destruye terraform destroy (ya que es el backend). Cuesta ~$0.023/GB/mes — practicamente gratis.'
+      }
+    ]
+  },
+
+  'cloudwatch': {
+    title: 'CloudWatch — Logs y Alarmas',
+    subtitle: 'Observabilidad del backend: logs en tiempo real + alertas automaticas',
+    sections: [
+      {
+        type: 'text',
+        heading: '¿Que se monitorea?',
+        content: 'CloudWatch recibe los logs de stdout/stderr de cada contenedor ECS. Ademas hay dos alarmas: una dispara cuando el CPU supera 80% por 2 minutos, otra cuando el backend devuelve mas de 5 errores 5xx en 1 minuto.'
+      },
+      {
+        type: 'code',
+        heading: 'Ver logs en vivo',
+        code: `<span class="code-comment"># Logs del contenedor backend en staging</span>
+aws logs tail \\
+  /ecs/datavault-backend-staging \\
+  --follow
+
+<span class="code-comment"># En la task definition:</span>
+logConfiguration = {
+  logDriver = <span class="code-string">"awslogs"</span>
+  options = {
+    awslogs-group  = <span class="code-string">"/ecs/datavault-backend-staging"</span>
+    awslogs-region = <span class="code-string">"us-east-1"</span>
+  }
+}`
+      },
+      {
+        type: 'tags',
+        heading: 'Alarmas configuradas',
+        tags: ['CPU > 80% por 2 min', 'HTTP 5xx > 5 en 1 min', 'Retencion: 30 dias']
+      }
+    ]
+  }
+};
+
+let activeNode = null;
+
+function show(key) {
+  const d = DATA[key];
+  if (!d) return;
+
+  // deactivate all
+  document.querySelectorAll('.node').forEach(n => n.classList.remove('active'));
+
+  // activate clicked
+  const nodeId = 'n-' + key;
+  const nodeEl = document.getElementById(nodeId);
+  if (nodeEl) {
+    nodeEl.classList.add('active');
+    nodeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  activeNode = key;
+
+  document.getElementById('panel-empty').style.display = 'none';
+  document.getElementById('panel-content').style.display = 'block';
+
+  document.getElementById('p-title').textContent = d.title;
+  document.getElementById('p-subtitle').textContent = d.subtitle;
+
+  const body = document.getElementById('p-body');
+  body.innerHTML = '';
+
+  d.sections.forEach(s => {
+    const section = document.createElement('div');
+    section.className = 'info-section';
+
+    if (s.heading) {
+      const h3 = document.createElement('h3');
+      h3.textContent = s.heading;
+      section.appendChild(h3);
+    }
+
+    if (s.type === 'text') {
+      const p = document.createElement('p');
+      p.innerHTML = s.content;
+      section.appendChild(p);
+    } else if (s.type === 'code') {
+      const pre = document.createElement('div');
+      pre.className = 'code-block';
+      pre.innerHTML = s.code;
+      section.appendChild(pre);
+    } else if (s.type === 'tags') {
+      const row = document.createElement('div');
+      row.className = 'tag-row';
+      s.tags.forEach(t => {
+        const tag = document.createElement('span');
+        tag.className = 'tag';
+        tag.textContent = t;
+        row.appendChild(tag);
+      });
+      section.appendChild(row);
+    } else if (s.type === 'warning') {
+      const box = document.createElement('div');
+      box.className = 'warning-box';
+      box.textContent = s.content;
+      section.appendChild(box);
+    } else if (s.type === 'success') {
+      const box = document.createElement('div');
+      box.className = 'success-box';
+      box.textContent = s.content;
+      section.appendChild(box);
+    }
+
+    body.appendChild(section);
+  });
+
+  // scroll panel to top
+  document.getElementById('panel').scrollTop = 0;
+}
+
+// Show first node on load
+window.addEventListener('load', () => show('dev-local'));
+</script>
+
+</body>
+</html>

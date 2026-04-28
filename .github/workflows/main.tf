@@ -235,9 +235,10 @@ resource "aws_cloudfront_distribution" "frontend" {
   }
 
   # Backend API: rutas que se proxean al ALB
+  # Patrón "/path*" matchea tanto "/path" como "/path/algo"
   # Usamos managed policies: CachingDisabled + AllViewer
   ordered_cache_behavior {
-    path_pattern             = "/auth/*"
+    path_pattern             = "/auth*"
     target_origin_id         = "ALB-backend"
     allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods           = ["GET", "HEAD"]
@@ -247,7 +248,7 @@ resource "aws_cloudfront_distribution" "frontend" {
   }
 
   ordered_cache_behavior {
-    path_pattern             = "/datasets/*"
+    path_pattern             = "/datasets*"
     target_origin_id         = "ALB-backend"
     allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods           = ["GET", "HEAD"]
@@ -257,7 +258,7 @@ resource "aws_cloudfront_distribution" "frontend" {
   }
 
   ordered_cache_behavior {
-    path_pattern             = "/permissions/*"
+    path_pattern             = "/permissions*"
     target_origin_id         = "ALB-backend"
     allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods           = ["GET", "HEAD"]
@@ -277,7 +278,7 @@ resource "aws_cloudfront_distribution" "frontend" {
   }
 
   ordered_cache_behavior {
-    path_pattern             = "/ws/*"
+    path_pattern             = "/ws*"
     target_origin_id         = "ALB-backend"
     allowed_methods          = ["GET", "HEAD", "OPTIONS"]
     cached_methods           = ["GET", "HEAD"]
