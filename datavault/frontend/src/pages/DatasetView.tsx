@@ -83,6 +83,12 @@ export default function DatasetView() {
       return s ? JSON.parse(s) : [];
     } catch { return []; }
   });
+  const [colOrder, setColOrder] = useState<string[]>(() => {
+    try {
+      const s = localStorage.getItem(`dv_colorder_${datasetId}`);
+      return s ? JSON.parse(s) : [];
+    } catch { return []; }
+  });
 
   // Persist state
   useEffect(() => {
@@ -97,6 +103,9 @@ export default function DatasetView() {
   useEffect(() => {
     localStorage.setItem(`dv_views_${datasetId}`, JSON.stringify(savedViews));
   }, [savedViews, datasetId]);
+  useEffect(() => {
+    localStorage.setItem(`dv_colorder_${datasetId}`, JSON.stringify(colOrder));
+  }, [colOrder, datasetId]);
 
   // Close menus on outside click
   useEffect(() => {
@@ -115,6 +124,22 @@ export default function DatasetView() {
 
   const { data: datasets = [] } = useQuery({ queryKey: ["datasets"], queryFn: getDatasets });
   const { data: columns = [] } = useQuery({ queryKey: colsKey, queryFn: () => getColumns(datasetId!) });
+
+  // Sync colOrder when columns/joins/formulas change (append new IDs, remove deleted ones)
+  useEffect(() => {
+    const allIds = [
+      ...columns.map((c) => c.field_key),
+      ...joinedCols.map((j) => `ec:${j.uid}`),
+      ...formulaCols.map((f) => `fc:${f.uid}`),
+    ];
+    setColOrder((prev) => {
+      const existing = prev.filter((id) => allIds.includes(id));
+      const newIds = allIds.filter((id) => !prev.includes(id));
+      if (existing.length === prev.length && newIds.length === 0) return prev;
+      return [...existing, ...newIds];
+    });
+  }, [columns, joinedCols, formulaCols]);
+
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 100;
   const { data: recsResult } = useQuery({
@@ -715,9 +740,23 @@ export default function DatasetView() {
               onDeleteRow={(recordId) => deleteMut.mutate(recordId)}
               onDeleteColumn={isAdmin ? (colId) => delColMut.mutate(colId) : undefined}
               onEditColumn={isAdmin ? setEditingColumn : undefined}
-              onReorderColumns={isAdmin ? (fromKey, toKey) => reorderColMut.mutate({ fromKey, toKey }) : undefined}
-              onReorderExtraColumns={handleReorderExtraColumns}
-              onReorderFormulaCols={handleReorderFormulaCols}
+              columnOrder={colOrder}
+              onReorderAny={isAdmin ? (fromId, toId) => {
+                setColOrder((prev) => {
+                  const arr = [...prev];
+                  const from = arr.indexOf(fromId);
+                  const to = arr.indexOf(toId);
+                  if (from === -1 || to === -1) return prev;
+                  const [item] = arr.splice(from, 1);
+                  arr.splice(to, 0, item);
+                  return arr;
+                });
+                // Persist regular column positions to backend
+                if (!fromId.startsWith('ec:') && !fromId.startsWith('fc:') &&
+                    !toId.startsWith('ec:') && !toId.startsWith('fc:')) {
+                  reorderColMut.mutate({ fromKey: fromId, toKey: toId });
+                }
+              } : undefined}
               onRemoveFormula={(uid) => setFormulaCols((prev) => prev.filter((f) => f.uid !== uid))}
               onShowHistory={setHistoryRecordId}
               selectedIds={selectedIds}

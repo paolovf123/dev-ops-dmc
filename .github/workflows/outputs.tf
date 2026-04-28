@@ -23,7 +23,8 @@ output "rds_endpoint" {
   value       = aws_db_instance.postgres.endpoint
 }
 
-output "redis_endpoint" {
-  description = "Endpoint del cluster de Redis"
-  value       = aws_elasticache_cluster.redis.cache_nodes[0].address
-}
+# OPTIMIZADO: Redis desactivado. Descomentar para producción junto con ElastiCache.
+# output "redis_endpoint" {
+#   description = "Endpoint del cluster de Redis"
+#   value       = aws_elasticache_cluster.redis.cache_nodes[0].address
+# }

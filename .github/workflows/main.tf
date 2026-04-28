@@ -4,6 +4,16 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
+  }
+
+  backend "s3" {
+    bucket = "datavault-tfstate-492094933097"
+    key    = "staging/terraform.tfstate"
+    region = "us-east-1"
   }
 }
 
@@ -35,8 +45,8 @@ module "vpc" {
   private_subnets = ["10.0.1.0/24", "10.0.2.0/24"]
   public_subnets  = ["10.0.101.0/24", "10.0.102.0/24"]
 
-  enable_nat_gateway   = true
-  single_nat_gateway   = true
+  enable_nat_gateway   = false # OPTIMIZADO: cambiar a true para producción (~$32/mes)
+  # single_nat_gateway = true  # OPTIMIZADO: descomentar junto con enable_nat_gateway para producción
   enable_dns_hostnames = true
 }
 
@@ -139,16 +149,29 @@ resource "aws_security_group" "redis" {
 resource "aws_ecr_repository" "backend" {
   name                 = "datavault-backend-${var.environment}"
   image_tag_mutability = "MUTABLE"
-  force_destroy        = true
+}
+
+resource "aws_ecr_lifecycle_policy" "backend" {
+  repository = aws_ecr_repository.backend.name
+  policy = jsonencode({
+    rules = [{
+      rulePriority = 1
+      description  = "Mantener solo las últimas 10 imágenes"
+      selection = {
+        tagStatus   = "any"
+        countType   = "imageCountMoreThan"
+        countNumber = 10
+      }
+      action = { type = "expire" }
+    }]
+  })
 }
 
 # ------------------------------------------------------------------------------
 # S3 + CloudFront (Frontend)
 # ------------------------------------------------------------------------------
 resource "aws_s3_bucket" "frontend" {
-  # Agregamos el account_id para asegurar que el bucket sea único a nivel global
-  bucket        = "datavault-frontend-${var.environment}-${data.aws_caller_identity.current.account_id}"
-  force_destroy = true
+  bucket = "datavault-frontend-${var.environment}-${data.aws_caller_identity.current.account_id}"
 }
 
 resource "aws_s3_bucket_public_access_block" "frontend" {
@@ -263,23 +286,24 @@ resource "aws_db_instance" "postgres" {
 
 # ------------------------------------------------------------------------------
 # Redis (ElastiCache) para WebSockets y Rate Limiting
+# OPTIMIZADO: desactivado para staging (~$12/mes). Descomentar todo para producción.
 # ------------------------------------------------------------------------------
-resource "aws_elasticache_subnet_group" "redis" {
-  name       = "datavault-redis-subnet-group-${var.environment}"
-  subnet_ids = module.vpc.private_subnets
-}
-
-resource "aws_elasticache_cluster" "redis" {
-  cluster_id           = "datavault-redis-${var.environment}"
-  engine               = "redis"
-  node_type            = var.redis_node_type
-  num_cache_nodes      = 1
-  parameter_group_name = "default.redis7"
-  engine_version       = "7.1"
-  port                 = 6379
-  subnet_group_name    = aws_elasticache_subnet_group.redis.name
-  security_group_ids   = [aws_security_group.redis.id]
-}
+# resource "aws_elasticache_subnet_group" "redis" {
+#   name       = "datavault-redis-subnet-group-${var.environment}"
+#   subnet_ids = module.vpc.private_subnets
+# }
+#
+# resource "aws_elasticache_cluster" "redis" {
+#   cluster_id           = "datavault-redis-${var.environment}"
+#   engine               = "redis"
+#   node_type            = var.redis_node_type
+#   num_cache_nodes      = 1
+#   parameter_group_name = "default.redis7"
+#   engine_version       = "7.1"
+#   port                 = 6379
+#   subnet_group_name    = aws_elasticache_subnet_group.redis.name
+#   security_group_ids   = [aws_security_group.redis.id]
+# }
 
 # ------------------------------------------------------------------------------
 # Load Balancer (ALB) y Target Groups
@@ -468,7 +492,8 @@ resource "aws_ecs_task_definition" "backend" {
     image = "python:3.11-slim" # Placeholder temporal. CI/CD actualizará esto
     portMappings = [{ containerPort = 8000 }]
     environment = [
-      { name = "REDIS_URL", value = "redis://${aws_elasticache_cluster.redis.cache_nodes[0].address}:6379/0" },
+      # OPTIMIZADO: Redis desactivado. Descomentar para producción junto con ElastiCache.
+      # { name = "REDIS_URL", value = "redis://${aws_elasticache_cluster.redis.cache_nodes[0].address}:6379/0" },
       { name = "ALLOWED_ORIGINS", value = "https://${aws_cloudfront_distribution.frontend.domain_name}" }
     ]
     secrets = [
@@ -486,8 +511,9 @@ resource "aws_ecs_service" "backend" {
   desired_count   = 1 # Sube esto para alta disponibilidad
 
   network_configuration {
-    subnets          = module.vpc.private_subnets
+    subnets          = module.vpc.public_subnets  # OPTIMIZADO: cambiar a private_subnets para producción (requiere NAT Gateway)
     security_groups  = [aws_security_group.ecs.id]
+    assign_public_ip = true # OPTIMIZADO: necesario en subred pública. false para producción con NAT Gateway.
   }
   load_balancer {
     target_group_arn = aws_lb_target_group.backend.arn
@@ -564,7 +590,7 @@ resource "aws_iam_role" "github_actions" {
         }
         StringLike = {
           # IMPORTANTE: Reemplaza TU_USUARIO/TU_REPO por los valores reales en GitHub (ej. "paolovilcapoma/datavault")
-          "token.actions.githubusercontent.com:sub" = "repo:TU_USUARIO/TU_REPO:environment:${var.environment}"
+          "token.actions.githubusercontent.com:sub" = "repo:paolovf123/dev-ops-dmc:environment:${var.environment}"
         }
       }
     }]
