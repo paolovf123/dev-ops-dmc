@@ -50,7 +50,7 @@ function SchemaPreview({
 
   // Build FK edges
   const edges: { fi: number; ti: number; fkKey: string }[] = [];
-  datasets.forEach((ds, fi) => {
+  datasets.forEach((_ds, fi) => {
     const cols = colQueries[fi]?.data ?? [];
     cols.filter((c) => c.field_key.startsWith("id_")).forEach((c) => {
       const refKw = c.field_key.slice(3);
@@ -175,7 +175,7 @@ export default function DatasetList() {
   const navigate = useNavigate();
   const confirm = useConfirm();
   const toast = useToast();
-  const { user, isAdmin, logout } = useAuth();
+  const { isAdmin } = useAuth();
   const [showSchema, setShowSchema] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
 

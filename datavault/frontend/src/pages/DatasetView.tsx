@@ -21,7 +21,6 @@ import CsvMappingModal from "../components/CsvMappingModal";
 import { useConfirm } from "../components/ConfirmDialog";
 import type { ColumnDefinition, JoinedColDef, FormulaColDef } from "../types";
 import { exportCsv, exportExcel } from "../utils/export";
-import { parseCsv } from "../utils/csvImport";
 import { useUndoRedo } from "../utils/useUndoRedo";
 
 type ViewMode = "table" | "kanban" | "chart" | "trash";
