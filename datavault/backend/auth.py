@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from database import get_db
-from models import User, DatasetPermission
+from models import User, DatasetPermission, DatasetGroupPermission, UserGroupMember
 
 SECRET_KEY = os.getenv("SECRET_KEY", "datavault-secret-change-in-production-xyz-123")
 ALGORITHM = "HS256"
@@ -20,6 +20,8 @@ ACCESS_TOKEN_EXPIRE_HOURS = 24
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
+
+ROLE_RANK = {"none": 0, "viewer": 1, "editor": 2, "admin": 3}
 
 
 def verify_password(plain: str, hashed: str) -> bool:
@@ -80,28 +82,46 @@ async def get_current_user(
     return user
 
 
-ROLE_RANK = {"none": 0, "viewer": 1, "editor": 2, "admin": 3}
-
-
 async def effective_role(user: User, dataset_id: uuid.UUID | None, db: AsyncSession) -> str:
     """Return the effective role for a user on a specific dataset.
-    Dataset-level permission overrides global role when present."""
+
+    Priority:
+    1. Global admin → always admin
+    2. Direct DatasetPermission (user-level) → use that role
+    3. Best DatasetGroupPermission from user's groups → use highest role
+    4. Global user role (fallback)
+    """
     if dataset_id is None:
         return user.role
-    result = await db.execute(
+    if user.role == "admin":
+        return "admin"
+
+    # Check direct user permission (highest priority after admin)
+    direct = await db.execute(
         select(DatasetPermission).where(
             DatasetPermission.dataset_id == dataset_id,
             DatasetPermission.user_id == user.id,
         )
     )
-    perm = result.scalar_one_or_none()
-    if perm is None:
-        return user.role
-    # Use whichever is higher: global role or dataset override
-    # (admins always keep admin regardless of dataset perm)
-    if user.role == "admin":
-        return "admin"
-    return perm.role
+    perm = direct.scalar_one_or_none()
+    if perm is not None:
+        return perm.role
+
+    # Check group permissions — return highest role across all groups
+    group_perms_result = await db.execute(
+        select(DatasetGroupPermission)
+        .join(UserGroupMember, DatasetGroupPermission.group_id == UserGroupMember.group_id)
+        .where(
+            DatasetGroupPermission.dataset_id == dataset_id,
+            UserGroupMember.user_id == user.id,
+        )
+    )
+    group_perms = group_perms_result.scalars().all()
+    if group_perms:
+        best = max(group_perms, key=lambda p: ROLE_RANK.get(p.role, 0))
+        return best.role
+
+    return user.role
 
 
 def require_roles(*roles: str):
@@ -117,8 +137,7 @@ def require_roles(*roles: str):
 
 
 def require_dataset_roles(*roles: str):
-    """Dependency factory that checks per-dataset permissions.
-    Reads dataset_id from the path parameter."""
+    """Dependency factory that checks per-dataset permissions (including groups)."""
     async def _check(
         dataset_id: uuid.UUID,
         current_user: User = Depends(get_current_user),

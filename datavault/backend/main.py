@@ -7,6 +7,7 @@ from slowapi.errors import RateLimitExceeded
 from routers import datasets, columns, records
 from routers.auth import router as auth_router
 from routers.permissions import router as permissions_router
+from routers.groups import router as groups_router
 from auth import decode_token
 import json
 
@@ -64,6 +65,7 @@ app.include_router(datasets.router)
 app.include_router(columns.router)
 app.include_router(records.router)
 app.include_router(permissions_router)
+app.include_router(groups_router)
 
 
 @app.get("/health")

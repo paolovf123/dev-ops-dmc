@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Text, Integer, ForeignKey, DateTime, Boolean, JSON
+from sqlalchemy import String, Text, Integer, ForeignKey, DateTime, Boolean, JSON, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.dialects.postgresql import JSONB as _PG_JSONB
 
@@ -27,6 +27,26 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class UserGroup(Base):
+    __tablename__ = "user_groups"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    members: Mapped[list["UserGroupMember"]] = relationship("UserGroupMember", back_populates="group", cascade="all, delete-orphan")
+
+
+class UserGroupMember(Base):
+    __tablename__ = "user_group_members"
+
+    group_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("user_groups.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+
+    group: Mapped["UserGroup"] = relationship("UserGroup", back_populates="members")
+
+
 class Dataset(Base):
     __tablename__ = "datasets"
 
@@ -34,6 +54,12 @@ class Dataset(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    # Computed dataset fields
+    is_computed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    source_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_dataset_ids: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    last_computed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     columns: Mapped[list["ColumnDefinition"]] = relationship("ColumnDefinition", back_populates="dataset", cascade="all, delete-orphan")
     records: Mapped[list["Record"]] = relationship("Record", back_populates="dataset", cascade="all, delete-orphan")
@@ -69,7 +95,7 @@ class Record(Base):
 
 
 class DatasetPermission(Base):
-    """Per-dataset role override. Overrides the user's global role for this dataset."""
+    """Per-dataset role override per user. Overrides the user's global role for this dataset."""
     __tablename__ = "dataset_permissions"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -77,6 +103,19 @@ class DatasetPermission(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     role: Mapped[str] = mapped_column(String(20), nullable=False)  # admin | editor | viewer | none
     granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class DatasetGroupPermission(Base):
+    """Per-dataset role override per group."""
+    __tablename__ = "dataset_group_permissions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    dataset_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("datasets.id", ondelete="CASCADE"), nullable=False)
+    group_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("user_groups.id", ondelete="CASCADE"), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False)  # admin | editor | viewer | none
+    granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (UniqueConstraint("dataset_id", "group_id", name="uq_dataset_group_perm"),)
 
 
 class ChangeHistory(Base):
@@ -89,7 +128,6 @@ class ChangeHistory(Base):
     new_value: Mapped[str | None] = mapped_column(Text)
     action: Mapped[str] = mapped_column(String(20))
     changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    # Who made the change (nullable for backward compat with pre-auth records)
     user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     user_name: Mapped[str | None] = mapped_column(Text, nullable=True)
 

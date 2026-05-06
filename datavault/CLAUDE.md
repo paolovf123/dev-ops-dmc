@@ -223,9 +223,68 @@ ALLOWED_ORIGINS=http://localhost:5173
 - **Rate limiting** — 10/min en login, 5/min en registro para prevenir brute force.
 - **Docker Desktop** en Windows (no WSL2 engine) — la máquina corre Docker Desktop directamente.
 
-## Próximos pasos
+## Features nuevas (Mayo 2026)
 
-- [x] Deploy a AWS ECS Fargate + RDS + S3 + CloudFront vía Terraform
-- [ ] Índice GIN en `records.data` cuando el volumen crezca
-- [ ] Permisos granulares por dataset desde la UI
-- [ ] Notificaciones en tiempo real por WebSocket para todos los cambios
+### Feature 1: Permisos por grupos
+- Modelos: `UserGroup`, `UserGroupMember`, `DatasetGroupPermission`
+- Migración: `c3f7a2b8d91e_groups_and_computed_datasets`
+- Prioridad: admin global > permiso directo > mejor permiso de grupo > rol global
+- `effective_role(user, dataset_id, db)` en `auth.py`
+- `GET /datasets` filtra automáticamente por acceso efectivo
+- API: `GET/POST/DELETE /groups`, `GET/POST/DELETE /groups/{id}/members`
+- API: `GET/PUT/DELETE /datasets/{id}/permissions/groups`
+- UI: `PermissionsPanel.tsx` (modal con tabs usuarios/grupos)
+- UI: `AdminGroups.tsx` → `/admin/groups`
+- Seed: `backend/seed_users_groups.py` — 12 usuarios, 4 grupos (Ventas, Operaciones, Gerencia, Analítica)
+  - Contraseña todos: `Pass1234!`
+
+### Feature 2: Scripts Python (Computed Datasets)
+- Cada script = Dataset propio (`is_computed=True`), completamente independiente
+- Re-ejecutar reemplaza solo los datos de ese script; no afecta otros scripts
+- `POST /datasets/{id}/compute` → invoca AWS Lambda con el código + DataFrames fuente
+- Lambda: `lambda/executor/` — paquetes: pandas, numpy, scipy, scikit-learn, openpyxl, duckdb
+- Timeout Lambda: 15 minutos. Variable necesaria: `LAMBDA_EXECUTOR_ARN`
+- UI: `ScriptsHub.tsx` → `/scripts` — hub principal (crear, ejecutar, editar, ver, eliminar)
+- UI: `ComputedDatasetEditor.tsx` — editor Monaco, tema azul-morado, 620px alto
+  - Sidebar: selector de datasets fuente + chips de columnas
+  - Botón "Generar plantilla" genera código con nombres reales de columnas
+- DuckDB disponible en scripts:
+  ```python
+  import duckdb
+  result = duckdb.query("""
+      SELECT p.nombre, SUM(d.cantidad) AS total
+      FROM detalle d
+      JOIN producto p ON d.id_producto = p.__id__
+      GROUP BY p.nombre ORDER BY total DESC
+  """).df()
+  ```
+
+## Rutas frontend completas
+| Ruta | Página |
+|------|--------|
+| `/` | DatasetList |
+| `/create` | CreateDataset |
+| `/scripts` | ScriptsHub |
+| `/computed/new` | ComputedDatasetEditor (nuevo) |
+| `/datasets/:id/computed` | ComputedDatasetEditor (editar) |
+| `/datasets/:id` | DatasetView |
+| `/datasets/:id/new` | RecordForm |
+| `/admin/users` | AdminUsers |
+| `/admin/audit` | AdminAudit |
+| `/admin/groups` | AdminGroups |
+
+## Pendientes de deploy
+1. Aplicar migración: `docker compose exec backend alembic upgrade head`
+2. Deploy Lambda: ver `lambda/executor/README.md`
+3. Configurar `LAMBDA_EXECUTOR_ARN` en la task definition de ECS
+
+## Migraciones Alembic (completas)
+1. `48460562010c_init`
+2. `a98108fe73ca_add_users_and_auth`
+3. `29e5809b0914_dataset_permissions_and_gin_index`
+4. `c3f7a2b8d91e_groups_and_computed_datasets`
+
+## Tips Windows / Git Bash
+- `docker exec` con rutas absolutas: usar `//bin/ls //app/` (doble slash)
+- Copiar scripts al backend antes de ejecutar: `docker cp script.py container:/app/` luego `docker compose exec backend python /app/script.py`
+- Monaco Editor requiere `@monaco-editor/react` (ya en package.json)

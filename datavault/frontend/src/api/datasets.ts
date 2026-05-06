@@ -1,11 +1,21 @@
 import api from "./client";
-import type { Dataset, ColumnDefinition, Record as DRecord } from "../types";
+import type { Dataset, ColumnDefinition, Record as DRecord, DatasetPermission, DatasetGroupPermission, ComputeResult } from "../types";
 
 // Datasets
 export const getDatasets = () => api.get<Dataset[]>("/datasets").then((r) => r.data);
-export const createDataset = (name: string, description?: string) =>
-  api.post<Dataset>("/datasets", { name, description }).then((r) => r.data);
+export const createDataset = (
+  name: string,
+  description?: string,
+  computed?: { is_computed: true; source_code: string; source_dataset_ids: string[] }
+) =>
+  api.post<Dataset>("/datasets", { name, description, ...(computed ?? {}) }).then((r) => r.data);
+export const updateDataset = (id: string, body: { name?: string; description?: string; source_code?: string; source_dataset_ids?: string[] }) =>
+  api.patch<Dataset>(`/datasets/${id}`, body).then((r) => r.data);
 export const deleteDataset = (id: string) => api.delete(`/datasets/${id}`);
+
+// Computed datasets
+export const computeDataset = (id: string) =>
+  api.post<ComputeResult>(`/datasets/${id}/compute`).then((r) => r.data);
 
 // Columns
 export const getColumns = (datasetId: string) =>
@@ -46,6 +56,22 @@ export const importCsv = (datasetId: string, file: File) => {
     { headers: { "Content-Type": "multipart/form-data" } }
   ).then((r) => r.data);
 };
+
+// Permissions (user-level)
+export const getDatasetPermissions = (datasetId: string) =>
+  api.get<DatasetPermission[]>(`/datasets/${datasetId}/permissions`).then((r) => r.data);
+export const setDatasetPermission = (datasetId: string, userId: string, role: string) =>
+  api.put<DatasetPermission>(`/datasets/${datasetId}/permissions`, { user_id: userId, role }).then((r) => r.data);
+export const removeDatasetPermission = (datasetId: string, userId: string) =>
+  api.delete(`/datasets/${datasetId}/permissions/${userId}`);
+
+// Permissions (group-level)
+export const getDatasetGroupPermissions = (datasetId: string) =>
+  api.get<DatasetGroupPermission[]>(`/datasets/${datasetId}/permissions/groups`).then((r) => r.data);
+export const setDatasetGroupPermission = (datasetId: string, groupId: string, role: string) =>
+  api.put<DatasetGroupPermission>(`/datasets/${datasetId}/permissions/groups`, { group_id: groupId, role }).then((r) => r.data);
+export const removeDatasetGroupPermission = (datasetId: string, groupId: string) =>
+  api.delete(`/datasets/${datasetId}/permissions/groups/${groupId}`);
 
 export interface ChangeHistoryEntry {
   id: string;

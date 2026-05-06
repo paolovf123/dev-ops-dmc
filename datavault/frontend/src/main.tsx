@@ -12,6 +12,9 @@ import CreateDataset from "./pages/CreateDataset";
 import Login from "./pages/Login";
 import AdminUsers from "./pages/AdminUsers";
 import AdminAudit from "./pages/AdminAudit";
+import AdminGroups from "./pages/AdminGroups";
+import ComputedDatasetEditor from "./pages/ComputedDatasetEditor";
+import ScriptsHub from "./pages/ScriptsHub";
 import "./index.css";
 
 const qc = new QueryClient({
@@ -53,8 +56,12 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="/create" element={<RequireAuth><CreateDataset /></RequireAuth>} />
               <Route path="/datasets/:datasetId" element={<RequireAuth><DatasetView /></RequireAuth>} />
               <Route path="/datasets/:datasetId/new" element={<RequireAuth><RecordForm /></RequireAuth>} />
+              <Route path="/datasets/:datasetId/computed" element={<RequireAuth><ComputedDatasetEditor /></RequireAuth>} />
+              <Route path="/computed/new" element={<RequireAuth><ComputedDatasetEditor /></RequireAuth>} />
+              <Route path="/scripts" element={<RequireAuth><ScriptsHub /></RequireAuth>} />
               <Route path="/admin/users" element={<RequireAuth><AdminUsers /></RequireAuth>} />
               <Route path="/admin/audit" element={<RequireAuth><AdminAudit /></RequireAuth>} />
+              <Route path="/admin/groups" element={<RequireAuth><AdminGroups /></RequireAuth>} />
             </Routes>
           </BrowserRouter>
         </ConfirmProvider>

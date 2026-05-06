@@ -237,6 +237,11 @@ export default function DatasetList() {
         </button>
         <div className="app-header-spacer" />
         <span className="app-header-tag">Paolo Corp</span>
+        {isAdmin && (
+          <button className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => navigate("/admin/groups")}>
+            👥 Grupos
+          </button>
+        )}
         <UserMenu />
       </header>
 
@@ -257,10 +262,16 @@ export default function DatasetList() {
               </button>
             )}
             {isAdmin && (
-              <button className="btn btn-primary ds-hero-btn" onClick={() => navigate("/create")}>
-                <span style={{ fontSize: 18, lineHeight: 1 }}>＋</span>
-                Nuevo dataset
-              </button>
+              <>
+                <button className="btn btn-secondary" onClick={() => navigate("/scripts")}
+                  style={{ fontSize: 14 }}>
+                  ⚡ Scripts Python
+                </button>
+                <button className="btn btn-primary ds-hero-btn" onClick={() => navigate("/create")}>
+                  <span style={{ fontSize: 18, lineHeight: 1 }}>＋</span>
+                  Nuevo dataset
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -425,6 +436,13 @@ export default function DatasetList() {
 
                   {/* Footer */}
                   <div className="ds-card-footer">
+                    {ds.is_computed && (
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 99,
+                        background: "#7C3AED18", color: "#7C3AED",
+                        border: "1px solid #7C3AED40",
+                      }}>⚡ calculado</span>
+                    )}
                     <span
                       className="ds-meta-badge"
                       style={{ background: color.light, color: color.text, border: `1px solid ${color.from}33` }}
@@ -441,6 +459,16 @@ export default function DatasetList() {
                       </svg>
                       {recCount === null ? "—" : recCount.toLocaleString()} fila{recCount !== 1 ? "s" : ""}
                     </span>
+                    {ds.is_computed && isAdmin && (
+                      <button
+                        className="btn btn-ghost"
+                        style={{ fontSize: 11, padding: "2px 8px" }}
+                        title="Editar código"
+                        onClick={(e) => { e.stopPropagation(); navigate(`/datasets/${ds.id}/computed`); }}
+                      >
+                        ✏️ Editor
+                      </button>
+                    )}
                     <span className="ds-card-open">
                       Abrir <span style={{ fontSize: 14 }}>→</span>
                     </span>
