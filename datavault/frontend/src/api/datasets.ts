@@ -2,7 +2,8 @@ import api from "./client";
 import type { Dataset, ColumnDefinition, Record as DRecord, DatasetPermission, DatasetGroupPermission, ComputeResult } from "../types";
 
 // Datasets
-export const getDatasets = () => api.get<Dataset[]>("/datasets").then((r) => r.data);
+export const getDatasets = (params?: { workspace_id?: string }) =>
+  api.get<Dataset[]>("/datasets", { params }).then((r) => r.data);
 export const createDataset = (
   name: string,
   description?: string,

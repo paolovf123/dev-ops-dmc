@@ -129,7 +129,7 @@ POST   /auth/login             body: {email, password}
 GET    /auth/me
 GET    /auth/users             (admin)
 PATCH  /auth/users/{id}/role   (admin)
-GET    /auth/audit             (admin) ?dataset_id=&user_id=&action=
+GET    /auth/audit             (admin) ?dataset_id=&workspace_id=&user_id=&action=
 
 GET    /datasets
 POST   /datasets
@@ -269,22 +269,150 @@ ALLOWED_ORIGINS=http://localhost:5173
 | `/datasets/:id/computed` | ComputedDatasetEditor (editar) |
 | `/datasets/:id` | DatasetView |
 | `/datasets/:id/new` | RecordForm |
+| `/ws/:workspaceId` | WorkspaceView |
 | `/admin/users` | AdminUsers |
 | `/admin/audit` | AdminAudit |
 | `/admin/groups` | AdminGroups |
+| `/admin/workspaces` | AdminWorkspaces |
 
-## Pendientes de deploy
-1. Aplicar migración: `docker compose exec backend alembic upgrade head`
-2. Deploy Lambda: ver `lambda/executor/README.md`
-3. Configurar `LAMBDA_EXECUTOR_ARN` en la task definition de ECS
+## Feature 3: Workspaces (Equipos)
+
+### Concepto
+Cada workspace = un equipo con sus propios datasets y grupos. Un usuario puede pertenecer a múltiples workspaces con roles distintos.
+
+### Jerarquía
+```
+Empresa
+└── Workspace (Ventas, Operaciones, RRHH...)
+    ├── Datasets propios
+    ├── Grupos propios
+    └── Miembros con roles: owner | admin | member
+```
+
+### Modelos nuevos
+- `Workspace`: id, name, description, created_at
+- `WorkspaceMember`: workspace_id, user_id, role (owner|admin|member), joined_at
+- `Dataset.workspace_id` → FK nullable a Workspace
+- `UserGroup.workspace_id` → FK nullable a Workspace
+
+### Migración
+`d4e8f1a2b3c5_add_workspaces`
+
+### API
+```
+GET    /workspaces                     lista los workspaces del usuario
+POST   /workspaces                     crea workspace (creador = owner automático)
+GET    /workspaces/{id}
+PATCH  /workspaces/{id}               solo owner/admin del workspace
+DELETE /workspaces/{id}               solo admin global
+
+GET    /workspaces/{id}/members
+POST   /workspaces/{id}/members       body: {user_id, role}
+PATCH  /workspaces/{id}/members/{uid} cambia rol
+DELETE /workspaces/{id}/members/{uid}
+
+GET    /datasets?workspace_id=<uuid>  filtra por workspace
+POST   /datasets                      body incluye workspace_id opcional
+GET    /groups?workspace_id=<uuid>    filtra por workspace
+```
+
+### Auth: effective_workspace_role()
+- Admin global → siempre "admin" en cualquier workspace
+- Otros → lee WorkspaceMember.role (owner|admin|member) o None si no es miembro
+
+### Frontend
+- `WorkspaceContext.tsx` — estado global del workspace activo (persiste en localStorage `dv_workspace_id`)
+- `WorkspaceSwitcher.tsx` — dropdown para cambiar de workspace y crear nuevos
+- `WorkspaceProvider` envuelve la app en `main.tsx`
+
+### Frontend (implementado)
+- `WorkspaceContext.tsx` — estado global del workspace activo (persiste en localStorage `dv_workspace_id`)
+- `WorkspaceSwitcher.tsx` — dropdown con avatares, roles pill, opción crear nuevo; tema claro con CSS variables; cierra al hacer clic fuera (useRef + useEffect)
+- `WorkspaceProvider` envuelve la app en `main.tsx`
+- `AdminWorkspaces.tsx` → `/admin/workspaces` — layout sidebar + panel derecho; avatares de color determinístico; gestión de miembros con rol seleccionable
+- `WorkspaceView.tsx` → `/ws/:workspaceId` — vista de datasets del workspace con header breadcrumb
+- `DatasetList.tsx` — `AppHeader` con `WorkspaceSwitcher`, nav SVG icons, `UserMenu`
+- `AdminGroups.tsx` → `/admin/groups` — mismo patrón sidebar + panel que AdminWorkspaces
+- `AdminAudit.tsx` → `/admin/audit`:
+  - Filtros: Acción | Workspace | Dataset (filtrado por workspace) | Persona (multi-select con checkboxes)
+  - Al seleccionar workspace, el select de dataset muestra solo los datasets de ese workspace
+  - Filtro de persona: multi-select, chips individuales por persona, avatares apilados en botón
+  - Tarjetas de estadísticas clicables (filtra por acción)
+  - Exportar CSV (con BOM UTF-8) y Excel SpreadsheetML (.xls) sin librería npm
+  - Click en usuario de la tabla agrega/quita de la selección multi-persona
+
+### Seed de datos
+- `backend/seed_users_groups.py` — 12 usuarios, 4 grupos; contraseña todos: `Pass1234!`
+- `backend/seed_datasets_finti.py` — datasets para workspaces Finanzas y TI
+- `backend/seed_activity.py` — simula actividad de 10 usuarios para poblar el audit log
+
+## Deploy en AWS
+
+### Estructura de infraestructura
+```
+dev_ops_dmc/
+├── terraform/
+│   ├── main.tf          # VPC, SG, ECR, S3, CloudFront, RDS, ECS, IAM, OIDC
+│   ├── variables.tf     # aws_region, environment, db_user, db_password, db_name
+│   ├── outputs.tf       # cloudfront_url, alb_dns_name, ecr_backend_url, github_actions_role_arn
+│   └── bootstrap.sh     # Crea el bucket S3 de estado (ejecutar 1 sola vez)
+└── .github/workflows/
+    └── ci-cd.yml        # Tests → deploy staging (develop) → deploy prod (main)
+```
+
+### Primer deploy (pasos en orden)
+
+```bash
+# 1. Crear bucket de estado Terraform
+cd terraform
+bash bootstrap.sh
+
+# 2. Aprovisionar infraestructura (staging)
+terraform init
+terraform apply -var="environment=staging" -var="db_password=<password_seguro>"
+
+# 3. Anotar los outputs — los necesitas para los secrets de GitHub:
+#    github_actions_role_arn → AWS_ROLE_ARN_STAGING
+#    cloudfront_url          → VITE_API_URL (dominio CloudFront)
+
+# 4. Configurar secrets y variables en GitHub
+#    Settings → Environments → staging:
+#      Secret: AWS_ROLE_ARN_STAGING
+#    Settings → Variables (repo level):
+#      VITE_API_URL = https://<cloudfront_domain>
+#      VITE_WS_URL  = wss://<cloudfront_domain>
+#      AWS_REGION   = us-east-1
+
+# 5. Push a develop → el pipeline hace el resto automáticamente
+```
+
+### Cómo funciona el CI/CD
+- `push → develop` → deploy staging (build → migración Alembic → ECS update)
+- `push → main`    → deploy prod (mismo flujo, entorno production)
+- `PR → main`      → solo tests y lint, sin deploy
+
+### CloudFront path routing
+El frontend (S3) recibe todo por defecto. Estos paths se proxean al ALB/backend:
+`/auth*` `/datasets*` `/permissions*` `/groups*` `/workspaces*` `/records*` `/health` `/ws*`
+
+### Pendientes antes de producción
+1. Habilitar NAT Gateway en Terraform (`enable_nat_gateway = true`) y mover ECS a subnets privadas
+2. Descomentar ElastiCache Redis y `REDIS_URL` en task definition
+3. Deploy Lambda executor: ver `lambda/executor/README.md`; agregar `LAMBDA_EXECUTOR_ARN` a SSM y task definition
+4. Configurar dominio propio + certificado ACM si se quiere URL personalizada
 
 ## Migraciones Alembic (completas)
 1. `48460562010c_init`
 2. `a98108fe73ca_add_users_and_auth`
 3. `29e5809b0914_dataset_permissions_and_gin_index`
 4. `c3f7a2b8d91e_groups_and_computed_datasets`
+5. `d4e8f1a2b3c5_add_workspaces`
 
 ## Tips Windows / Git Bash
 - `docker exec` con rutas absolutas: usar `//bin/ls //app/` (doble slash)
 - Copiar scripts al backend antes de ejecutar: `docker cp script.py container:/app/` luego `docker compose exec backend python /app/script.py`
 - Monaco Editor requiere `@monaco-editor/react` (ya en package.json)
+- Para copiar archivos frontend al contenedor en caliente (sin rebuild): `docker cp archivo.tsx datavault-frontend-1:/app/src/pages/` — Vite HMR lo detecta automáticamente
+- Para cambios en el backend (routers/): `docker cp router.py datavault-backend-1:/app/routers/` + `docker restart datavault-backend-1`
+- Módulo de base de datos expone `engine` y `get_db`; no `AsyncSessionLocal` ni `async_session_maker`
+- Usuarios admin de desarrollo: `admin@datavault.com` / `Admin1234!`

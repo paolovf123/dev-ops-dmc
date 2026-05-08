@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Navigate } from "react-router-dom";
 import axios from "axios";
 import api from "../api/client";
 import { useAuth } from "../auth/AuthContext";
@@ -8,8 +8,10 @@ import type { AuthUser } from "../auth/AuthContext";
 type Mode = "login" | "register";
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, token } = useAuth();
   const navigate   = useNavigate();
+
+  if (token) return <Navigate to="/" replace />;
   const [mode, setMode]         = useState<Mode>("login");
   const [email, setEmail]       = useState("");
   const [username, setUsername] = useState("");

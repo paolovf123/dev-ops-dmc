@@ -127,6 +127,7 @@ async def audit_log(
     skip: int = 0,
     limit: int = 100,
     dataset_id: str | None = None,
+    workspace_id: str | None = None,
     user_id: str | None = None,
     action: str | None = None,
 ):
@@ -138,6 +139,8 @@ async def audit_log(
     )
     if dataset_id:
         stmt = stmt.where(Record.dataset_id == uuid.UUID(dataset_id))
+    if workspace_id:
+        stmt = stmt.where(Dataset.workspace_id == uuid.UUID(workspace_id))
     if user_id:
         stmt = stmt.where(ChangeHistory.user_id == uuid.UUID(user_id))
     if action:

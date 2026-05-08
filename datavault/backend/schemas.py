@@ -43,6 +43,7 @@ class Token(BaseModel):
 class DatasetCreate(BaseModel):
     name: str
     description: str | None = None
+    workspace_id: uuid.UUID | None = None
     is_computed: bool = False
     source_code: str | None = None
     source_dataset_ids: list[str] = []
@@ -59,6 +60,7 @@ class DatasetOut(BaseModel):
     id: uuid.UUID
     name: str
     description: str | None
+    workspace_id: uuid.UUID | None
     created_at: datetime
     is_computed: bool
     source_code: str | None
@@ -139,6 +141,7 @@ class ChangeHistoryOut(BaseModel):
 class GroupCreate(BaseModel):
     name: str
     description: str | None = None
+    workspace_id: uuid.UUID | None = None
 
 
 class GroupUpdate(BaseModel):
@@ -150,6 +153,7 @@ class GroupOut(BaseModel):
     id: uuid.UUID
     name: str
     description: str | None
+    workspace_id: uuid.UUID | None = None
     created_at: datetime
     member_count: int = 0
 

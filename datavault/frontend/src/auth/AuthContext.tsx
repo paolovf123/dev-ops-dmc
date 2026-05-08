@@ -52,6 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback((token: string, user: AuthUser) => {
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem(USER_KEY, JSON.stringify(user));
+    if (user.role === "admin") localStorage.removeItem("dv_workspace_id");
     axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
     setState({ token, user });
   }, []);
@@ -59,6 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
+    localStorage.removeItem("dv_workspace_id");
     delete axios.defaults.headers.common["Authorization"];
     setState({ token: null, user: null });
   }, []);

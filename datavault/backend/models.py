@@ -15,6 +15,31 @@ def utcnow():
     return datetime.now(timezone.utc)
 
 
+class Workspace(Base):
+    __tablename__ = "workspaces"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    members: Mapped[list["WorkspaceMember"]] = relationship("WorkspaceMember", back_populates="workspace", cascade="all, delete-orphan")
+    datasets: Mapped[list["Dataset"]] = relationship("Dataset", back_populates="workspace", cascade="all, delete-orphan")
+    groups: Mapped[list["UserGroup"]] = relationship("UserGroup", back_populates="workspace", cascade="all, delete-orphan")
+
+
+class WorkspaceMember(Base):
+    """Membresía de un usuario en un workspace con su rol dentro de ese equipo."""
+    __tablename__ = "workspace_members"
+
+    workspace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="member")  # owner | admin | member
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    workspace: Mapped["Workspace"] = relationship("Workspace", back_populates="members")
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -31,10 +56,12 @@ class UserGroup(Base):
     __tablename__ = "user_groups"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    workspace_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
+    workspace: Mapped["Workspace | None"] = relationship("Workspace", back_populates="groups")
     members: Mapped[list["UserGroupMember"]] = relationship("UserGroupMember", back_populates="group", cascade="all, delete-orphan")
 
 
@@ -51,6 +78,7 @@ class Dataset(Base):
     __tablename__ = "datasets"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -61,6 +89,7 @@ class Dataset(Base):
     source_dataset_ids: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     last_computed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    workspace: Mapped["Workspace | None"] = relationship("Workspace", back_populates="datasets")
     columns: Mapped[list["ColumnDefinition"]] = relationship("ColumnDefinition", back_populates="dataset", cascade="all, delete-orphan")
     records: Mapped[list["Record"]] = relationship("Record", back_populates="dataset", cascade="all, delete-orphan")
 

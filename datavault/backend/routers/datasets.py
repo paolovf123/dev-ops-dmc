@@ -10,7 +10,7 @@ from sqlalchemy import select, delete, and_, or_, not_
 from database import get_db
 from models import Dataset, User, Record, ColumnDefinition, DatasetPermission, DatasetGroupPermission, UserGroupMember
 from schemas import DatasetCreate, DatasetUpdate, DatasetOut, ComputeResult, ColumnOut
-from auth import get_current_user, require_admin, ds_require_editor, ds_require_viewer
+from auth import get_current_user, require_admin, ds_require_editor, ds_require_viewer, effective_workspace_role
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
 
@@ -19,22 +19,17 @@ router = APIRouter(prefix="/datasets", tags=["datasets"])
 
 @router.get("", response_model=list[DatasetOut])
 async def list_datasets(
+    workspace_id: uuid.UUID | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    ws_filter = Dataset.workspace_id == workspace_id if workspace_id else True
+
     if current_user.role == "admin":
-        result = await db.execute(select(Dataset).order_by(Dataset.created_at.desc()))
+        result = await db.execute(select(Dataset).where(ws_filter).order_by(Dataset.created_at.desc()))
         return result.scalars().all()
 
     # Non-admin: exclude datasets where effective role would be "none"
-    #
-    # Priority: direct perm > best group perm > global role
-    # A dataset is visible when effective_role != "none", which means:
-    #   - Has direct non-"none" perm
-    #   - OR no direct perm AND has group access (best group role != "none")
-    #   - OR no direct perm AND no group perms (global role applies, always visible)
-
-    # Datasets where user has a direct non-none permission
     direct_access = Dataset.id.in_(
         select(DatasetPermission.dataset_id).where(
             DatasetPermission.user_id == current_user.id,
@@ -42,19 +37,16 @@ async def list_datasets(
         )
     )
 
-    # Datasets where user has any direct permission (blocks group/global fallback)
     has_direct = Dataset.id.in_(
         select(DatasetPermission.dataset_id).where(
             DatasetPermission.user_id == current_user.id,
         )
     )
 
-    # User's group IDs
     user_group_ids = select(UserGroupMember.group_id).where(
         UserGroupMember.user_id == current_user.id
     )
 
-    # Datasets where user has a positive group permission
     group_access = Dataset.id.in_(
         select(DatasetGroupPermission.dataset_id).where(
             DatasetGroupPermission.group_id.in_(user_group_ids),
@@ -62,7 +54,6 @@ async def list_datasets(
         )
     )
 
-    # Datasets where user has any group permission (to detect "group blocked")
     has_group_any = Dataset.id.in_(
         select(DatasetGroupPermission.dataset_id).where(
             DatasetGroupPermission.group_id.in_(user_group_ids),
@@ -76,9 +67,22 @@ async def list_datasets(
     )
 
     result = await db.execute(
-        select(Dataset).where(visible).order_by(Dataset.created_at.desc())
+        select(Dataset).where(and_(visible, ws_filter)).order_by(Dataset.created_at.desc())
     )
     return result.scalars().all()
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+async def _require_ws_manager(user: User, workspace_id: uuid.UUID | None, db: AsyncSession):
+    """Permite admin global, o owner/manager del workspace."""
+    if user.role == "admin":
+        return
+    if not workspace_id:
+        raise HTTPException(status_code=403, detail="Se requiere workspace para esta operación")
+    ws_role = await effective_workspace_role(user, workspace_id, db)
+    if ws_role not in ("owner", "manager"):
+        raise HTTPException(status_code=403, detail="Requiere rol owner o manager en el workspace")
 
 
 # ── Create ────────────────────────────────────────────────────────────────────
@@ -86,12 +90,14 @@ async def list_datasets(
 @router.post("", response_model=DatasetOut, status_code=201)
 async def create_dataset(
     body: DatasetCreate,
-    _: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await _require_ws_manager(current_user, body.workspace_id, db)
     dataset = Dataset(
         name=body.name,
         description=body.description,
+        workspace_id=body.workspace_id,
         is_computed=body.is_computed,
         source_code=body.source_code,
         source_dataset_ids=body.source_dataset_ids,
@@ -108,13 +114,14 @@ async def create_dataset(
 async def update_dataset(
     dataset_id: uuid.UUID,
     body: DatasetUpdate,
-    _: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Dataset).where(Dataset.id == dataset_id))
     dataset = result.scalar_one_or_none()
     if not dataset:
         raise HTTPException(status_code=404, detail="Dataset not found")
+    await _require_ws_manager(current_user, dataset.workspace_id, db)
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(dataset, field, value)
     await db.commit()
@@ -127,13 +134,14 @@ async def update_dataset(
 @router.delete("/{dataset_id}", status_code=204)
 async def delete_dataset(
     dataset_id: uuid.UUID,
-    _: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Dataset).where(Dataset.id == dataset_id))
     dataset = result.scalar_one_or_none()
     if not dataset:
         raise HTTPException(status_code=404, detail="Dataset not found")
+    await _require_ws_manager(current_user, dataset.workspace_id, db)
     await db.delete(dataset)
     await db.commit()
 
@@ -157,7 +165,6 @@ async def compute_dataset(
     if not dataset.source_dataset_ids:
         raise HTTPException(status_code=400, detail="El dataset no tiene datasets fuente configurados")
 
-    # Load source datasets as DataFrames (list of dicts)
     dataframes: dict[str, list[dict]] = {}
     for src_id_str in dataset.source_dataset_ids:
         src_id = uuid.UUID(src_id_str)
@@ -173,12 +180,10 @@ async def compute_dataset(
             )
         )
         records = records_result.scalars().all()
-        # Normalize name to valid Python identifier
         df_name = src_ds.name.lower().replace(" ", "_").replace("-", "_")
         df_name = "".join(c if c.isalnum() or c == "_" else "_" for c in df_name)
         dataframes[df_name] = [{"__id__": str(r.id), **r.data} for r in records]
 
-    # Invoke Lambda
     lambda_arn = os.getenv("LAMBDA_EXECUTOR_ARN")
     if not lambda_arn:
         raise HTTPException(
@@ -198,7 +203,6 @@ async def compute_dataset(
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Error invocando Lambda: {str(e)}")
 
-    # Lambda may return a FunctionError
     if response.get("FunctionError"):
         detail = result.get("errorMessage", str(result))
         raise HTTPException(status_code=422, detail=f"Error en Lambda: {detail}")
@@ -212,7 +216,6 @@ async def compute_dataset(
     columns_data: list[dict] = result.get("columns", [])
     records_data: list[dict] = result.get("records", [])
 
-    # Replace columns and records atomically
     await db.execute(delete(ColumnDefinition).where(ColumnDefinition.dataset_id == dataset_id))
     await db.execute(delete(Record).where(Record.dataset_id == dataset_id))
 

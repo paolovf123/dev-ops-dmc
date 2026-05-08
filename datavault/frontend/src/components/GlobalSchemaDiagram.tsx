@@ -3,7 +3,7 @@ import { useQuery, useQueries } from "@tanstack/react-query";
 import { getDatasets, getColumns } from "../api/datasets";
 import type { ColumnDefinition } from "../types";
 
-interface Props { onClose: () => void }
+interface Props { onClose: () => void; workspaceId?: string; workspaceName?: string }
 
 // ── FK helpers ────────────────────────────────────────────────────────────────
 function normalize(s: string) { return s.toLowerCase().replace(/\s+/g, "_"); }
@@ -184,12 +184,12 @@ function downloadPng(svgEl: SVGSVGElement, name: string) {
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
-export default function GlobalSchemaDiagram({ onClose }: Props) {
+export default function GlobalSchemaDiagram({ onClose, workspaceId, workspaceName }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
 
   const { data: datasets = [], isLoading: loadingDs } = useQuery({
-    queryKey: ["datasets"],
-    queryFn: getDatasets,
+    queryKey: ["datasets", workspaceId ?? "all"],
+    queryFn: () => getDatasets(workspaceId ? { workspace_id: workspaceId } : undefined),
   });
 
   const colQueries = useQueries({
@@ -274,7 +274,18 @@ export default function GlobalSchemaDiagram({ onClose }: Props) {
         {/* Header */}
         <div className="schema-header">
           <div>
-            <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>Diagrama global de relaciones</p>
+            <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>
+              Diagrama de relaciones
+              {workspaceName && (
+                <span style={{
+                  marginLeft: 10, fontSize: 12, fontWeight: 600,
+                  background: "#3B82F620", color: "#3B82F6",
+                  padding: "2px 10px", borderRadius: 99, border: "1px solid #3B82F640",
+                }}>
+                  {workspaceName}
+                </span>
+              )}
+            </p>
             <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 }}>
               {datasets.length} tabla{datasets.length !== 1 ? "s" : ""}
               {edges.length > 0 && ` · ${edges.length} relación${edges.length !== 1 ? "es" : ""} detectada${edges.length !== 1 ? "s" : ""}`}

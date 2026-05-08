@@ -45,8 +45,7 @@ module "vpc" {
   private_subnets = ["10.0.1.0/24", "10.0.2.0/24"]
   public_subnets  = ["10.0.101.0/24", "10.0.102.0/24"]
 
-  enable_nat_gateway   = false # OPTIMIZADO: cambiar a true para producción (~$32/mes)
-  # single_nat_gateway = true  # OPTIMIZADO: descomentar junto con enable_nat_gateway para producción
+  enable_nat_gateway   = false # cambiar a true para producción (~$32/mes)
   enable_dns_hostnames = true
 }
 
@@ -59,7 +58,6 @@ resource "aws_security_group" "alb" {
   vpc_id      = module.vpc.vpc_id
 
   ingress {
-    description = "HTTP Frontend"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -67,17 +65,8 @@ resource "aws_security_group" "alb" {
   }
 
   ingress {
-    description = "HTTPS Backend"
     from_port   = 443
     to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    description = "HTTP Backend (API & WS)"
-    from_port   = 8000
-    to_port     = 8000
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -94,13 +83,6 @@ resource "aws_security_group" "ecs" {
   name        = "datavault-ecs-sg-${var.environment}"
   description = "Permitir trafico desde el ALB hacia ECS"
   vpc_id      = module.vpc.vpc_id
-
-  ingress {
-    from_port       = 80
-    to_port         = 80
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
-  }
 
   ingress {
     from_port       = 8000
@@ -144,7 +126,7 @@ resource "aws_security_group" "redis" {
 }
 
 # ------------------------------------------------------------------------------
-# Repositorios ECR (Listos para el pipeline CI/CD)
+# ECR
 # ------------------------------------------------------------------------------
 resource "aws_ecr_repository" "backend" {
   name                 = "datavault-backend-${var.environment}"
@@ -171,7 +153,7 @@ resource "aws_ecr_lifecycle_policy" "backend" {
 # S3 + CloudFront (Frontend)
 # ------------------------------------------------------------------------------
 resource "aws_s3_bucket" "frontend" {
-  bucket = "datavault-frontend-${var.environment}-${data.aws_caller_identity.current.account_id}"
+  bucket        = "datavault-frontend-${var.environment}-${data.aws_caller_identity.current.account_id}"
   force_destroy = true
 }
 
@@ -191,19 +173,31 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
   signing_protocol                  = "sigv4"
 }
 
+locals {
+  # Todos los path patterns del backend API
+  api_paths = [
+    "/auth*",
+    "/datasets*",
+    "/permissions*",
+    "/groups*",
+    "/workspaces*",
+    "/records*",
+    "/health",
+    "/ws*",
+  ]
+}
+
 resource "aws_cloudfront_distribution" "frontend" {
   enabled             = true
   is_ipv6_enabled     = true
   default_root_object = "index.html"
 
-  # Origin 1: S3 (frontend estático)
   origin {
     domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
     origin_id                = "S3-frontend"
     origin_access_control_id = aws_cloudfront_origin_access_control.frontend.id
   }
 
-  # Origin 2: ALB (backend API)
   origin {
     domain_name = aws_lb.main.dns_name
     origin_id   = "ALB-backend"
@@ -215,79 +209,37 @@ resource "aws_cloudfront_distribution" "frontend" {
     }
   }
 
-  # Default behavior: servir frontend desde S3
+  # Default: frontend desde S3
   default_cache_behavior {
-    allowed_methods  = ["GET", "HEAD", "OPTIONS"]
-    cached_methods   = ["GET", "HEAD"]
-    target_origin_id = "S3-frontend"
-
-    forwarded_values {
-      query_string = false
-      cookies {
-        forward = "none"
-      }
-    }
-
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "S3-frontend"
     viewer_protocol_policy = "redirect-to-https"
     min_ttl                = 0
     default_ttl            = 3600
     max_ttl                = 86400
+
+    forwarded_values {
+      query_string = false
+      cookies { forward = "none" }
+    }
   }
 
-  # Backend API: rutas que se proxean al ALB
-  # Patrón "/path*" matchea tanto "/path" como "/path/algo"
-  # Usamos managed policies: CachingDisabled + AllViewer
-  ordered_cache_behavior {
-    path_pattern             = "/auth*"
-    target_origin_id         = "ALB-backend"
-    allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-    cached_methods           = ["GET", "HEAD"]
-    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # CachingDisabled
-    origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3" # AllViewer
-    viewer_protocol_policy   = "redirect-to-https"
+  # API routes → ALB
+  dynamic "ordered_cache_behavior" {
+    for_each = local.api_paths
+    content {
+      path_pattern             = ordered_cache_behavior.value
+      target_origin_id         = "ALB-backend"
+      allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+      cached_methods           = ["GET", "HEAD"]
+      cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # CachingDisabled
+      origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3" # AllViewer
+      viewer_protocol_policy   = "redirect-to-https"
+    }
   }
 
-  ordered_cache_behavior {
-    path_pattern             = "/datasets*"
-    target_origin_id         = "ALB-backend"
-    allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-    cached_methods           = ["GET", "HEAD"]
-    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
-    origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3"
-    viewer_protocol_policy   = "redirect-to-https"
-  }
-
-  ordered_cache_behavior {
-    path_pattern             = "/permissions*"
-    target_origin_id         = "ALB-backend"
-    allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-    cached_methods           = ["GET", "HEAD"]
-    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
-    origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3"
-    viewer_protocol_policy   = "redirect-to-https"
-  }
-
-  ordered_cache_behavior {
-    path_pattern             = "/health"
-    target_origin_id         = "ALB-backend"
-    allowed_methods          = ["GET", "HEAD", "OPTIONS"]
-    cached_methods           = ["GET", "HEAD"]
-    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
-    origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3"
-    viewer_protocol_policy   = "redirect-to-https"
-  }
-
-  ordered_cache_behavior {
-    path_pattern             = "/ws*"
-    target_origin_id         = "ALB-backend"
-    allowed_methods          = ["GET", "HEAD", "OPTIONS"]
-    cached_methods           = ["GET", "HEAD"]
-    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
-    origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3"
-    viewer_protocol_policy   = "redirect-to-https"
-  }
-
-  # SPA Fallback (React Router)
+  # SPA fallback
   custom_error_response {
     error_code         = 403
     response_code      = 200
@@ -300,9 +252,7 @@ resource "aws_cloudfront_distribution" "frontend" {
   }
 
   restrictions {
-    geo_restriction {
-      restriction_type = "none"
-    }
+    geo_restriction { restriction_type = "none" }
   }
 
   viewer_certificate {
@@ -328,9 +278,8 @@ resource "aws_s3_bucket_policy" "frontend" {
   })
 }
 
-
 # ------------------------------------------------------------------------------
-# Base de Datos PostgreSQL (RDS)
+# RDS PostgreSQL
 # ------------------------------------------------------------------------------
 resource "aws_db_subnet_group" "main" {
   name       = "datavault-db-subnet-group-${var.environment}"
@@ -353,8 +302,8 @@ resource "aws_db_instance" "postgres" {
 }
 
 # ------------------------------------------------------------------------------
-# Redis (ElastiCache) para WebSockets y Rate Limiting
-# OPTIMIZADO: desactivado para staging (~$12/mes). Descomentar todo para producción.
+# Redis (ElastiCache) — desactivado en staging (~$12/mes)
+# Descomentar todo el bloque para producción
 # ------------------------------------------------------------------------------
 # resource "aws_elasticache_subnet_group" "redis" {
 #   name       = "datavault-redis-subnet-group-${var.environment}"
@@ -374,7 +323,7 @@ resource "aws_db_instance" "postgres" {
 # }
 
 # ------------------------------------------------------------------------------
-# Load Balancer (ALB) y Target Groups
+# ALB
 # ------------------------------------------------------------------------------
 resource "aws_lb" "main" {
   name               = "datavault-alb-${var.environment}"
@@ -384,7 +333,6 @@ resource "aws_lb" "main" {
   subnets            = module.vpc.public_subnets
 }
 
-# Target Group Backend (FastAPI)
 resource "aws_lb_target_group" "backend" {
   name        = "datavault-tg-back-${var.environment}"
   port        = 8000
@@ -392,80 +340,17 @@ resource "aws_lb_target_group" "backend" {
   vpc_id      = module.vpc.vpc_id
   target_type = "ip"
   health_check {
-    path = "/health"
+    path                = "/health"
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    interval            = 30
   }
 }
 
-resource "aws_lb_listener" "backend_80" {
+resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = "80"
   protocol          = "HTTP"
-
-  dynamic "default_action" {
-    for_each = var.backend_domain != "" ? [1] : []
-    content {
-      type = "redirect"
-      redirect {
-        port        = "443"
-        protocol    = "HTTPS"
-        status_code = "HTTP_301"
-      }
-    }
-  }
-
-  dynamic "default_action" {
-    for_each = var.backend_domain == "" ? [1] : []
-    content {
-      type             = "forward"
-      target_group_arn = aws_lb_target_group.backend.arn
-    }
-  }
-}
-
-# ------------------------------------------------------------------------------
-# SSL Certificate & HTTPS Listener (Backend)
-# ------------------------------------------------------------------------------
-data "aws_route53_zone" "main" {
-  count = var.backend_domain != "" ? 1 : 0
-  name  = var.route53_zone_name
-}
-
-resource "aws_acm_certificate" "backend" {
-  count             = var.backend_domain != "" ? 1 : 0
-  domain_name       = var.backend_domain
-  validation_method = "DNS"
-  lifecycle { create_before_destroy = true }
-}
-
-resource "aws_route53_record" "cert_validation" {
-  for_each = {
-    for dvo in try(aws_acm_certificate.backend[0].domain_validation_options, []) : dvo.domain_name => {
-      name   = dvo.resource_record_name
-      record = dvo.resource_record_value
-      type   = dvo.resource_record_type
-    }
-  }
-  allow_overwrite = true
-  name            = each.value.name
-  records         = [each.value.record]
-  ttl             = 60
-  type            = each.value.type
-  zone_id         = data.aws_route53_zone.main[0].zone_id
-}
-
-resource "aws_acm_certificate_validation" "backend" {
-  count                   = var.backend_domain != "" ? 1 : 0
-  certificate_arn         = aws_acm_certificate.backend[0].arn
-  validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
-}
-
-resource "aws_lb_listener" "backend_443" {
-  count             = var.backend_domain != "" ? 1 : 0
-  load_balancer_arn = aws_lb.main.arn
-  port              = "443"
-  protocol          = "HTTPS"
-  ssl_policy        = "ELBSecurityPolicy-2016-08"
-  certificate_arn   = aws_acm_certificate_validation.backend[0].certificate_arn
 
   default_action {
     type             = "forward"
@@ -474,7 +359,7 @@ resource "aws_lb_listener" "backend_443" {
 }
 
 # ------------------------------------------------------------------------------
-# SSM Parameter Store (Secretos)
+# SSM Parameter Store
 # ------------------------------------------------------------------------------
 resource "random_password" "secret_key" {
   length  = 32
@@ -495,16 +380,22 @@ resource "aws_ssm_parameter" "secret_key" {
   value       = random_password.secret_key.result
 }
 
+resource "aws_ssm_parameter" "allowed_origins" {
+  name  = "/datavault/${var.environment}/allowed_origins"
+  type  = "String"
+  value = "https://${aws_cloudfront_distribution.frontend.domain_name}"
+}
+
 # ------------------------------------------------------------------------------
-# IAM Roles para ECS
+# IAM Roles ECS
 # ------------------------------------------------------------------------------
 resource "aws_iam_role" "ecs_execution_role" {
   name = "datavault-ecs-exec-role-${var.environment}"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
       Principal = { Service = "ecs-tasks.amazonaws.com" }
     }]
   })
@@ -515,10 +406,9 @@ resource "aws_iam_role_policy_attachment" "ecs_execution_role_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-resource "aws_iam_role_policy" "ecs_execution_ssm_policy" {
-  name = "datavault-ecs-exec-ssm-policy-${var.environment}"
+resource "aws_iam_role_policy" "ecs_execution_ssm" {
+  name = "datavault-ecs-ssm-${var.environment}"
   role = aws_iam_role.ecs_execution_role.id
-
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -526,7 +416,7 @@ resource "aws_iam_role_policy" "ecs_execution_ssm_policy" {
       Action = ["ssm:GetParameters"]
       Resource = [
         aws_ssm_parameter.database_url.arn,
-        aws_ssm_parameter.secret_key.arn
+        aws_ssm_parameter.secret_key.arn,
       ]
     }]
   })
@@ -541,7 +431,7 @@ resource "aws_cloudwatch_log_group" "backend" {
 }
 
 # ------------------------------------------------------------------------------
-# ECS Cluster, Task Definitions y Services (Fargate)
+# ECS Fargate
 # ------------------------------------------------------------------------------
 resource "aws_ecs_cluster" "main" {
   name = "datavault-${var.environment}"
@@ -557,24 +447,30 @@ resource "aws_ecs_task_definition" "backend" {
 
   container_definitions = jsonencode([{
     name  = "backend"
-    image = "python:3.11-slim" # Placeholder temporal. CI/CD actualizará esto
-    portMappings = [{ containerPort = 8000 }]
+    image = "${aws_ecr_repository.backend.repository_url}:latest"
+    portMappings = [{ containerPort = 8000, protocol = "tcp" }]
     environment = [
-      # OPTIMIZADO: Redis desactivado. Descomentar para producción junto con ElastiCache.
-      # { name = "REDIS_URL", value = "redis://${aws_elasticache_cluster.redis.cache_nodes[0].address}:6379/0" },
       { name = "ALLOWED_ORIGINS", value = "https://${aws_cloudfront_distribution.frontend.domain_name}" }
+      # { name = "REDIS_URL", value = "redis://<elasticache_endpoint>:6379/0" }  # descomentar con Redis
     ]
     secrets = [
       { name = "DATABASE_URL", valueFrom = aws_ssm_parameter.database_url.arn },
-      { name = "SECRET_KEY", valueFrom = aws_ssm_parameter.secret_key.arn }
+      { name = "SECRET_KEY",   valueFrom = aws_ssm_parameter.secret_key.arn   },
     ]
     logConfiguration = {
       logDriver = "awslogs"
       options = {
-        "awslogs-group"         = "/ecs/datavault-backend-staging"
-        "awslogs-region"        = "us-east-1"
+        "awslogs-group"         = aws_cloudwatch_log_group.backend.name
+        "awslogs-region"        = var.aws_region
         "awslogs-stream-prefix" = "ecs"
       }
+    }
+    healthCheck = {
+      command     = ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval    = 30
+      timeout     = 5
+      retries     = 3
+      startPeriod = 60
     }
   }])
 }
@@ -584,52 +480,52 @@ resource "aws_ecs_service" "backend" {
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.backend.arn
   launch_type     = "FARGATE"
-  desired_count   = 1 # Sube esto para alta disponibilidad
+  desired_count   = 1
 
   network_configuration {
-    subnets          = module.vpc.public_subnets  # OPTIMIZADO: cambiar a private_subnets para producción (requiere NAT Gateway)
+    subnets          = module.vpc.public_subnets # cambiar a private_subnets con NAT Gateway en producción
     security_groups  = [aws_security_group.ecs.id]
-    assign_public_ip = true # OPTIMIZADO: necesario en subred pública. false para producción con NAT Gateway.
+    assign_public_ip = true # false con NAT Gateway
   }
+
   load_balancer {
     target_group_arn = aws_lb_target_group.backend.arn
     container_name   = "backend"
     container_port   = 8000
   }
+
   lifecycle { ignore_changes = [task_definition, desired_count] }
+
+  depends_on = [aws_lb_listener.http]
 }
 
 # ------------------------------------------------------------------------------
-# Alarmas de CloudWatch (Observabilidad)
+# CloudWatch Alarmas
 # ------------------------------------------------------------------------------
 resource "aws_cloudwatch_metric_alarm" "ecs_cpu_high" {
   alarm_name          = "datavault-ecs-cpu-high-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "2"
+  evaluation_periods  = 2
   metric_name         = "CPUUtilization"
   namespace           = "AWS/ECS"
-  period              = "60"
+  period              = 60
   statistic           = "Average"
-  threshold           = "80"
-  alarm_description   = "Esta alarma se dispara si el uso de CPU de ECS supera el 80% durante 2 minutos."
-
+  threshold           = 80
   dimensions = {
     ClusterName = aws_ecs_cluster.main.name
     ServiceName = aws_ecs_service.backend.name
   }
 }
 
-resource "aws_cloudwatch_metric_alarm" "alb_5xx_errors" {
+resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
   alarm_name          = "datavault-alb-5xx-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "1"
+  evaluation_periods  = 1
   metric_name         = "HTTPCode_Target_5XX_Count"
   namespace           = "AWS/ApplicationELB"
-  period              = "60"
+  period              = 60
   statistic           = "Sum"
-  threshold           = "5"
-  alarm_description   = "Alerta si el backend devuelve más de 5 errores 5xx en 1 minuto."
-
+  threshold           = 5
   dimensions = {
     TargetGroup  = aws_lb_target_group.backend.arn_suffix
     LoadBalancer = aws_lb.main.arn_suffix
@@ -637,18 +533,17 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx_errors" {
 }
 
 # ------------------------------------------------------------------------------
-# OIDC y Roles IAM para GitHub Actions (CI/CD)
+# OIDC + IAM para GitHub Actions
 # ------------------------------------------------------------------------------
-
-# 1. Configurar GitHub como Proveedor de Identidad en AWS
 resource "aws_iam_openid_connect_provider" "github" {
-  url             = "https://token.actions.githubusercontent.com"
-  client_id_list  = ["sts.amazonaws.com"]
-  # Thumbprints oficiales de GitHub Actions (AWS los requiere por Terraform)
-  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1", "1c58a3a8518e8759bf075b76b750d4f2df264fcd"]
+  url            = "https://token.actions.githubusercontent.com"
+  client_id_list = ["sts.amazonaws.com"]
+  thumbprint_list = [
+    "6938fd4d98bab03faadb97b34396831e3780aea1",
+    "1c58a3a8518e8759bf075b76b750d4f2df264fcd",
+  ]
 }
 
-# 2. Crear el Rol que GitHub asumirá, restringido a tu repositorio y entorno
 resource "aws_iam_role" "github_actions" {
   name = "datavault-github-actions-${var.environment}"
 
@@ -657,15 +552,12 @@ resource "aws_iam_role" "github_actions" {
     Statement = [{
       Action = "sts:AssumeRoleWithWebIdentity"
       Effect = "Allow"
-      Principal = {
-        Federated = aws_iam_openid_connect_provider.github.arn
-      }
+      Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
       Condition = {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
         }
         StringLike = {
-          # IMPORTANTE: Reemplaza TU_USUARIO/TU_REPO por los valores reales en GitHub (ej. "paolovilcapoma/datavault")
           "token.actions.githubusercontent.com:sub" = "repo:paolovf123/dev-ops-dmc:environment:${var.environment}"
         }
       }
@@ -673,8 +565,7 @@ resource "aws_iam_role" "github_actions" {
   })
 }
 
-# 3. Otorgar permisos al Rol para ECR y ECS
-resource "aws_iam_role_policy" "github_actions_policy" {
+resource "aws_iam_role_policy" "github_actions" {
   name = "datavault-ci-cd-policy-${var.environment}"
   role = aws_iam_role.github_actions.id
 
@@ -687,10 +578,6 @@ resource "aws_iam_role_policy" "github_actions_policy" {
           "ecr:GetAuthorizationToken",
           "ecr:BatchCheckLayerAvailability",
           "ecr:GetDownloadUrlForLayer",
-          "ecr:GetRepositoryPolicy",
-          "ecr:DescribeRepositories",
-          "ecr:ListImages",
-          "ecr:DescribeImages",
           "ecr:BatchGetImage",
           "ecr:InitiateLayerUpload",
           "ecr:UploadLayerPart",
@@ -707,21 +594,15 @@ resource "aws_iam_role_policy" "github_actions_policy" {
           "s3:DeleteObject",
           "s3:GetBucketLocation",
           "cloudfront:CreateInvalidation",
-          "cloudfront:ListDistributions"
+          "cloudfront:ListDistributions",
         ]
         Resource = "*"
       },
       {
-        # Necesario para que ECS pueda asignar el Execution Role a las nuevas tareas
-        Effect = "Allow"
-        Action = "iam:PassRole"
+        Effect   = "Allow"
+        Action   = "iam:PassRole"
         Resource = aws_iam_role.ecs_execution_role.arn
-      }
+      },
     ]
   })
-}
-
-output "github_actions_role_arn" {
-  description = "El ARN del rol para configurar en los secrets de GitHub"
-  value       = aws_iam_role.github_actions.arn
 }

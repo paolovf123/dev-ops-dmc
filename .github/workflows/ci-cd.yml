@@ -7,39 +7,37 @@ on:
     branches: [main]
 
 jobs:
+  # ─────────────────────────────────────────────────────────
+  # 1. Tests y lint (siempre)
+  # ─────────────────────────────────────────────────────────
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          pip install --upgrade pip
           pip install flake8 pytest
           pip install -r datavault/backend/requirements.txt
 
-      - name: Lint with flake8
+      - name: Lint
         run: |
           flake8 datavault/backend --count --select=E9,F63,F7,F82 --show-source --statistics
           flake8 datavault/backend --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
-      - name: Run tests
+      - name: Tests
         working-directory: datavault/backend
         run: python -m pytest tests/ -v --tb=short
 
-      - name: Build check
-        run: |
-          echo "Build completed successfully"
-          echo "Branch: ${{ github.ref_name }}"
-          echo "Commit: ${{ github.sha }}"
-
+  # ─────────────────────────────────────────────────────────
+  # 2. Deploy Staging (push → develop)
+  # ─────────────────────────────────────────────────────────
   deploy-staging:
     needs: build
     runs-on: ubuntu-latest
@@ -49,36 +47,43 @@ jobs:
       id-token: write
       contents: read
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    env:
+      ENVIRONMENT: staging
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      ECR_REPOSITORY: datavault-backend-staging
+      ECS_CLUSTER: datavault-staging
+      ECS_SERVICE: datavault-backend
+      TASK_DEF_FAMILY: datavault-backend-staging
+      CONTAINER_NAME: backend
 
-      - name: Configure AWS credentials via OIDC
-        uses: aws-actions/configure-aws-credentials@v4
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_STAGING }}
-          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR
+      - name: Login ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, tag, and push Backend to ECR
+      - name: Build & push backend
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: datavault-backend-staging
           IMAGE_TAG: ${{ github.sha }}
         run: |
           cd datavault/backend
-          docker build -f Dockerfile.prod -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          docker build -f Dockerfile.prod \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY --all-tags
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Build and Sync Frontend to S3
+      - name: Build & sync frontend
         env:
           VITE_API_URL: ${{ vars.VITE_API_URL }}
           VITE_WS_URL: ${{ vars.VITE_WS_URL }}
@@ -88,83 +93,75 @@ jobs:
           npm run build
 
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          BUCKET_NAME="datavault-frontend-staging-${ACCOUNT_ID}"
+          BUCKET="datavault-frontend-${ENVIRONMENT}-${ACCOUNT_ID}"
+          aws s3 sync dist/ s3://$BUCKET --delete
 
-          echo "Sincronizando con S3: $BUCKET_NAME"
-          aws s3 sync dist/ s3://$BUCKET_NAME --delete
-
-          DIST_ID=$(aws cloudfront list-distributions --query "DistributionList.Items[?Aliases.Items==null && starts_with(Origins.Items[0].DomainName, '$BUCKET_NAME')].Id | [0]" --output text)
+          # Invalidar CloudFront buscando la distribución por bucket de origen
+          DIST_ID=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?Origins.Items[0].DomainName=='${BUCKET}.s3.amazonaws.com'].Id | [0]" \
+            --output text)
           if [ "$DIST_ID" != "None" ] && [ -n "$DIST_ID" ]; then
+            echo "Invalidando CloudFront $DIST_ID..."
             aws cloudfront create-invalidation --distribution-id $DIST_ID --paths "/*"
           fi
 
-      - name: Register new Task Definition and Run Alembic Migrations
+      - name: Migrar base de datos (Alembic)
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: datavault-backend-staging
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          CLUSTER="datavault-staging"
-          CONTAINER="backend"
-          TASK_DEF_FAMILY="datavault-backend-staging"
+          # Registrar nueva task definition con la imagen recién construida
+          CURRENT_TASK=$(aws ecs describe-task-definition \
+            --task-definition $TASK_DEF_FAMILY --query 'taskDefinition' --output json)
 
-          # Fetch the current task definition and update the image to the just-built one
-          TASK_DEF_JSON=$(aws ecs describe-task-definition \
-            --task-definition $TASK_DEF_FAMILY \
-            --query 'taskDefinition' \
-            --output json)
+          NEW_TASK=$(echo "$CURRENT_TASK" | jq \
+            --arg IMG "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+            --arg CTR "$CONTAINER_NAME" \
+            '(.containerDefinitions[] | select(.name==$CTR) | .image) |= $IMG |
+             del(.taskDefinitionArn,.revision,.status,.requiresAttributes,
+                 .compatibilities,.registeredAt,.registeredBy,.enableFaultInjection)')
 
-          NEW_TASK_DEF=$(echo "$TASK_DEF_JSON" | jq \
-            --arg IMAGE "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
-            --arg CONTAINER "$CONTAINER" \
-            '(.containerDefinitions[] | select(.name == $CONTAINER) | .image) |= $IMAGE |
-             del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
-                 .compatibilities, .registeredAt, .registeredBy, .enableFaultInjection)')
+          NEW_TASK_ARN=$(aws ecs register-task-definition \
+            --cli-input-json "$NEW_TASK" \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
 
-          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
-            --cli-input-json "$NEW_TASK_DEF" \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
+          echo "Task registrada: $NEW_TASK_ARN"
 
-          echo "Nueva task definition registrada: $NEW_TASK_DEF_ARN"
-
-          NETWORK_CONFIG=$(aws ecs describe-services \
-            --cluster $CLUSTER --services datavault-backend \
+          NET_CFG=$(aws ecs describe-services \
+            --cluster $ECS_CLUSTER --services $ECS_SERVICE \
             --query 'services[0].networkConfiguration' --output json)
 
-          echo "Ejecutando migraciones en cluster $CLUSTER..."
           TASK_ARN=$(aws ecs run-task \
-            --cluster $CLUSTER \
-            --task-definition $NEW_TASK_DEF_ARN \
+            --cluster $ECS_CLUSTER \
+            --task-definition $NEW_TASK_ARN \
             --launch-type FARGATE \
-            --network-configuration "$NETWORK_CONFIG" \
-            --overrides "{\"containerOverrides\": [{\"name\": \"$CONTAINER\", \"command\": [\"alembic\", \"upgrade\", \"head\"]}]}" \
-            --query 'tasks[0].taskArn' \
-            --output text)
+            --network-configuration "$NET_CFG" \
+            --overrides "{\"containerOverrides\":[{\"name\":\"$CONTAINER_NAME\",\"command\":[\"alembic\",\"upgrade\",\"head\"]}]}" \
+            --query 'tasks[0].taskArn' --output text)
 
-          echo "Esperando a que la tarea $TASK_ARN finalice..."
-          aws ecs wait tasks-stopped --cluster $CLUSTER --tasks $TASK_ARN
+          echo "Esperando migración $TASK_ARN..."
+          aws ecs wait tasks-stopped --cluster $ECS_CLUSTER --tasks $TASK_ARN
 
-          EXIT_CODE=$(aws ecs describe-tasks --cluster $CLUSTER --tasks $TASK_ARN \
+          EXIT=$(aws ecs describe-tasks --cluster $ECS_CLUSTER --tasks $TASK_ARN \
             --query 'tasks[0].containers[0].exitCode' --output text)
-          if [ "$EXIT_CODE" != "0" ]; then
-            echo "Error: La migración falló (Exit code: $EXIT_CODE)"
-            exit 1
-          fi
-          echo "Migración exitosa."
+          [ "$EXIT" = "0" ] || { echo "Migración falló (exit $EXIT)"; exit 1; }
+          echo "Migración OK."
 
-      - name: Deploy new ECS revision
+      - name: Deploy ECS
         run: |
-          LATEST_TASK_DEF=$(aws ecs describe-task-definition \
-            --task-definition datavault-backend-staging \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
+          LATEST=$(aws ecs describe-task-definition \
+            --task-definition $TASK_DEF_FAMILY \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
           aws ecs update-service \
-            --cluster datavault-staging \
-            --service datavault-backend \
-            --task-definition $LATEST_TASK_DEF \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_SERVICE \
+            --task-definition $LATEST \
             --force-new-deployment
+          echo "Deploy iniciado. Sigue el progreso en la consola de ECS."
 
+  # ─────────────────────────────────────────────────────────
+  # 3. Deploy Production (push → main)
+  # ─────────────────────────────────────────────────────────
   deploy-production:
     needs: build
     runs-on: ubuntu-latest
@@ -174,36 +171,43 @@ jobs:
       id-token: write
       contents: read
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    env:
+      ENVIRONMENT: prod
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      ECR_REPOSITORY: datavault-backend-prod
+      ECS_CLUSTER: datavault-prod
+      ECS_SERVICE: datavault-backend
+      TASK_DEF_FAMILY: datavault-backend-prod
+      CONTAINER_NAME: backend
 
-      - name: Configure AWS credentials via OIDC
-        uses: aws-actions/configure-aws-credentials@v4
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
-          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR
+      - name: Login ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, tag, and push Backend to ECR
+      - name: Build & push backend
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: datavault-backend-prod
           IMAGE_TAG: ${{ github.sha }}
         run: |
           cd datavault/backend
-          docker build -f Dockerfile.prod -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          docker build -f Dockerfile.prod \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY --all-tags
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Build and Sync Frontend to S3
+      - name: Build & sync frontend
         env:
           VITE_API_URL: ${{ vars.VITE_API_URL }}
           VITE_WS_URL: ${{ vars.VITE_WS_URL }}
@@ -213,78 +217,62 @@ jobs:
           npm run build
 
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          BUCKET_NAME="datavault-frontend-prod-${ACCOUNT_ID}"
+          BUCKET="datavault-frontend-${ENVIRONMENT}-${ACCOUNT_ID}"
+          aws s3 sync dist/ s3://$BUCKET --delete
 
-          echo "Sincronizando con S3: $BUCKET_NAME"
-          aws s3 sync dist/ s3://$BUCKET_NAME --delete
-
-          DIST_ID=$(aws cloudfront list-distributions --query "DistributionList.Items[?Aliases.Items==null && starts_with(Origins.Items[0].DomainName, '$BUCKET_NAME')].Id | [0]" --output text)
+          DIST_ID=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?Origins.Items[0].DomainName=='${BUCKET}.s3.amazonaws.com'].Id | [0]" \
+            --output text)
           if [ "$DIST_ID" != "None" ] && [ -n "$DIST_ID" ]; then
+            echo "Invalidando CloudFront $DIST_ID..."
             aws cloudfront create-invalidation --distribution-id $DIST_ID --paths "/*"
           fi
 
-      - name: Register new Task Definition and Run Alembic Migrations
+      - name: Migrar base de datos (Alembic)
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: datavault-backend-prod
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          CLUSTER="datavault-prod"
-          CONTAINER="backend"
-          TASK_DEF_FAMILY="datavault-backend-prod"
+          CURRENT_TASK=$(aws ecs describe-task-definition \
+            --task-definition $TASK_DEF_FAMILY --query 'taskDefinition' --output json)
 
-          TASK_DEF_JSON=$(aws ecs describe-task-definition \
-            --task-definition $TASK_DEF_FAMILY \
-            --query 'taskDefinition' \
-            --output json)
+          NEW_TASK=$(echo "$CURRENT_TASK" | jq \
+            --arg IMG "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+            --arg CTR "$CONTAINER_NAME" \
+            '(.containerDefinitions[] | select(.name==$CTR) | .image) |= $IMG |
+             del(.taskDefinitionArn,.revision,.status,.requiresAttributes,
+                 .compatibilities,.registeredAt,.registeredBy,.enableFaultInjection)')
 
-          NEW_TASK_DEF=$(echo "$TASK_DEF_JSON" | jq \
-            --arg IMAGE "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
-            --arg CONTAINER "$CONTAINER" \
-            '(.containerDefinitions[] | select(.name == $CONTAINER) | .image) |= $IMAGE |
-             del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
-                 .compatibilities, .registeredAt, .registeredBy, .enableFaultInjection)')
+          NEW_TASK_ARN=$(aws ecs register-task-definition \
+            --cli-input-json "$NEW_TASK" \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
 
-          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
-            --cli-input-json "$NEW_TASK_DEF" \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
-
-          echo "Nueva task definition registrada: $NEW_TASK_DEF_ARN"
-
-          NETWORK_CONFIG=$(aws ecs describe-services \
-            --cluster $CLUSTER --services datavault-backend \
+          NET_CFG=$(aws ecs describe-services \
+            --cluster $ECS_CLUSTER --services $ECS_SERVICE \
             --query 'services[0].networkConfiguration' --output json)
 
-          echo "Ejecutando migraciones en cluster $CLUSTER..."
           TASK_ARN=$(aws ecs run-task \
-            --cluster $CLUSTER \
-            --task-definition $NEW_TASK_DEF_ARN \
+            --cluster $ECS_CLUSTER \
+            --task-definition $NEW_TASK_ARN \
             --launch-type FARGATE \
-            --network-configuration "$NETWORK_CONFIG" \
-            --overrides "{\"containerOverrides\": [{\"name\": \"$CONTAINER\", \"command\": [\"alembic\", \"upgrade\", \"head\"]}]}" \
-            --query 'tasks[0].taskArn' \
-            --output text)
+            --network-configuration "$NET_CFG" \
+            --overrides "{\"containerOverrides\":[{\"name\":\"$CONTAINER_NAME\",\"command\":[\"alembic\",\"upgrade\",\"head\"]}]}" \
+            --query 'tasks[0].taskArn' --output text)
 
-          echo "Esperando a que la tarea $TASK_ARN finalice..."
-          aws ecs wait tasks-stopped --cluster $CLUSTER --tasks $TASK_ARN
+          aws ecs wait tasks-stopped --cluster $ECS_CLUSTER --tasks $TASK_ARN
 
-          EXIT_CODE=$(aws ecs describe-tasks --cluster $CLUSTER --tasks $TASK_ARN \
+          EXIT=$(aws ecs describe-tasks --cluster $ECS_CLUSTER --tasks $TASK_ARN \
             --query 'tasks[0].containers[0].exitCode' --output text)
-          if [ "$EXIT_CODE" != "0" ]; then
-            echo "Error: La migración falló (Exit code: $EXIT_CODE)"
-            exit 1
-          fi
-          echo "Migración exitosa."
+          [ "$EXIT" = "0" ] || { echo "Migración falló (exit $EXIT)"; exit 1; }
+          echo "Migración OK."
 
-      - name: Deploy new ECS revision
+      - name: Deploy ECS
         run: |
-          LATEST_TASK_DEF=$(aws ecs describe-task-definition \
-            --task-definition datavault-backend-prod \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
+          LATEST=$(aws ecs describe-task-definition \
+            --task-definition $TASK_DEF_FAMILY \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
           aws ecs update-service \
-            --cluster datavault-prod \
-            --service datavault-backend \
-            --task-definition $LATEST_TASK_DEF \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_SERVICE \
+            --task-definition $LATEST \
             --force-new-deployment

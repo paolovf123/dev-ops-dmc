@@ -8,6 +8,7 @@ from routers import datasets, columns, records
 from routers.auth import router as auth_router
 from routers.permissions import router as permissions_router
 from routers.groups import router as groups_router
+from routers.workspaces import router as workspaces_router
 from auth import decode_token
 import json
 
@@ -61,6 +62,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(workspaces_router)
 app.include_router(datasets.router)
 app.include_router(columns.router)
 app.include_router(records.router)

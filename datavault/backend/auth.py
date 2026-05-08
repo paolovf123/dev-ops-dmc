@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from database import get_db
-from models import User, DatasetPermission, DatasetGroupPermission, UserGroupMember
+from models import User, DatasetPermission, DatasetGroupPermission, UserGroupMember, WorkspaceMember
 
 SECRET_KEY = os.getenv("SECRET_KEY", "datavault-secret-change-in-production-xyz-123")
 ALGORITHM = "HS256"
@@ -21,7 +21,15 @@ ACCESS_TOKEN_EXPIRE_HOURS = 24
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
-ROLE_RANK = {"none": 0, "viewer": 1, "editor": 2, "admin": 3}
+ROLE_RANK = {"none": 0, "viewer": 1, "editor": 2, "manager": 3, "owner": 4, "admin": 5}
+
+# Workspace role → equivalent dataset permission level
+WS_ROLE_TO_DS_ROLE = {
+    "owner":   "admin",
+    "manager": "editor",
+    "editor":  "editor",
+    "viewer":  "viewer",
+}
 
 
 def verify_password(plain: str, hashed: str) -> bool:
@@ -162,6 +170,95 @@ require_viewer = require_roles("admin", "editor", "viewer")
 ds_require_admin  = require_dataset_roles("admin")
 ds_require_editor = require_dataset_roles("admin", "editor")
 ds_require_viewer = require_dataset_roles("admin", "editor", "viewer")
+
+
+async def effective_workspace_role(user: User, workspace_id: uuid.UUID, db: AsyncSession) -> str | None:
+    """Devuelve el rol del usuario en un workspace: owner|manager|editor|viewer, o None.
+
+    Admin global siempre retorna 'owner'.
+    """
+    if user.role == "admin":
+        return "owner"
+    result = await db.execute(
+        select(WorkspaceMember).where(
+            WorkspaceMember.workspace_id == workspace_id,
+            WorkspaceMember.user_id == user.id,
+        )
+    )
+    member = result.scalar_one_or_none()
+    return member.role if member else None
+
+
+async def effective_role_in_workspace(
+    user: User, dataset_id: uuid.UUID | None, workspace_id: uuid.UUID | None, db: AsyncSession
+) -> str:
+    """Rol efectivo considerando workspace primero, luego dataset perms, luego rol global.
+
+    Prioridad:
+    1. Admin global → siempre 'admin'
+    2. Rol de workspace → se convierte en permiso de dataset
+    3. Permiso directo de dataset
+    4. Mejor permiso de grupo en dataset
+    5. Rol global como fallback
+    """
+    if user.role == "admin":
+        return "admin"
+
+    # Workspace role takes priority over global role
+    if workspace_id:
+        ws_role = await effective_workspace_role(user, workspace_id, db)
+        if ws_role:
+            return WS_ROLE_TO_DS_ROLE.get(ws_role, "viewer")
+
+    # Fallback to dataset-level permissions
+    if dataset_id:
+        direct = await db.execute(
+            select(DatasetPermission).where(
+                DatasetPermission.dataset_id == dataset_id,
+                DatasetPermission.user_id == user.id,
+            )
+        )
+        perm = direct.scalar_one_or_none()
+        if perm is not None:
+            return perm.role
+
+        user_group_ids = select(UserGroupMember.group_id).where(UserGroupMember.user_id == user.id)
+        group_perms_result = await db.execute(
+            select(DatasetGroupPermission)
+            .join(UserGroupMember, DatasetGroupPermission.group_id == UserGroupMember.group_id)
+            .where(
+                DatasetGroupPermission.dataset_id == dataset_id,
+                UserGroupMember.user_id == user.id,
+            )
+        )
+        group_perms = group_perms_result.scalars().all()
+        if group_perms:
+            best = max(group_perms, key=lambda p: ROLE_RANK.get(p.role, 0))
+            return best.role
+
+    return user.role
+
+
+def require_workspace_roles(*roles: str):
+    """Dependency que verifica que el usuario tenga uno de los roles dados en el workspace."""
+    async def _check(
+        workspace_id: uuid.UUID,
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> User:
+        role = await effective_workspace_role(current_user, workspace_id, db)
+        if role not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Sin acceso a este workspace. Requiere: {' o '.join(roles)}",
+            )
+        return current_user
+    return _check
+
+
+ws_require_owner   = require_workspace_roles("owner")
+ws_require_manager = require_workspace_roles("owner", "manager")
+ws_require_member  = require_workspace_roles("owner", "manager", "editor", "viewer")
 
 
 async def count_users(db: AsyncSession) -> int:

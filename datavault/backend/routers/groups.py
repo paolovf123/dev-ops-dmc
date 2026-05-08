@@ -15,10 +15,14 @@ router = APIRouter(prefix="/groups", tags=["groups"])
 
 @router.get("", response_model=list[GroupOut])
 async def list_groups(
+    workspace_id: uuid.UUID | None = None,
     _: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(UserGroup).order_by(UserGroup.name))
+    q = select(UserGroup).order_by(UserGroup.name)
+    if workspace_id is not None:
+        q = q.where(UserGroup.workspace_id == workspace_id)
+    result = await db.execute(q)
     groups = result.scalars().all()
 
     # Count members per group
@@ -34,6 +38,7 @@ async def list_groups(
             id=g.id,
             name=g.name,
             description=g.description,
+            workspace_id=g.workspace_id,
             created_at=g.created_at,
             member_count=counts.get(g.id, 0),
         ))
@@ -46,10 +51,15 @@ async def create_group(
     _: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    existing = await db.execute(select(UserGroup).where(UserGroup.name == body.name))
+    existing = await db.execute(
+        select(UserGroup).where(
+            UserGroup.name == body.name,
+            UserGroup.workspace_id == body.workspace_id,
+        )
+    )
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Ya existe un grupo con ese nombre")
-    group = UserGroup(name=body.name, description=body.description)
+        raise HTTPException(status_code=400, detail="Ya existe un grupo con ese nombre en este workspace")
+    group = UserGroup(name=body.name, description=body.description, workspace_id=body.workspace_id)
     db.add(group)
     await db.commit()
     await db.refresh(group)

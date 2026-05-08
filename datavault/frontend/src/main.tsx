@@ -5,7 +5,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ConfirmProvider } from "./components/ConfirmDialog";
 import { ToastProvider } from "./components/Toast";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
+import { WorkspaceProvider } from "./workspace/WorkspaceContext";
 import DatasetList from "./pages/DatasetList";
+import WorkspaceView from "./pages/WorkspaceView";
 import DatasetView from "./pages/DatasetView";
 import RecordForm from "./pages/RecordForm";
 import CreateDataset from "./pages/CreateDataset";
@@ -13,6 +15,7 @@ import Login from "./pages/Login";
 import AdminUsers from "./pages/AdminUsers";
 import AdminAudit from "./pages/AdminAudit";
 import AdminGroups from "./pages/AdminGroups";
+import AdminWorkspaces from "./pages/AdminWorkspaces";
 import ComputedDatasetEditor from "./pages/ComputedDatasetEditor";
 import ScriptsHub from "./pages/ScriptsHub";
 import "./index.css";
@@ -40,7 +43,7 @@ function axios_status(err: unknown): number | null {
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
   if (!token) return <Navigate to="/login" replace />;
-  return <>{children}</>;
+  return <WorkspaceProvider>{children}</WorkspaceProvider>;
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -53,6 +56,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/" element={<RequireAuth><DatasetList /></RequireAuth>} />
+              <Route path="/ws/:workspaceId" element={<RequireAuth><WorkspaceView /></RequireAuth>} />
               <Route path="/create" element={<RequireAuth><CreateDataset /></RequireAuth>} />
               <Route path="/datasets/:datasetId" element={<RequireAuth><DatasetView /></RequireAuth>} />
               <Route path="/datasets/:datasetId/new" element={<RequireAuth><RecordForm /></RequireAuth>} />
@@ -62,6 +66,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="/admin/users" element={<RequireAuth><AdminUsers /></RequireAuth>} />
               <Route path="/admin/audit" element={<RequireAuth><AdminAudit /></RequireAuth>} />
               <Route path="/admin/groups" element={<RequireAuth><AdminGroups /></RequireAuth>} />
+              <Route path="/admin/workspaces" element={<RequireAuth><AdminWorkspaces /></RequireAuth>} />
             </Routes>
           </BrowserRouter>
         </ConfirmProvider>
