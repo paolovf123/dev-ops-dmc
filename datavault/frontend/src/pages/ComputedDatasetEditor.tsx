@@ -52,7 +52,7 @@ export default function ComputedDatasetEditor() {
 
   const { data: allDatasets = [] } = useQuery({
     queryKey: ["datasets"],
-    queryFn: getDatasets,
+    queryFn: () => getDatasets(),
   });
 
   const existingDatasets = isNew ? allDatasets : allDatasets.filter((d) => d.id !== datasetId);

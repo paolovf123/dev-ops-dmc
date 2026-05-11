@@ -6,7 +6,7 @@ import api from "../api/client";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/Toast";
 import UserMenu from "../components/UserMenu";
-import type { UserGroup, GroupMember } from "../types";
+import type { UserGroup } from "../types";
 
 const GROUP_COLORS = [
   ["#6366F1","#818CF8"], ["#8B5CF6","#A78BFA"], ["#EC4899","#F472B6"],

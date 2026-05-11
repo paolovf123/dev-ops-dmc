@@ -179,7 +179,7 @@ export default function SchemaDiagram({
   const svgRef = useRef<SVGSVGElement>(null);
   const curKw = keyword(currentDatasetName);
 
-  const { data: allDatasets = [] } = useQuery({ queryKey: ["datasets"], queryFn: getDatasets });
+  const { data: allDatasets = [] } = useQuery({ queryKey: ["datasets"], queryFn: () => getDatasets() });
   const otherDatasets = allDatasets.filter((d) => d.id !== currentDatasetId);
 
   const colQueries = useQueries({

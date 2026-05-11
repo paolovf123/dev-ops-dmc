@@ -121,7 +121,7 @@ export default function DatasetView() {
   const colsKey = ["columns", datasetId];
   const recsKey = ["records", datasetId, search];
 
-  const { data: datasets = [] } = useQuery({ queryKey: ["datasets"], queryFn: getDatasets });
+  const { data: datasets = [] } = useQuery({ queryKey: ["datasets"], queryFn: () => getDatasets() });
   const { data: columns = [] } = useQuery({ queryKey: colsKey, queryFn: () => getColumns(datasetId!) });
 
   // Sync colOrder when columns/joins/formulas change (append new IDs, remove deleted ones)

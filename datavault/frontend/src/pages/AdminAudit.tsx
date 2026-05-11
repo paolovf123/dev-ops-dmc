@@ -539,7 +539,6 @@ export default function AdminAudit() {
                     const meta = ACTION_META[entry.action] ?? ACTION_META.update;
                     const isLast = idx === items.length - 1;
                     const isFiltered = !!entry.user_id && filterUsers.includes(entry.user_id);
-                    const c = entry.user_name ? userColor(entry.user_name) : "#94A3B8";
                     return (
                       <tr key={entry.id}
                         style={{ borderBottom: isLast ? "none" : "1px solid var(--color-border-light)", transition:"background 0.1s" }}

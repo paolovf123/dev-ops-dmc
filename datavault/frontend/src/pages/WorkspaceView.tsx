@@ -162,7 +162,6 @@ export default function WorkspaceView() {
   const workspace = allWorkspaces.find((w) => w.id === workspaceId) ?? null;
   const wsRole = workspace?.my_role ?? null;
   const canManage = isAdmin || wsRole === "owner" || wsRole === "manager";
-  const canEdit   = canManage || wsRole === "editor";
 
   // Sync WorkspaceContext so other components (WorkspaceSwitcher) stay in sync
   useEffect(() => {

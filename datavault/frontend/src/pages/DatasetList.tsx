@@ -578,7 +578,7 @@ function NavIconBtn({ title, icon, onClick }: { title: string; icon: React.React
 }
 
 function AppHeader({
-  isAdmin, navigate, setCurrent, workspace,
+  isAdmin, navigate, setCurrent: _setCurrent, workspace: _workspace,
 }: {
   isAdmin: boolean;
   navigate: ReturnType<typeof useNavigate>;

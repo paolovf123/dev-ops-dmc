@@ -80,7 +80,7 @@ export default function WorkspaceSwitcher() {
     }
   };
 
-  const [fromC] = current ? wsColor(current.name) : ["#009A44"];
+  const [_fromC] = current ? wsColor(current.name) : ["#009A44"];
 
   return (
     <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
@@ -176,7 +176,7 @@ export default function WorkspaceSwitcher() {
             {/* Workspaces list */}
             {workspaces.map((ws) => {
               const role = ws.my_role;
-              const rs = ROLE_STYLE[role] ?? { bg: "#F1F5F9", color: "#64748B" };
+              const rs = (role ? ROLE_STYLE[role] : null) ?? { bg: "#F1F5F9", color: "#64748B" };
               const isActive = current?.id === ws.id;
               return (
                 <button

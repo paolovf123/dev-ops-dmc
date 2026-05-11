@@ -6,7 +6,6 @@ import {
 } from "../api/datasets";
 import { getGroups } from "../api/groups";
 import api from "../api/client";
-import type { DatasetPermission, DatasetGroupPermission } from "../types";
 import { useToast } from "./Toast";
 
 const ROLES = [
@@ -16,19 +15,6 @@ const ROLES = [
   { value: "none",   label: "Sin acceso", color: "#6B7280" },
 ];
 
-function RoleBadge({ role }: { role: string }) {
-  const r = ROLES.find((x) => x.value === role);
-  return (
-    <span style={{
-      fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 99,
-      background: r ? `${r.color}18` : "#F3F4F6",
-      color: r?.color ?? "#6B7280",
-      border: `1px solid ${r ? `${r.color}40` : "#E5E7EB"}`,
-    }}>
-      {r?.label ?? role}
-    </span>
-  );
-}
 
 interface Props {
   datasetId: string;

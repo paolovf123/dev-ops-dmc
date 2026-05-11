@@ -48,7 +48,7 @@ export default function ColumnPanel({
   const [showHelp, setShowHelp] = useState(false);
   const [editingUid, setEditingUid] = useState<string | null>(null);
 
-  const { data: datasets = [] } = useQuery({ queryKey: ["datasets"], queryFn: getDatasets });
+  const { data: datasets = [] } = useQuery({ queryKey: ["datasets"], queryFn: () => getDatasets() });
   const { data: srcColumns = [] } = useQuery({
     queryKey: ["columns", selectedDsId],
     queryFn: () => getColumns(selectedDsId),

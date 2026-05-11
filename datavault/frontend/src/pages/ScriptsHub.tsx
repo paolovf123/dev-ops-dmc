@@ -33,7 +33,7 @@ export default function ScriptsHub() {
 
   const { data: allDatasets = [], isLoading } = useQuery({
     queryKey: ["datasets"],
-    queryFn: getDatasets,
+    queryFn: () => getDatasets(),
   });
 
   const scripts = allDatasets.filter((d) => d.is_computed);

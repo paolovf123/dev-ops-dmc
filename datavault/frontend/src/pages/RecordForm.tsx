@@ -9,7 +9,7 @@ export default function RecordForm() {
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  const { data: datasets = [] } = useQuery({ queryKey: ["datasets"], queryFn: getDatasets });
+  const { data: datasets = [] } = useQuery({ queryKey: ["datasets"], queryFn: () => getDatasets() });
   const { data: columns = [], isLoading } = useQuery({
     queryKey: ["columns", datasetId],
     queryFn: () => getColumns(datasetId!),

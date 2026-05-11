@@ -49,7 +49,7 @@ export default function RelatedDatasets({ currentDatasetId, currentDatasetName, 
   const navigate = useNavigate();
   const curKw = keyword(currentDatasetName);
 
-  const { data: allDatasets = [] } = useQuery({ queryKey: ["datasets"], queryFn: getDatasets });
+  const { data: allDatasets = [] } = useQuery({ queryKey: ["datasets"], queryFn: () => getDatasets() });
   const otherDatasets = allDatasets.filter((d) => d.id !== currentDatasetId);
 
   // Fetch columns of all other datasets (to find who references us)
