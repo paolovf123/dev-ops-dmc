@@ -10,6 +10,8 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
 # Crear un usuario no-root por seguridad
 RUN addgroup --system appgroup && adduser --system --group appuser
 
