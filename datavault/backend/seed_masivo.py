@@ -23,7 +23,8 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy import select
 from models import Workspace, Dataset, ColumnDefinition, Record
 
-DATABASE_URL = "postgresql+asyncpg://dev:dev@db/datavault"
+import os
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://dev:dev@db/datavault")
 engine = create_async_engine(DATABASE_URL, echo=False)
 DB = async_sessionmaker(engine, expire_on_commit=False)
 

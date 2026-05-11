@@ -31,7 +31,8 @@ from sqlalchemy import select
 from models import Base, User, Workspace, WorkspaceMember, UserGroup, UserGroupMember, Dataset, ColumnDefinition, Record
 from auth import hash_password
 
-DATABASE_URL = "postgresql+asyncpg://dev:dev@db/datavault"
+import os
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://dev:dev@db/datavault")
 engine = create_async_engine(DATABASE_URL, echo=False)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
