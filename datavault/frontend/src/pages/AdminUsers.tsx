@@ -1,11 +1,13 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useState, useMemo } from "react";
+import { useQuery, useMutation, useQueryClient, useQueries } from "@tanstack/react-query";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { useConfirm } from "../components/ConfirmDialog";
 import UserMenu from "../components/UserMenu";
 import { useToast } from "../components/Toast";
+import { getGroups, getGroupMembers } from "../api/groups";
+import { getWorkspaces, getWorkspaceMembers } from "../api/workspaces";
 
 interface UserRow {
   id: string;
@@ -16,23 +18,51 @@ interface UserRow {
   created_at: string;
 }
 
+type SortField = "username" | "role" | "created_at";
+type SortDir = "asc" | "desc";
+
 const ROLE_META = {
-  admin:  { label: "Admin",  icon: "★", desc: "Acceso total" },
-  editor: { label: "Editor", icon: "✎", desc: "Edita registros" },
-  viewer: { label: "Viewer", icon: "◉", desc: "Solo lectura" },
+  admin:  { label: "Admin",  color: "#7C3AED", bg: "#EDE9FE", border: "#C4B5FD", icon: "★" },
+  editor: { label: "Editor", color: "#15803D", bg: "#DCFCE7", border: "#86EFAC", icon: "✎" },
+  viewer: { label: "Viewer", color: "#64748B", bg: "#F1F5F9", border: "#CBD5E1", icon: "◉" },
 } as const;
 
-function Avatar({ name, role }: { name: string; role: string }) {
-  const colors: Record<string, string> = {
+function Avatar({ name, role, size = 36 }: { name: string; role: string; size?: number }) {
+  const gradients: Record<string, string> = {
     admin:  "linear-gradient(135deg,#7C3AED,#5B21B6)",
     editor: "linear-gradient(135deg,#009A44,#007A36)",
     viewer: "linear-gradient(135deg,#94A3B8,#64748B)",
   };
   return (
-    <div className="au-avatar" style={{ background: colors[role] ?? colors.viewer }}>
+    <div style={{
+      width: size, height: size, borderRadius: "50%",
+      background: gradients[role] ?? gradients.viewer,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      color: "#fff", fontWeight: 700, fontSize: size * 0.38, flexShrink: 0,
+      border: "2px solid rgba(255,255,255,0.15)",
+    }}>
       {name.charAt(0).toUpperCase()}
     </div>
   );
+}
+
+function RoleBadge({ role }: { role: keyof typeof ROLE_META }) {
+  const m = ROLE_META[role];
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 4,
+      fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 99,
+      background: m.bg, color: m.color, border: `1px solid ${m.border}`,
+      whiteSpace: "nowrap",
+    }}>
+      {m.icon} {m.label}
+    </span>
+  );
+}
+
+function SortIcon({ field, current, dir }: { field: SortField; current: SortField; dir: SortDir }) {
+  if (field !== current) return <span style={{ color: "#CBD5E1", fontSize: 10, marginLeft: 3 }}>↕</span>;
+  return <span style={{ color: "#7C3AED", fontSize: 10, marginLeft: 3 }}>{dir === "asc" ? "↑" : "↓"}</span>;
 }
 
 export default function AdminUsers() {
@@ -41,14 +71,116 @@ export default function AdminUsers() {
   const qc        = useQueryClient();
   const confirm   = useConfirm();
   const toast     = useToast();
-  const [editingId, setEditingId]   = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initWsId = searchParams.get("workspace_id") ?? "";
+
+  const [search,    setSearch]    = useState("");
+  const [roleFilter, setRoleFilter] = useState<"" | "admin" | "editor" | "viewer">("");
+  const [wsFilter,  setWsFilter]  = useState(initWsId);
+  const [grpFilter, setGrpFilter] = useState("");
+  const [showInactive, setShowInactive] = useState(false);
+  const [sortField, setSortField] = useState<SortField>("username");
+  const [sortDir,   setSortDir]   = useState<SortDir>("asc");
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingRole, setPendingRole] = useState<string>("");
 
   const { data: users = [], isLoading } = useQuery<UserRow[]>({
-    queryKey: ["admin-users"],
-    queryFn: () => api.get<UserRow[]>("/auth/users").then((r) => r.data),
-    enabled: isAdmin,
+    queryKey: ["admin-users", isAdmin ? null : initWsId],
+    queryFn: () => {
+      const url = isAdmin ? "/auth/users" : `/auth/users?workspace_id=${initWsId}`;
+      return api.get<UserRow[]>(url).then((r) => r.data);
+    },
+    enabled: isAdmin || !!initWsId,
   });
+
+  const { data: groups    = [] } = useQuery({ queryKey: ["groups"],    queryFn: getGroups,    staleTime: 60_000 });
+  const { data: workspaces = [], isLoading: isLoadingWs } = useQuery({ queryKey: ["workspaces"], queryFn: getWorkspaces, staleTime: 60_000 });
+
+  // El rol del usuario en el workspace filtrado (permite acceso a owner/admin_ws)
+  const activeWs   = workspaces.find((w) => w.id === wsFilter) ?? null;
+  const myWsRole   = activeWs?.my_role ?? null;
+  const canAccess  = isAdmin || myWsRole === "owner" || myWsRole === "admin_ws";
+
+  const groupMemberQueries = useQueries({
+    queries: groups.map((g) => ({
+      queryKey: ["group-members", g.id],
+      queryFn: () => getGroupMembers(g.id),
+      staleTime: 60_000,
+    })),
+  });
+
+  const wsMemberQueries = useQueries({
+    queries: workspaces.map((ws) => ({
+      queryKey: ["workspace-members", ws.id],
+      queryFn: () => getWorkspaceMembers(ws.id),
+      staleTime: 60_000,
+    })),
+  });
+
+  const userGroupsMap = useMemo(() => {
+    const map = new Map<string, string[]>();
+    groups.forEach((g, i) => {
+      (groupMemberQueries[i]?.data ?? []).forEach((m) => {
+        if (!map.has(m.user_id)) map.set(m.user_id, []);
+        map.get(m.user_id)!.push(g.name);
+      });
+    });
+    return map;
+  }, [groups, groupMemberQueries]);
+
+  const userWorkspacesMap = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }[]>();
+    workspaces.forEach((ws, i) => {
+      (wsMemberQueries[i]?.data ?? []).forEach((m) => {
+        if (!map.has(m.user_id)) map.set(m.user_id, []);
+        map.get(m.user_id)!.push({ id: ws.id, name: ws.name });
+      });
+    });
+    return map;
+  }, [workspaces, wsMemberQueries]);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    return users
+      .filter((u) => {
+        if (!showInactive && !u.is_active) return false;
+        if (showInactive && u.is_active) return false;
+        if (roleFilter && u.role !== roleFilter) return false;
+        if (q && !u.username.toLowerCase().includes(q) && !u.email.toLowerCase().includes(q)) return false;
+        if (wsFilter) {
+          const uws = userWorkspacesMap.get(u.id) ?? [];
+          if (!uws.some((w) => w.id === wsFilter)) return false;
+        }
+        if (grpFilter) {
+          const ugs = userGroupsMap.get(u.id) ?? [];
+          if (!ugs.some((g) => g === grpFilter)) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        let va = a[sortField] as string;
+        let vb = b[sortField] as string;
+        if (sortField === "role") {
+          const order = { admin: 0, editor: 1, viewer: 2 };
+          return sortDir === "asc"
+            ? (order[a.role] ?? 3) - (order[b.role] ?? 3)
+            : (order[b.role] ?? 3) - (order[a.role] ?? 3);
+        }
+        return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
+      });
+  }, [users, search, roleFilter, wsFilter, grpFilter, showInactive, sortField, sortDir, userWorkspacesMap, userGroupsMap]);
+
+  function toggleSort(field: SortField) {
+    if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortField(field); setSortDir("asc"); }
+  }
+
+  function clearFilters() {
+    setSearch(""); setRoleFilter(""); setWsFilter(""); setGrpFilter("");
+    setSearchParams({});
+  }
+
+  const hasFilters = search || roleFilter || wsFilter || grpFilter;
 
   const roleM = useMutation({
     mutationFn: ({ id, role }: { id: string; role: string }) =>
@@ -84,23 +216,36 @@ export default function AdminUsers() {
     if (ok) deactivateM.mutate(user.id);
   }
 
-  if (!isAdmin) {
+  if (isLoadingWs) {
     return (
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh" }}>
+        <div className="csv-loading-spinner" />
+      </div>
+    );
+  }
+
+  if (!canAccess) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh" }}>
         <div className="empty">
           <div className="empty-icon">🔒</div>
           <h3>Sin acceso</h3>
-          <p>Solo los administradores pueden ver esta página.</p>
+          <p>Accede desde un workspace en el que seas owner o admin_ws.</p>
         </div>
       </div>
     );
   }
 
-  const active   = users.filter((u) => u.is_active);
-  const inactive = users.filter((u) => !u.is_active);
+  const totalActive = users.filter((u) => u.is_active).length;
+  const totalAdmins = users.filter((u) => u.role === "admin").length;
+  const totalEditors = users.filter((u) => u.role === "editor").length;
+  const totalInactive = users.filter((u) => !u.is_active).length;
+
+  const wsLabel = workspaces.find((w) => w.id === wsFilter)?.name ?? "";
+  const grpLabel = grpFilter;
 
   return (
-    <div style={{ minHeight:"100vh", background:"var(--color-bg)" }}>
+    <div style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
 
       {/* ── Header ── */}
       <header className="app-header">
@@ -109,182 +254,421 @@ export default function AdminUsers() {
           <span className="app-header-name">Trans<em>Excel</em></span>
         </button>
         <div className="toolbar-sep" />
-        <span style={{ fontSize:13, color:"var(--color-text-secondary)", fontWeight:500 }}>
+        <span style={{ fontSize: 13, color: "var(--color-text-secondary)", fontWeight: 500 }}>
           Gestión de usuarios
         </span>
         <div className="app-header-spacer" />
         <UserMenu />
       </header>
 
-      {/* ── Hero ── */}
-      <div className="ds-hero">
-        <div className="ds-hero-inner">
-          <div>
-            <h1 className="ds-hero-title">Usuarios</h1>
-            <p className="ds-hero-sub">Gestiona roles y acceso al sistema</p>
-          </div>
-        </div>
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px" }}>
 
-        {/* Stats inline */}
-        <div className="ds-stats">
-          {[
-            { label:"Total",     value: users.length,                              color:"var(--color-text)" },
-            { label:"Activos",   value: active.length,                             color:"var(--pm-green-600)" },
-            { label:"Admins",    value: users.filter(u=>u.role==="admin").length,   color:"var(--pm-violet-600)" },
-            { label:"Editores",  value: users.filter(u=>u.role==="editor").length,  color:"#2563EB" },
-            { label:"Inactivos", value: inactive.length,                            color:"var(--color-text-muted)" },
-          ].map((s, i, arr) => (
-            <div key={s.label} style={{ display:"contents" }}>
-              <div className="ds-stat">
-                <span className="ds-stat-value" style={{ color:s.color }}>{s.value}</span>
-                <span className="ds-stat-label">{s.label}</span>
+        {/* ── Page title + stats ── */}
+        <div style={{ marginBottom: 28 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 800, color: "var(--color-text)", margin: 0 }}>
+            Usuarios
+          </h1>
+          <p style={{ fontSize: 14, color: "var(--color-text-secondary)", margin: "4px 0 20px" }}>
+            Gestiona roles y acceso al sistema
+          </p>
+
+          {/* Stats cards */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+            {[
+              { label: "Activos",   value: totalActive,   color: "#15803D", bg: "#F0FDF4", border: "#BBF7D0", icon: "●" },
+              { label: "Admins",    value: totalAdmins,   color: "#7C3AED", bg: "#F5F3FF", border: "#DDD6FE", icon: "★" },
+              { label: "Editores",  value: totalEditors,  color: "#2563EB", bg: "#EFF6FF", border: "#BFDBFE", icon: "✎" },
+              { label: "Inactivos", value: totalInactive, color: "#94A3B8", bg: "#F8FAFC", border: "#E2E8F0", icon: "○" },
+            ].map((s) => (
+              <div key={s.label} style={{
+                background: s.bg, border: `1px solid ${s.border}`, borderRadius: 12,
+                padding: "14px 16px", display: "flex", alignItems: "center", gap: 12,
+              }}>
+                <span style={{ fontSize: 22, color: s.color, opacity: 0.7 }}>{s.icon}</span>
+                <div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.value}</div>
+                  <div style={{ fontSize: 11, color: s.color, opacity: 0.8, fontWeight: 600, marginTop: 2 }}>{s.label}</div>
+                </div>
               </div>
-              {i < arr.length - 1 && <div className="ds-stat-divider" />}
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
 
-      {/* ── Content ── */}
-      <div style={{ maxWidth:960, margin:"0 auto", padding:"28px 24px" }}>
+        {/* ── Filter bar ── */}
+        <div style={{
+          background: "var(--color-surface)", border: "1px solid var(--color-border)",
+          borderRadius: 14, padding: "16px 20px", marginBottom: 16,
+          display: "flex", flexDirection: "column", gap: 12,
+          boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
+        }}>
 
-        {/* Active users */}
-        <div className="au-card">
-          <div className="au-card-header">
-            <span className="au-card-title">Usuarios activos</span>
-            <span className="au-count">{active.length}</span>
+          {/* Row 1: search + status toggle */}
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            {/* Search */}
+            <div style={{ position: "relative", flex: 1 }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--color-text-muted)", pointerEvents: "none" }}>
+                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+              </svg>
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por nombre o email..."
+                style={{
+                  width: "100%", height: 38, paddingLeft: 36, paddingRight: 12,
+                  border: "1.5px solid var(--color-border)", borderRadius: 9, fontSize: 13,
+                  background: "var(--color-bg)", color: "var(--color-text)", outline: "none",
+                  boxSizing: "border-box",
+                }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = "#7C3AED"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
+              />
+            </div>
+
+            {/* Status toggle */}
+            <div style={{ display: "flex", background: "var(--color-bg)", border: "1.5px solid var(--color-border)", borderRadius: 9, overflow: "hidden" }}>
+              {[
+                { label: "Activos",   value: false },
+                { label: "Inactivos", value: true },
+              ].map((opt) => (
+                <button key={String(opt.value)}
+                  onClick={() => setShowInactive(opt.value)}
+                  style={{
+                    padding: "0 16px", height: 38, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "none",
+                    background: showInactive === opt.value ? "#7C3AED" : "transparent",
+                    color: showInactive === opt.value ? "#fff" : "var(--color-text-secondary)",
+                    transition: "all 0.15s",
+                  }}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Clear filters */}
+            {hasFilters && (
+              <button onClick={clearFilters}
+                style={{
+                  height: 38, padding: "0 14px", border: "1.5px solid #FCA5A5", borderRadius: 9,
+                  background: "#FEF2F2", color: "#DC2626", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap",
+                }}>
+                ✕ Limpiar filtros
+              </button>
+            )}
           </div>
 
-          {isLoading ? (
-            <div style={{ padding:"48px 24px", textAlign:"center" }}>
-              <div className="csv-loading-spinner" />
+          {/* Row 2: role + workspace + group */}
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            {/* Role chips */}
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>Rol:</span>
+              {(["", "admin", "editor", "viewer"] as const).map((r) => {
+                const active = roleFilter === r;
+                const meta = r ? ROLE_META[r] : null;
+                return (
+                  <button key={r} onClick={() => setRoleFilter(r)}
+                    style={{
+                      padding: "4px 12px", borderRadius: 99, fontSize: 11, fontWeight: 600,
+                      cursor: "pointer", border: "1.5px solid",
+                      background: active ? (meta?.bg ?? "#F8FAFC") : "transparent",
+                      color: active ? (meta?.color ?? "var(--color-text)") : "var(--color-text-secondary)",
+                      borderColor: active ? (meta?.border ?? "var(--color-border)") : "var(--color-border)",
+                      transition: "all 0.15s",
+                    }}>
+                    {r === "" ? "Todos" : `${meta!.icon} ${meta!.label}`}
+                  </button>
+                );
+              })}
             </div>
-          ) : active.length === 0 ? (
-            <div className="empty"><p>No hay usuarios activos.</p></div>
-          ) : (
-            <div className="au-list">
-              {active.map((user) => (
-                <div key={user.id} className="au-row">
 
-                  {/* Left: avatar + info */}
-                  <div className="au-row-left">
+            <div style={{ width: 1, height: 22, background: "var(--color-border)" }} />
+
+            {/* Workspace dropdown */}
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>Workspace:</span>
+              <select
+                value={wsFilter}
+                onChange={(e) => { setWsFilter(e.target.value); setSearchParams(e.target.value ? { workspace_id: e.target.value } : {}); }}
+                style={{
+                  height: 32, padding: "0 10px", border: "1.5px solid var(--color-border)",
+                  borderRadius: 8, fontSize: 12, background: wsFilter ? "#F0FDF4" : "var(--color-bg)",
+                  color: wsFilter ? "#15803D" : "var(--color-text)", cursor: "pointer", outline: "none",
+                  fontWeight: wsFilter ? 600 : 400,
+                }}>
+                <option value="">Todos</option>
+                {workspaces.map((ws) => (
+                  <option key={ws.id} value={ws.id}>{ws.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Group dropdown */}
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>Grupo:</span>
+              <select
+                value={grpFilter}
+                onChange={(e) => setGrpFilter(e.target.value)}
+                style={{
+                  height: 32, padding: "0 10px", border: "1.5px solid var(--color-border)",
+                  borderRadius: 8, fontSize: 12, background: grpFilter ? "#F5F3FF" : "var(--color-bg)",
+                  color: grpFilter ? "#7C3AED" : "var(--color-text)", cursor: "pointer", outline: "none",
+                  fontWeight: grpFilter ? 600 : 400,
+                }}>
+                <option value="">Todos</option>
+                {groups.map((g) => (
+                  <option key={g.id} value={g.name}>{g.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Active filter pills */}
+          {hasFilters && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", paddingTop: 4, borderTop: "1px solid var(--color-border-light)" }}>
+              <span style={{ fontSize: 11, color: "var(--color-text-muted)", alignSelf: "center" }}>Filtros activos:</span>
+              {search && (
+                <FilterPill label={`"${search}"`} onRemove={() => setSearch("")} />
+              )}
+              {roleFilter && (
+                <FilterPill label={`Rol: ${ROLE_META[roleFilter].label}`} color={ROLE_META[roleFilter].color} onRemove={() => setRoleFilter("")} />
+              )}
+              {wsFilter && (
+                <FilterPill label={`WS: ${wsLabel}`} color="#15803D" onRemove={() => { setWsFilter(""); setSearchParams({}); }} />
+              )}
+              {grpFilter && (
+                <FilterPill label={`Grupo: ${grpLabel}`} color="#7C3AED" onRemove={() => setGrpFilter("")} />
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── Result count ── */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, padding: "0 2px" }}>
+          <span style={{ fontSize: 13, color: "var(--color-text-secondary)", fontWeight: 500 }}>
+            {filtered.length} {filtered.length === 1 ? "usuario" : "usuarios"}
+            {hasFilters && <span style={{ color: "var(--color-text-muted)" }}> de {users.filter(u => u.is_active === !showInactive).length}</span>}
+          </span>
+        </div>
+
+        {/* ── Table ── */}
+        <div style={{
+          background: "var(--color-surface)", border: "1px solid var(--color-border)",
+          borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
+        }}>
+          {/* Table header */}
+          <div style={{
+            display: "grid", gridTemplateColumns: "2fr 1fr 1.6fr 1fr 140px",
+            padding: "10px 20px", background: "var(--color-bg)",
+            borderBottom: "1px solid var(--color-border)",
+          }}>
+            {[
+              { label: "Usuario", field: "username" as SortField },
+              { label: "Rol",     field: "role"     as SortField },
+              { label: "Membresías", field: null },
+              { label: "Desde",   field: "created_at" as SortField },
+              { label: "Acciones", field: null },
+            ].map((col) => (
+              <div key={col.label}
+                onClick={() => col.field && toggleSort(col.field)}
+                style={{
+                  fontSize: 11, fontWeight: 700, color: "var(--color-text-muted)", textTransform: "uppercase",
+                  letterSpacing: "0.06em", cursor: col.field ? "pointer" : "default",
+                  userSelect: "none", display: "flex", alignItems: "center", gap: 2,
+                }}>
+                {col.label}
+                {col.field && <SortIcon field={col.field} current={sortField} dir={sortDir} />}
+              </div>
+            ))}
+          </div>
+
+          {/* Rows */}
+          {isLoading ? (
+            <div style={{ padding: "56px 24px", textAlign: "center" }}>
+              <div className="csv-loading-spinner" style={{ margin: "0 auto" }} />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div style={{ padding: "56px 24px", textAlign: "center" }}>
+              <div style={{ fontSize: 36, marginBottom: 12 }}>
+                {hasFilters ? "🔍" : showInactive ? "👤" : "✓"}
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: "var(--color-text)", marginBottom: 6 }}>
+                {hasFilters ? "Sin resultados" : showInactive ? "No hay cuentas inactivas" : "No hay usuarios activos"}
+              </div>
+              {hasFilters && (
+                <button onClick={clearFilters}
+                  style={{ marginTop: 8, fontSize: 13, color: "#7C3AED", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+                  Limpiar filtros
+                </button>
+              )}
+            </div>
+          ) : (
+            filtered.map((user, idx) => {
+              const uws = userWorkspacesMap.get(user.id) ?? [];
+              const ugs = userGroupsMap.get(user.id) ?? [];
+              const isEditing = editingId === user.id;
+              return (
+                <div key={user.id} style={{
+                  display: "grid", gridTemplateColumns: "2fr 1fr 1.6fr 1fr 140px",
+                  padding: "14px 20px", alignItems: "center",
+                  borderBottom: idx < filtered.length - 1 ? "1px solid var(--color-border-light)" : "none",
+                  background: "transparent", transition: "background 0.1s",
+                  opacity: showInactive ? 0.75 : 1,
+                }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--color-bg)"; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                >
+                  {/* Usuario */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
                     <Avatar name={user.username} role={user.role} />
-                    <div className="au-info">
-                      <div className="au-name">
-                        {user.username}
-                        {user.id === me?.id && <span className="au-you">Tú</span>}
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontWeight: 600, fontSize: 14, color: "var(--color-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {user.username}
+                        </span>
+                        {user.id === me?.id && (
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 99, background: "#EFF6FF", color: "#2563EB", border: "1px solid #BFDBFE" }}>
+                            Tú
+                          </span>
+                        )}
                       </div>
-                      <div className="au-email">{user.email}</div>
+                      <div style={{ fontSize: 12, color: "var(--color-text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {user.email}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Center: role */}
-                  <div className="au-role-cell">
-                    {editingId === user.id ? (
-                      <div className="au-role-edit">
-                        <div className="au-role-options">
-                          {(["admin","editor","viewer"] as const).map((r) => (
-                            <button key={r}
-                              className={`au-role-opt${pendingRole === r ? " active" : ""} au-role-opt--${r}`}
-                              onClick={() => setPendingRole(r)}>
-                              <span className="au-role-opt-icon">{ROLE_META[r].icon}</span>
-                              <span>{ROLE_META[r].label}</span>
-                            </button>
-                          ))}
+                  {/* Rol */}
+                  <div>
+                    {isEditing ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        <div style={{ display: "flex", gap: 4 }}>
+                          {(["admin", "editor", "viewer"] as const).map((r) => {
+                            const m = ROLE_META[r];
+                            const sel = pendingRole === r;
+                            return (
+                              <button key={r} onClick={() => setPendingRole(r)}
+                                style={{
+                                  padding: "3px 9px", borderRadius: 99, fontSize: 11, fontWeight: 700,
+                                  cursor: "pointer", border: `1.5px solid ${m.border}`,
+                                  background: sel ? m.bg : "transparent",
+                                  color: sel ? m.color : "var(--color-text-muted)",
+                                  transition: "all 0.12s",
+                                }}>
+                                {m.icon} {m.label}
+                              </button>
+                            );
+                          })}
                         </div>
-                        <div style={{ display:"flex", gap:6, marginTop:8 }}>
-                          <button className="btn btn-primary" style={{ height:30, fontSize:12, padding:"0 14px" }}
+                        <div style={{ display: "flex", gap: 5 }}>
+                          <button className="btn btn-primary" style={{ height: 26, fontSize: 11, padding: "0 10px" }}
                             onClick={() => saveRole(user)} disabled={roleM.isPending}>
                             Guardar
                           </button>
-                          <button className="btn btn-ghost" style={{ height:30, fontSize:12 }}
+                          <button className="btn btn-ghost" style={{ height: 26, fontSize: 11 }}
                             onClick={() => setEditingId(null)}>
                             Cancelar
                           </button>
                         </div>
                       </div>
                     ) : (
-                      <span className={`role-badge role-badge--${user.role}`}>
-                        {ROLE_META[user.role].icon} {ROLE_META[user.role].label}
-                      </span>
+                      <RoleBadge role={user.role} />
                     )}
                   </div>
 
-                  {/* Right: date + actions */}
-                  <div className="au-row-right">
-                    <span className="au-date">
-                      {new Date(user.created_at).toLocaleDateString("es-PE", {
-                        day:"2-digit", month:"short", year:"numeric"
-                      })}
-                    </span>
-                    {user.id !== me?.id && editingId === null && (
-                      <div className="au-actions">
-                        <button className="btn btn-ghost au-action-btn"
-                          onClick={() => { setEditingId(user.id); setPendingRole(user.role); }}>
-                          Cambiar rol
-                        </button>
-                        <button className="btn btn-ghost au-action-btn au-action-btn--danger"
-                          onClick={() => deactivate(user)} disabled={deactivateM.isPending}>
-                          Desactivar
-                        </button>
-                      </div>
+                  {/* Membresías */}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                    {uws.map((ws) => (
+                      <button key={ws.id}
+                        onClick={() => { setWsFilter(ws.id); setSearchParams({ workspace_id: ws.id }); }}
+                        title={`Filtrar por workspace: ${ws.name}`}
+                        style={{
+                          fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99,
+                          background: wsFilter === ws.id ? "#DCFCE7" : "#F0FDF4",
+                          color: "#15803D", border: `1px solid ${wsFilter === ws.id ? "#4ADE80" : "#86EFAC"}`,
+                          cursor: "pointer", transition: "all 0.12s",
+                          boxShadow: wsFilter === ws.id ? "0 0 0 2px #86EFAC" : "none",
+                        }}>
+                        ⬡ {ws.name}
+                      </button>
+                    ))}
+                    {ugs.map((g) => (
+                      <button key={g}
+                        onClick={() => setGrpFilter(g === grpFilter ? "" : g)}
+                        title={`Filtrar por grupo: ${g}`}
+                        style={{
+                          fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99,
+                          background: grpFilter === g ? "#EDE9FE" : "#F5F3FF",
+                          color: "#7C3AED", border: `1px solid ${grpFilter === g ? "#A78BFA" : "#C4B5FD"}`,
+                          cursor: "pointer", transition: "all 0.12s",
+                          boxShadow: grpFilter === g ? "0 0 0 2px #C4B5FD" : "none",
+                        }}>
+                        👥 {g}
+                      </button>
+                    ))}
+                    {uws.length === 0 && ugs.length === 0 && (
+                      <span style={{ fontSize: 11, color: "var(--color-text-muted)", fontStyle: "italic" }}>Sin asignar</span>
+                    )}
+                  </div>
+
+                  {/* Desde */}
+                  <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+                    {new Date(user.created_at).toLocaleDateString("es-PE", {
+                      day: "2-digit", month: "short", year: "numeric",
+                    })}
+                  </div>
+
+                  {/* Acciones */}
+                  <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                    {user.id !== me?.id && !isEditing && (
+                      <>
+                        <button
+                          onClick={() => { setEditingId(user.id); setPendingRole(user.role); }}
+                          title="Cambiar rol"
+                          style={{
+                            height: 30, width: 30, borderRadius: 8, border: "1px solid var(--color-border)",
+                            background: "var(--color-bg)", cursor: "pointer", display: "flex",
+                            alignItems: "center", justifyContent: "center", fontSize: 14, color: "var(--color-text-secondary)",
+                            transition: "all 0.12s",
+                          }}
+                          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#7C3AED"; (e.currentTarget as HTMLElement).style.color = "#7C3AED"; }}
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)"; (e.currentTarget as HTMLElement).style.color = "var(--color-text-secondary)"; }}
+                        >✎</button>
+                        <button
+                          onClick={() => deactivate(user)}
+                          title="Desactivar cuenta"
+                          disabled={deactivateM.isPending}
+                          style={{
+                            height: 30, width: 30, borderRadius: 8, border: "1px solid var(--color-border)",
+                            background: "var(--color-bg)", cursor: "pointer", display: "flex",
+                            alignItems: "center", justifyContent: "center", fontSize: 14, color: "var(--color-text-secondary)",
+                            transition: "all 0.12s",
+                          }}
+                          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#F87171"; (e.currentTarget as HTMLElement).style.color = "#DC2626"; }}
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)"; (e.currentTarget as HTMLElement).style.color = "var(--color-text-secondary)"; }}
+                        >⊘</button>
+                      </>
                     )}
                   </div>
                 </div>
-              ))}
-            </div>
+              );
+            })
           )}
         </div>
 
-        {/* Inactive users */}
-        {inactive.length > 0 && (
-          <div className="au-card" style={{ marginTop:16, opacity:0.8 }}>
-            <div className="au-card-header">
-              <span className="au-card-title" style={{ color:"var(--color-text-muted)" }}>
-                Cuentas desactivadas
-              </span>
-              <span className="au-count">{inactive.length}</span>
-            </div>
-            <div className="au-list">
-              {inactive.map((user) => (
-                <div key={user.id} className="au-row au-row--inactive">
-                  <div className="au-row-left">
-                    <Avatar name={user.username} role="viewer" />
-                    <div className="au-info">
-                      <div className="au-name" style={{ color:"var(--color-text-muted)" }}>{user.username}</div>
-                      <div className="au-email">{user.email}</div>
-                    </div>
-                  </div>
-                  <div className="au-role-cell">
-                    <span style={{
-                      fontSize:11, fontWeight:600, padding:"2px 10px", borderRadius:99,
-                      background:"var(--color-border-light)", color:"var(--color-text-muted)",
-                      border:"1px solid var(--color-border)",
-                    }}>Inactivo</span>
-                  </div>
-                  <div className="au-row-right">
-                    <span className="au-date">
-                      {new Date(user.created_at).toLocaleDateString("es-PE", {
-                        day:"2-digit", month:"short", year:"numeric"
-                      })}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Role guide */}
-        <div className="au-guide">
-          <span className="au-guide-label">Permisos por rol</span>
-          {(["admin","editor","viewer"] as const).map((r) => (
-            <div key={r} className="au-guide-item">
-              <span className={`role-badge role-badge--${r}`}>
-                {ROLE_META[r].icon} {ROLE_META[r].label}
-              </span>
-              <span className="au-guide-desc">
-                {r === "admin"  && "Datasets, columnas, registros y usuarios"}
+        {/* ── Role guide ── */}
+        <div style={{
+          marginTop: 20, padding: "14px 20px", background: "var(--color-surface)",
+          border: "1px solid var(--color-border)", borderRadius: 12,
+          display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap",
+        }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            Guía de roles
+          </span>
+          {(["admin", "editor", "viewer"] as const).map((r) => (
+            <div key={r} style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <RoleBadge role={r} />
+              <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+                {r === "admin"  && "Acceso total: datasets, columnas, registros y usuarios"}
                 {r === "editor" && "Crear, editar y eliminar registros"}
                 {r === "viewer" && "Solo puede ver datos"}
               </span>
@@ -294,5 +678,23 @@ export default function AdminUsers() {
 
       </div>
     </div>
+  );
+}
+
+function FilterPill({ label, color, onRemove }: { label: string; color?: string; onRemove: () => void }) {
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 5,
+      fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 99,
+      background: color ? `${color}18` : "#F1F5F9",
+      color: color ?? "var(--color-text-secondary)",
+      border: `1px solid ${color ? `${color}40` : "var(--color-border)"}`,
+    }}>
+      {label}
+      <button onClick={onRemove}
+        style={{ background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 1, color: "inherit", fontSize: 12, opacity: 0.7 }}>
+        ×
+      </button>
+    </span>
   );
 }

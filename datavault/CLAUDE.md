@@ -286,12 +286,12 @@ Empresa
 └── Workspace (Ventas, Operaciones, RRHH...)
     ├── Datasets propios
     ├── Grupos propios
-    └── Miembros con roles: owner | admin | member
+    └── Miembros con roles: owner | admin_ws | member
 ```
 
 ### Modelos nuevos
 - `Workspace`: id, name, description, created_at
-- `WorkspaceMember`: workspace_id, user_id, role (owner|admin|member), joined_at
+- `WorkspaceMember`: workspace_id, user_id, role (owner|admin_ws|member), joined_at
 - `Dataset.workspace_id` → FK nullable a Workspace
 - `UserGroup.workspace_id` → FK nullable a Workspace
 
@@ -317,34 +317,87 @@ GET    /groups?workspace_id=<uuid>    filtra por workspace
 ```
 
 ### Auth: effective_workspace_role()
-- Admin global → siempre "admin" en cualquier workspace
-- Otros → lee WorkspaceMember.role (owner|admin|member) o None si no es miembro
+- Admin global → siempre "owner" en cualquier workspace
+- Otros → lee WorkspaceMember.role (owner|admin_ws|member) o None si no es miembro
 
-### Frontend
-- `WorkspaceContext.tsx` — estado global del workspace activo (persiste en localStorage `dv_workspace_id`)
-- `WorkspaceSwitcher.tsx` — dropdown para cambiar de workspace y crear nuevos
-- `WorkspaceProvider` envuelve la app en `main.tsx`
+### Roles de workspace y permisos efectivos sobre datos
+
+| Workspace role | Rol efectivo sobre datasets | Puede editar datos | Gestiona equipo/grupos |
+|---|---|---|---|
+| `member`   | `editor` | ✓ | ✗ |
+| `admin_ws` | `editor` | ✓ | ✓ |
+| `owner`    | `admin`  | ✓ | ✓ + eliminar workspace |
+
+Mapeo en `auth.py`:
+```python
+WS_ROLE_TO_DS_ROLE = {
+    "owner":    "admin",
+    "admin_ws": "editor",
+    "member":   "editor",   # member puede editar registros (no solo leer)
+}
+```
+
+### Flujo para agregar un usuario nuevo al sistema
+1. Usuario se registra → rol global `"viewer"`, sin workspace
+2. Admin global **o** workspace owner/admin_ws van a `/admin/workspaces`
+   - Usan `?list_all=true` en `/auth/users` para ver todos los usuarios del sistema
+   - Agregan al usuario con rol `member` / `admin_ws` / `owner`
+3. Una vez en el workspace, owner/admin_ws pueden agregarlo a grupos en `/admin/groups`
+
+### API
+```
+GET    /workspaces                     lista workspaces del usuario
+POST   /workspaces                     crea workspace (creador = owner automático, solo admin global)
+GET    /workspaces/{id}
+PATCH  /workspaces/{id}               solo owner/admin_ws
+DELETE /workspaces/{id}               solo admin global
+
+GET    /workspaces/{id}/members
+POST   /workspaces/{id}/members       body: {user_id, role}  — owner/admin_ws
+PATCH  /workspaces/{id}/members/{uid} cambia rol             — owner/admin_ws
+DELETE /workspaces/{id}/members/{uid}                        — owner/admin_ws
+
+GET    /datasets?workspace_id=<uuid>  filtra por workspace
+POST   /datasets                      body incluye workspace_id opcional
+GET    /groups?workspace_id=<uuid>    filtra por workspace
+
+GET    /auth/users                    admin global: todos; con ?workspace_id=: miembros del ws
+GET    /auth/users?list_all=true      owner/admin_ws de cualquier ws: todos los usuarios del sistema
+GET    /auth/users?workspace_id=<id> owner/admin_ws del ws: miembros de ese ws
+```
 
 ### Frontend (implementado)
 - `WorkspaceContext.tsx` — estado global del workspace activo (persiste en localStorage `dv_workspace_id`)
-- `WorkspaceSwitcher.tsx` — dropdown con avatares, roles pill, opción crear nuevo; tema claro con CSS variables; cierra al hacer clic fuera (useRef + useEffect)
+  - owners/admin_ws NO se auto-seleccionan en reload (navegan vía URL `/ws/:id`)
+  - members regulares sí se auto-seleccionan al primer workspace disponible
+- `WorkspaceSwitcher.tsx` — dropdown con avatares, roles pill, opción crear nuevo
+  - owners/admin_ws → `navigate('/ws/:id')` al seleccionar (igual que admin global)
+  - members regulares → `setCurrent(ws)` (no navegan a WorkspaceView)
 - `WorkspaceProvider` envuelve la app en `main.tsx`
-- `AdminWorkspaces.tsx` → `/admin/workspaces` — layout sidebar + panel derecho; avatares de color determinístico; gestión de miembros con rol seleccionable
-- `WorkspaceView.tsx` → `/ws/:workspaceId` — vista de datasets del workspace con header breadcrumb
-- `DatasetList.tsx` — `AppHeader` con `WorkspaceSwitcher`, nav SVG icons, `UserMenu`
-- `AdminGroups.tsx` → `/admin/groups` — mismo patrón sidebar + panel que AdminWorkspaces
+- `AdminWorkspaces.tsx` → `/admin/workspaces` — sidebar + panel derecho; gestión de miembros con rol seleccionable inline; accesible para owner/admin_ws (no solo admin global)
+- `WorkspaceView.tsx` → `/ws/:workspaceId` — vista de datasets del workspace
+  - Nav para admin global: Workspaces | Equipo | Grupos | Usuarios
+  - Nav para owner/admin_ws: Equipo | Grupos | Usuarios
+- `AdminGroups.tsx` → `/admin/groups`
+  - Admin global ve todos los grupos
+  - owner/admin_ws ve solo los grupos de sus workspaces
+  - Búsqueda de usuarios para agregar filtra por workspace (`?workspace_id=`)
+- `AdminUsers.tsx` → `/admin/users?workspace_id=<id>`
+  - Admin global ve todos; owner/admin_ws ven solo su workspace
+  - Muestra grupos y workspaces de cada usuario como chips clicables
 - `AdminAudit.tsx` → `/admin/audit`:
-  - Filtros: Acción | Workspace | Dataset (filtrado por workspace) | Persona (multi-select con checkboxes)
-  - Al seleccionar workspace, el select de dataset muestra solo los datasets de ese workspace
-  - Filtro de persona: multi-select, chips individuales por persona, avatares apilados en botón
-  - Tarjetas de estadísticas clicables (filtra por acción)
-  - Exportar CSV (con BOM UTF-8) y Excel SpreadsheetML (.xls) sin librería npm
-  - Click en usuario de la tabla agrega/quita de la selección multi-persona
+  - Filtros: Acción | Workspace | Dataset | Persona (multi-select)
+  - Exportar CSV y Excel sin librería npm
 
 ### Seed de datos
-- `backend/seed_users_groups.py` — 12 usuarios, 4 grupos; contraseña todos: `Pass1234!`
+- `backend/seed_users_groups.py` — 12 usuarios, 4 grupos; contraseña: `Pass1234!`
 - `backend/seed_datasets_finti.py` — datasets para workspaces Finanzas y TI
 - `backend/seed_activity.py` — simula actividad de 10 usuarios para poblar el audit log
+- `backend/seed_roles_test.py` — 18 usuarios extra, 3 cuentas de prueba por rol, 5 workspaces, 5 grupos
+  - `test.owner@empresa.com` / `TestOwner1!` → owner del workspace Ventas
+  - `test.adminws@empresa.com` / `TestAdminWS1!` → admin_ws del workspace Ventas
+  - `test.member@empresa.com` / `TestMember1!` → member del workspace Ventas
+  - Resto de usuarios: `Pass1234!`
 
 ## Deploy en AWS
 

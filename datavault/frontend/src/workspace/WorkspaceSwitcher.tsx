@@ -17,10 +17,9 @@ function wsColor(name: string) {
 }
 
 const ROLE_STYLE: Record<string, { bg: string; color: string }> = {
-  owner:   { bg: "#EDE9FE", color: "#7C3AED" },
-  manager: { bg: "#E0F2FE", color: "#0284C7" },
-  editor:  { bg: "#FEF3C7", color: "#D97706" },
-  viewer:  { bg: "#DCFCE7", color: "#16A34A" },
+  owner:    { bg: "#EDE9FE", color: "#7C3AED" },
+  admin_ws: { bg: "#E0F2FE", color: "#0284C7" },
+  member:   { bg: "#F0FDF4", color: "#15803D" },
 };
 
 function WsAvatar({ name, size = 22 }: { name: string; size?: number }) {
@@ -61,8 +60,12 @@ export default function WorkspaceSwitcher() {
 
   const handleSelect = (ws: Workspace) => {
     setOpen(false);
-    if (isAdmin) navigate(`/ws/${ws.id}`);
-    else setCurrent(ws);
+    const role = ws.my_role;
+    if (isAdmin || role === "owner" || role === "admin_ws") {
+      navigate(`/ws/${ws.id}`);
+    } else {
+      setCurrent(ws);
+    }
   };
 
   const handleCreate = async (e: React.FormEvent) => {

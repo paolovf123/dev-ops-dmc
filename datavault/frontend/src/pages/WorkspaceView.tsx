@@ -161,7 +161,8 @@ export default function WorkspaceView() {
   });
   const workspace = allWorkspaces.find((w) => w.id === workspaceId) ?? null;
   const wsRole = workspace?.my_role ?? null;
-  const canManage = isAdmin || wsRole === "owner" || wsRole === "manager";
+  const canManage = isAdmin || wsRole === "owner" || wsRole === "admin_ws";
+  const isWsManager = wsRole === "owner" || wsRole === "admin_ws";
 
   // Sync WorkspaceContext so other components (WorkspaceSwitcher) stay in sync
   useEffect(() => {
@@ -243,33 +244,24 @@ export default function WorkspaceView() {
 
         <div className="app-header-spacer" />
 
-        {/* Nav links (admin) */}
-        {isAdmin && (
-          <nav style={{ display: "flex", gap: 2, alignItems: "center" }}>
-            {[
-              { title: "Workspaces", path: "/admin/workspaces", icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg> },
-              { title: "Grupos", path: "/admin/groups", icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6"/><circle cx="16" cy="8" r="3"/><path d="M22 20c0-3.3-2.7-6-6-6"/><path d="M9 14c0 0 1.5-.5 3-.5s3 .5 3 .5"/></svg> },
-              { title: "Usuarios", path: "/admin/users", icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg> },
-            ].map(({ title, path, icon }) => (
-              <button key={path}
-                title={title}
-                onClick={() => navigate(path)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 6,
-                  padding: "5px 10px", height: 34, borderRadius: 7,
-                  background: "transparent", border: "1.5px solid transparent",
-                  cursor: "pointer", color: "var(--color-text-secondary)",
-                  fontSize: 12.5, fontWeight: 600, transition: "all 0.14s", whiteSpace: "nowrap",
-                }}
-                onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.background = "var(--color-border-light)"; el.style.borderColor = "var(--color-border)"; el.style.color = "var(--color-text)"; }}
-                onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.background = "transparent"; el.style.borderColor = "transparent"; el.style.color = "var(--color-text-secondary)"; }}
-              >
-                {icon}
-                <span>{title}</span>
-              </button>
-            ))}
-          </nav>
-        )}
+        {/* Nav links: admin global ve todo; owner/admin_ws ven grupos y usuarios de su ws */}
+        {(isAdmin || isWsManager) && (() => {
+          const navBtn = (title: string, path: string, icon: React.ReactNode) => (
+            <button key={path} title={title} onClick={() => navigate(path)}
+              style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 10px", height:34, borderRadius:7, background:"transparent", border:"1.5px solid transparent", cursor:"pointer", color:"var(--color-text-secondary)", fontSize:12.5, fontWeight:600, transition:"all 0.14s", whiteSpace:"nowrap" }}
+              onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.background="var(--color-border-light)"; el.style.borderColor="var(--color-border)"; el.style.color="var(--color-text)"; }}
+              onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.background="transparent"; el.style.borderColor="transparent"; el.style.color="var(--color-text-secondary)"; }}
+            >{icon}<span>{title}</span></button>
+          );
+          return (
+            <nav style={{ display:"flex", gap:2, alignItems:"center" }}>
+              {isAdmin && navBtn("Workspaces", "/admin/workspaces", <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>)}
+              {navBtn("Equipo",   "/admin/workspaces", <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>)}
+              {navBtn("Grupos",   "/admin/groups", <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6"/><circle cx="16" cy="8" r="3"/><path d="M22 20c0-3.3-2.7-6-6-6"/><path d="M9 14c0 0 1.5-.5 3-.5s3 .5 3 .5"/></svg>)}
+              {navBtn("Usuarios", `/admin/users?workspace_id=${workspaceId}`, <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>)}
+            </nav>
+          );
+        })()}
 
         <div style={{ width: 1, height: 22, background: "var(--color-border)", margin: "0 4px", flexShrink: 0 }} />
         <UserMenu />

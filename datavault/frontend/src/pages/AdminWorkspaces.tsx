@@ -6,6 +6,7 @@ import {
   getWorkspaceMembers, addWorkspaceMember, updateMemberRole, removeWorkspaceMember,
 } from "../api/workspaces";
 import api from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/Toast";
 import UserMenu from "../components/UserMenu";
@@ -13,10 +14,9 @@ import type { Workspace } from "../workspace/WorkspaceContext";
 import type { WorkspaceMember } from "../api/workspaces";
 
 const ROLE_BADGE: Record<string, { bg: string; color: string; label: string; dot: string }> = {
-  owner:   { bg: "#EDE9FE", color: "#7C3AED", label: "Owner",   dot: "#7C3AED" },
-  manager: { bg: "#E0F2FE", color: "#0284C7", label: "Manager", dot: "#0284C7" },
-  editor:  { bg: "#FEF3C7", color: "#D97706", label: "Editor",  dot: "#D97706" },
-  viewer:  { bg: "#DCFCE7", color: "#16A34A", label: "Viewer",  dot: "#16A34A" },
+  owner:    { bg: "#EDE9FE", color: "#7C3AED", label: "Owner",    dot: "#7C3AED" },
+  admin_ws: { bg: "#E0F2FE", color: "#0284C7", label: "Admin WS", dot: "#0284C7" },
+  member:   { bg: "#F0FDF4", color: "#15803D", label: "Member",   dot: "#15803D" },
 };
 
 const WS_COLORS = [
@@ -66,6 +66,7 @@ export default function AdminWorkspaces() {
   const qc = useQueryClient();
   const confirm = useConfirm();
   const toast = useToast();
+  const { isAdmin } = useAuth();
 
   const [selected, setSelected] = useState<Workspace | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -76,7 +77,7 @@ export default function AdminWorkspaces() {
   const [editDesc, setEditDesc] = useState("");
   const [userSearch, setUserSearch] = useState("");
   const [selectedUserId, setSelectedUserId] = useState("");
-  const [selectedRole, setSelectedRole] = useState("viewer");
+  const [selectedRole, setSelectedRole] = useState("member");
   const [memberSearch, setMemberSearch] = useState("");
 
   const { data: workspaces = [], isLoading } = useQuery({
@@ -91,8 +92,11 @@ export default function AdminWorkspaces() {
   });
 
   const { data: allUsers = [] } = useQuery({
-    queryKey: ["all-users"],
-    queryFn: () => api.get<{ id: string; username: string; email: string }[]>("/auth/users").then((r) => r.data),
+    queryKey: ["all-users", isAdmin],
+    queryFn: () => {
+      const url = isAdmin ? "/auth/users" : "/auth/users?list_all=true";
+      return api.get<{ id: string; username: string; email: string }[]>(url).then((r) => r.data);
+    },
   });
 
   const createMut = useMutation({
@@ -177,7 +181,7 @@ export default function AdminWorkspaces() {
       )
     : members;
 
-  const roleOrder: Record<string, number> = { owner: 0, manager: 1, editor: 2, viewer: 3 };
+  const roleOrder: Record<string, number> = { owner: 0, admin_ws: 1, member: 2 };
   const sortedMembers = [...filteredMembers].sort((a, b) => (roleOrder[a.role] ?? 9) - (roleOrder[b.role] ?? 9));
 
   const totalMembers = members.length;
@@ -440,10 +444,9 @@ export default function AdminWorkspaces() {
                     value={selectedRole}
                     onChange={(e) => setSelectedRole(e.target.value)}
                     style={{ ...inputStyle, flex: "0 0 auto", minWidth: 180 }}>
-                    <option value="viewer">Viewer — solo lectura</option>
-                    <option value="editor">Editor — edita datos</option>
-                    <option value="manager">Manager — gestiona miembros</option>
-                    <option value="owner">Owner — control total</option>
+                    <option value="member">Member — accede a los datos</option>
+                    <option value="admin_ws">Admin WS — gestiona miembros y grupos</option>
+                    <option value="owner">Owner — control total + puede eliminar</option>
                   </select>
                   <button className="btn btn-primary" style={{ fontSize: 13, whiteSpace: "nowrap" }}
                     disabled={!selectedUserId || addMemberMut.isPending}
@@ -525,9 +528,8 @@ export default function AdminWorkspaces() {
                                     fontSize: 12, fontWeight: 600, cursor: "pointer", padding: 0,
                                     appearance: "none", WebkitAppearance: "none",
                                   }}>
-                                  <option value="viewer">Viewer</option>
-                                  <option value="editor">Editor</option>
-                                  <option value="manager">Manager</option>
+                                  <option value="member">Member</option>
+                                  <option value="admin_ws">Admin WS</option>
                                   <option value="owner">Owner</option>
                                 </select>
                                 <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={badge.color} strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>

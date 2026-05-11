@@ -32,12 +32,16 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       const res = await api.get<Workspace[]>("/workspaces");
       setWorkspaces(res.data);
       if (!isAdmin && res.data.length > 0) {
-        // No-admin → autoseleccionar el primero (no usan rutas /ws/:id)
-        const savedId = localStorage.getItem("dv_workspace_id");
-        const found = savedId ? (res.data.find((w) => w.id === savedId) ?? res.data[0]) : res.data[0];
-        setCurrent(found);
+        const isManager = res.data.some((w) => w.my_role === "owner" || w.my_role === "admin_ws");
+        if (!isManager) {
+          // Member regular → autoseleccionar workspace (usan DatasetList, no /ws/:id)
+          const savedId = localStorage.getItem("dv_workspace_id");
+          const found = savedId ? (res.data.find((w) => w.id === savedId) ?? res.data[0]) : res.data[0];
+          setCurrent(found);
+        }
+        // Owner/admin_ws → navegan a /ws/:id manualmente via WorkspaceSwitcher
       }
-      // Admin → el workspace activo lo maneja la URL /ws/:id
+      // Admin global → el workspace activo lo maneja la URL /ws/:id
     } catch {
       setWorkspaces([]);
     } finally {

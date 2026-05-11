@@ -38,7 +38,7 @@ class WorkspaceOut(BaseModel):
 
 class MemberAdd(BaseModel):
     user_id: uuid.UUID
-    role: str = "member"  # owner | admin | member
+    role: str = "member"  # owner | admin_ws | member
 
 
 class MemberOut(BaseModel):
@@ -133,8 +133,8 @@ async def update_workspace(
 ):
     ws = await _get_or_404(workspace_id, db)
     role = await effective_workspace_role(current_user, workspace_id, db)
-    if role not in ("owner", "admin"):
-        raise HTTPException(status_code=403, detail="Solo owner o admin pueden editar el workspace")
+    if role not in ("owner", "admin_ws"):
+        raise HTTPException(status_code=403, detail="Solo owner o admin_ws pueden editar el workspace")
     if body.name is not None:
         ws.name = body.name
     if body.description is not None:
@@ -194,8 +194,8 @@ async def add_member(
     db: AsyncSession = Depends(get_db),
 ):
     role = await effective_workspace_role(current_user, workspace_id, db)
-    if role not in ("owner", "admin"):
-        raise HTTPException(status_code=403, detail="Solo owner o admin pueden agregar miembros")
+    if role not in ("owner", "admin_ws"):
+        raise HTTPException(status_code=403, detail="Solo owner o admin_ws pueden agregar miembros")
 
     user_result = await db.execute(select(User).where(User.id == body.user_id))
     user = user_result.scalar_one_or_none()
@@ -211,8 +211,8 @@ async def add_member(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="El usuario ya es miembro")
 
-    if body.role not in ("owner", "admin", "member"):
-        raise HTTPException(status_code=400, detail="Rol inválido. Usa: owner, admin, member")
+    if body.role not in ("owner", "admin_ws", "member"):
+        raise HTTPException(status_code=400, detail="Rol inválido. Usa: owner, admin_ws, member")
 
     member = WorkspaceMember(
         workspace_id=workspace_id,
@@ -241,8 +241,8 @@ async def update_member_role(
     db: AsyncSession = Depends(get_db),
 ):
     role = await effective_workspace_role(current_user, workspace_id, db)
-    if role not in ("owner", "admin"):
-        raise HTTPException(status_code=403, detail="Solo owner o admin pueden cambiar roles")
+    if role not in ("owner", "admin_ws"):
+        raise HTTPException(status_code=403, detail="Solo owner o admin_ws pueden cambiar roles")
 
     result = await db.execute(
         select(WorkspaceMember, User)
@@ -254,8 +254,8 @@ async def update_member_role(
         raise HTTPException(status_code=404, detail="Miembro no encontrado")
 
     member, user = row
-    if body.role not in ("owner", "admin", "member"):
-        raise HTTPException(status_code=400, detail="Rol inválido. Usa: owner, admin, member")
+    if body.role not in ("owner", "admin_ws", "member"):
+        raise HTTPException(status_code=400, detail="Rol inválido. Usa: owner, admin_ws, member")
 
     member.role = body.role
     await db.commit()
@@ -277,7 +277,7 @@ async def remove_member(
     db: AsyncSession = Depends(get_db),
 ):
     role = await effective_workspace_role(current_user, workspace_id, db)
-    if role not in ("owner", "admin") and current_user.id != user_id:
+    if role not in ("owner", "admin_ws") and current_user.id != user_id:
         raise HTTPException(status_code=403, detail="Sin permisos para remover este miembro")
 
     result = await db.execute(

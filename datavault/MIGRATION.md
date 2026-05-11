@@ -3,7 +3,7 @@
 > Documento para reubicar el proyecto a otra carpeta o máquina desde cero.
 > Mantener actualizado ante cambios de estructura, dependencias o modelo de datos.
 >
-> **Última actualización:** 2026-04-27
+> **Última actualización:** 2026-05-11
 
 ---
 
@@ -21,6 +21,8 @@
 | State / cache | TanStack Query | 5 |
 | Charts | Recharts | 3 |
 | Contenerización | Docker Compose (Docker Engine en WSL2 Ubuntu 24.04) | — |
+| Code editor | Monaco Editor (`@monaco-editor/react`) | — |
+| Compute scripts | AWS Lambda (pandas, numpy, duckdb, scikit-learn) | — |
 
 ---
 
@@ -39,21 +41,35 @@ datavault/
 │   ├── main.py               # FastAPI app + CORS + WebSocket ConnectionManager
 │   ├── database.py           # SQLAlchemy async engine + get_db
 │   ├── models.py             # ORM: User, Dataset, ColumnDefinition, Record,
-│   │                         #       DatasetPermission, ChangeHistory
+│   │                         #   DatasetPermission, ChangeHistory,
+│   │                         #   UserGroup, UserGroupMember, DatasetGroupPermission,
+│   │                         #   Workspace, WorkspaceMember
 │   ├── schemas.py            # Pydantic schemas (in/out)
 │   ├── auth.py               # JWT utils, hash, get_current_user, require_roles,
-│   │                         #   ds_require_* (dataset-aware), effective_role()
+│   │                         #   effective_role(), effective_workspace_role(),
+│   │                         #   WS_ROLE_TO_DS_ROLE, ws_require_*
+│   ├── limiter.py            # slowapi rate limiter
 │   ├── alembic/
 │   │   └── versions/
-│   │       ├── 48460562010c_init.py                          # schema inicial
-│   │       ├── a98108fe73ca_add_users_and_auth.py            # tabla users + auth cols en change_history
-│   │       └── 29e5809b0914_dataset_permissions_and_gin_index.py  # permisos por dataset + GIN index
-│   └── routers/
-│       ├── auth.py           # /auth/* — register, login, me, users CRUD, /auth/audit
-│       ├── datasets.py       # /datasets CRUD
-│       ├── columns.py        # /datasets/{id}/columns CRUD
-│       ├── records.py        # /datasets/{id}/records CRUD + paginación + import-excel + history
-│       └── permissions.py    # /datasets/{id}/permissions — permisos por dataset
+│   │       ├── 48460562010c_init.py
+│   │       ├── a98108fe73ca_add_users_and_auth.py
+│   │       ├── 29e5809b0914_dataset_permissions_and_gin_index.py
+│   │       ├── c3f7a2b8d91e_groups_and_computed_datasets.py
+│   │       └── d4e8f1a2b3c5_add_workspaces.py
+│   ├── routers/
+│   │   ├── auth.py           # /auth/* — register, login, me, users, audit
+│   │   ├── datasets.py       # /datasets CRUD
+│   │   ├── columns.py        # /datasets/{id}/columns CRUD
+│   │   ├── records.py        # /datasets/{id}/records CRUD + import + history
+│   │   ├── permissions.py    # /datasets/{id}/permissions
+│   │   ├── groups.py         # /groups + /groups/{id}/members
+│   │   └── workspaces.py     # /workspaces + /workspaces/{id}/members
+│   └── seeds/
+│       ├── setup_seed.py          # seed inicial (categorias, productos, etc.)
+│       ├── seed_users_groups.py   # 12 usuarios, 4 grupos; Pass1234!
+│       ├── seed_datasets_finti.py # datasets para workspaces Finanzas y TI
+│       ├── seed_activity.py       # actividad en audit log
+│       └── seed_roles_test.py     # cuentas test.owner/adminws/member; ver abajo
 │
 └── frontend/
     ├── Dockerfile
@@ -61,39 +77,33 @@ datavault/
     ├── vite.config.ts
     ├── .env                  # VITE_API_URL, VITE_WS_URL
     └── src/
-        ├── main.tsx          # Router + providers: Query, Auth, Toast, Confirm
-        ├── index.css         # Paolo Corp Design System (Inter, CSS custom props)
-        ├── types.ts
+        ├── main.tsx          # Router + providers: Query, Auth, Workspace, Toast, Confirm
         ├── auth/
-        │   └── AuthContext.tsx       # JWT en localStorage, axios default header
+        │   └── AuthContext.tsx
+        ├── workspace/
+        │   ├── WorkspaceContext.tsx   # estado global workspace activo
+        │   └── WorkspaceSwitcher.tsx  # dropdown cambio de workspace
         ├── api/
-        │   ├── client.ts             # axios.create + interceptor de token
-        │   └── datasets.ts           # fetch helpers — getRecords devuelve {data, total}
+        │   ├── client.ts
+        │   ├── datasets.ts
+        │   ├── groups.ts
+        │   └── workspaces.ts
         ├── components/
-        │   ├── Toast.tsx             # ToastProvider + useToast() — notificaciones
-        │   ├── UserMenu.tsx          # Dropdown usuario en header (admin links incluidos)
-        │   ├── ConfirmDialog.tsx     # Modal confirm (reemplaza window.confirm)
-        │   ├── DataGrid.tsx          # Tabla editable con inline editing + selección
-        │   ├── CellEditor.tsx        # Input adaptado por data_type
-        │   ├── AddColumnModal.tsx    # Modal nueva columna
-        │   ├── EditColumnModal.tsx   # Modal editar columna
-        │   ├── ColumnPanel.tsx       # Panel lateral columnas + visibilidad
-        │   ├── TrashPanel.tsx        # Panel papelera (soft delete + restaurar)
-        │   ├── RecordHistoryPanel.tsx # Panel historial por registro
-        │   ├── KanbanView.tsx        # Vista Kanban agrupada por enum
-        │   ├── ChartPanel.tsx        # Vista gráficos (Recharts)
-        │   ├── RelatedDatasets.tsx   # Datasets relacionados por FK (id_*)
-        │   ├── CsvMappingModal.tsx   # Modal mapeo columnas al importar Excel
-        │   ├── SchemaDiagram.tsx     # Diagrama de schema SVG inline
-        │   └── GlobalSchemaDiagram.tsx # Diagrama global de todos los datasets
+        │   ├── Toast, ConfirmDialog, UserMenu, DataGrid, CellEditor
+        │   ├── KanbanView, ChartPanel, SchemaDiagram, GlobalSchemaDiagram
+        │   ├── PermissionsPanel.tsx   # permisos por dataset (usuarios + grupos)
+        │   └── ...
         └── pages/
-            ├── Login.tsx             # Login + Register (primer usuario → admin)
-            ├── DatasetList.tsx       # Home — cards + búsqueda global cross-dataset
-            ├── DatasetView.tsx       # Vista principal: tabla/kanban/charts + paginación
-            ├── CreateDataset.tsx     # Formulario nuevo dataset
-            ├── RecordForm.tsx        # Formulario nuevo registro
-            ├── AdminUsers.tsx        # /admin/users — gestión de usuarios y roles
-            └── AdminAudit.tsx        # /admin/audit — registro de auditoría global
+            ├── Login.tsx
+            ├── DatasetList.tsx        # home con WorkspaceSwitcher
+            ├── DatasetView.tsx        # tabla/kanban/charts
+            ├── WorkspaceView.tsx      # /ws/:id — datasets del workspace
+            ├── ScriptsHub.tsx         # /scripts — scripts Python
+            ├── ComputedDatasetEditor.tsx # editor Monaco
+            ├── AdminUsers.tsx         # /admin/users — con filtros avanzados
+            ├── AdminGroups.tsx        # /admin/groups — sidebar + miembros
+            ├── AdminWorkspaces.tsx    # /admin/workspaces — sidebar + miembros
+            └── AdminAudit.tsx         # /admin/audit — con exportar CSV/Excel
 ```
 
 ---
@@ -101,6 +111,7 @@ datavault/
 ## Modelo de datos (PostgreSQL)
 
 ```sql
+-- Migración 1: init
 users
   id              UUID PK
   email           TEXT UNIQUE NOT NULL
@@ -114,34 +125,34 @@ datasets
   id              UUID PK
   name            TEXT NOT NULL
   description     TEXT
+  is_computed     BOOLEAN DEFAULT false  -- true = script Python (Lambda)
+  workspace_id    UUID FK→workspaces NULL
   created_at      TIMESTAMPTZ
 
 column_definitions
   id              UUID PK
   dataset_id      UUID FK→datasets (CASCADE)
   name            TEXT NOT NULL
-  field_key       TEXT NOT NULL          -- clave en records.data JSONB
-  data_type       VARCHAR(20)            -- 'text'|'number'|'date'|'enum'
-  rules           JSONB DEFAULT '{}'     -- {required, min, max, options:[...]}
+  field_key       TEXT NOT NULL
+  data_type       VARCHAR(20)            -- 'text'|'number'|'date'|'enum'|'boolean'
+  rules           JSONB DEFAULT '{}'
   position        INTEGER DEFAULT 0
   created_at      TIMESTAMPTZ
 
 records
   id              UUID PK
   dataset_id      UUID FK→datasets (CASCADE)
-  data            JSONB DEFAULT '{}'     -- {field_key: value, ...}
+  data            JSONB DEFAULT '{}'
   created_at      TIMESTAMPTZ
   updated_at      TIMESTAMPTZ
-  deleted_at      TIMESTAMPTZ NULL       -- soft delete; NULL = activo
+  deleted_at      TIMESTAMPTZ NULL
+  INDEX: ix_records_data_gin GIN(data)
 
-  INDEXES:
-    ix_records_data_gin   GIN(data)      -- búsqueda rápida en JSONB
-
-dataset_permissions                     -- permisos por dataset (override del rol global)
+dataset_permissions
   id              UUID PK
   dataset_id      UUID FK→datasets (CASCADE)
   user_id         UUID FK→users (CASCADE)
-  role            VARCHAR(20) NOT NULL   -- 'admin'|'editor'|'viewer'|'none'
+  role            VARCHAR(20)            -- 'admin'|'editor'|'viewer'|'none'
   granted_at      TIMESTAMPTZ
 
 change_history
@@ -152,8 +163,62 @@ change_history
   new_value       TEXT NULL
   action          VARCHAR(20)            -- 'create'|'update'|'delete'|'restore'
   changed_at      TIMESTAMPTZ
-  user_id         UUID FK→users NULL     -- quién hizo el cambio
-  user_name       TEXT NULL              -- denormalizado para historial rápido
+  user_id         UUID FK→users NULL
+  user_name       TEXT NULL
+
+-- Migración 4: groups_and_computed_datasets
+user_groups
+  id              UUID PK
+  name            TEXT NOT NULL
+  description     TEXT NULL
+  workspace_id    UUID FK→workspaces NULL
+  created_at      TIMESTAMPTZ
+
+user_group_members
+  group_id        UUID FK→user_groups (CASCADE)
+  user_id         UUID FK→users (CASCADE)
+  PRIMARY KEY (group_id, user_id)
+
+dataset_group_permissions
+  id              UUID PK
+  dataset_id      UUID FK→datasets (CASCADE)
+  group_id        UUID FK→user_groups (CASCADE)
+  role            VARCHAR(20)
+
+-- Migración 5: add_workspaces
+workspaces
+  id              UUID PK
+  name            TEXT NOT NULL
+  description     TEXT NULL
+  created_at      TIMESTAMPTZ
+
+workspace_members
+  workspace_id    UUID FK→workspaces (CASCADE)
+  user_id         UUID FK→users (CASCADE)
+  role            VARCHAR(20)            -- 'owner' | 'admin_ws' | 'member'
+  joined_at       TIMESTAMPTZ
+  PRIMARY KEY (workspace_id, user_id)
+```
+
+### Migraciones Alembic (completas)
+
+| # | ID | Descripción |
+|---|----|----|
+| 1 | `48460562010c` | Schema inicial: datasets, columns, records, change_history |
+| 2 | `a98108fe73ca` | Tabla users + user_id en change_history |
+| 3 | `29e5809b0914` | dataset_permissions + GIN index en records.data |
+| 4 | `c3f7a2b8d91e` | user_groups, group_members, dataset_group_permissions, is_computed en datasets |
+| 5 | `d4e8f1a2b3c5` | workspaces, workspace_members, workspace_id en datasets y groups |
+
+```bash
+# Aplicar todas las migraciones
+docker compose exec backend alembic upgrade head
+
+# Ver estado actual
+docker compose exec backend alembic current
+
+# Ver historial
+docker compose exec backend alembic history --verbose
 ```
 
 ---
@@ -163,16 +228,48 @@ change_history
 - JWT firmado con `SECRET_KEY` (env var). Default inseguro — **cambiar en producción**.
 - Token en `localStorage` (`dv_token`). El cliente axios lo inyecta en cada request via interceptor.
 - **Primer usuario registrado** → rol `admin` automáticamente.
-- Roles globales vs. permisos por dataset:
-  - El rol global aplica a todos los datasets por defecto.
-  - `dataset_permissions` permite dar un rol diferente por dataset (e.g. un `viewer` global puede ser `editor` en un dataset específico).
-  - Los admins globales siempre son admin en todos los datasets.
 
-| Rol | Datasets | Columnas | Registros | Usuarios | Permisos dataset |
-|-----|----------|----------|-----------|----------|-----------------|
-| admin | CRUD | CRUD | CRUD | CRUD | CRUD |
-| editor | lectura | lectura | CRUD | — | — |
-| viewer | lectura | lectura | lectura | — | — |
+### Roles globales (campo `users.role`)
+
+| Rol | Datasets | Columnas | Registros | Usuarios | Workspaces |
+|-----|----------|----------|-----------|----------|------------|
+| `admin` | CRUD | CRUD | CRUD | CRUD | CRUD |
+| `editor` | lectura | lectura | CRUD | — | — |
+| `viewer` | lectura | lectura | lectura | — | — |
+
+### Roles de workspace (`workspace_members.role`)
+
+| Workspace role | Rol efectivo sobre datos | Gestionar equipo/grupos | Eliminar workspace |
+|---|---|---|---|
+| `owner` | `admin` (control total) | ✓ | ✓ |
+| `admin_ws` | `editor` (editar registros) | ✓ | ✗ |
+| `member` | `editor` (editar registros) | ✗ | ✗ |
+
+Mapeo en `auth.py → WS_ROLE_TO_DS_ROLE`:
+```python
+WS_ROLE_TO_DS_ROLE = {
+    "owner":    "admin",
+    "admin_ws": "editor",
+    "member":   "editor",   # member puede crear/editar/eliminar registros
+}
+```
+
+### Prioridad de permisos efectivos sobre un dataset
+```
+admin global > permiso directo (dataset_permissions) > mejor permiso de grupo > workspace role > rol global
+```
+Implementado en `auth.py → effective_role(user, dataset_id, db)`.
+
+### Cuentas de prueba (seed_roles_test.py)
+
+| Email | Contraseña | Rol global | Workspace role |
+|-------|-----------|-----------|---------------|
+| admin@datavault.com | Admin1234! | admin | owner (cualquier ws) |
+| test.owner@empresa.com | TestOwner1! | editor | owner en Ventas |
+| test.adminws@empresa.com | TestAdminWS1! | editor | admin_ws en Ventas |
+| test.member@empresa.com | TestMember1! | viewer | member en Ventas |
+| juan.perez@empresa.com | Pass1234! | editor | member en Ventas |
+| (resto de usuarios) | Pass1234! | editor/viewer | varios workspaces |
 
 ---
 
@@ -180,45 +277,65 @@ change_history
 
 ```
 # Auth
-POST   /auth/register             body: {email, username, password}
-POST   /auth/login                body: {email, password} → {access_token, user}
+POST   /auth/register                    {email, username, password}
+POST   /auth/login                       {email, password} → {access_token, user}
 GET    /auth/me
-GET    /auth/users                (admin) lista todos los usuarios
-PATCH  /auth/users/{id}/role      (admin) {role: "admin"|"editor"|"viewer"}
-PATCH  /auth/users/{id}/deactivate (admin)
-GET    /auth/audit                (admin) historial global de cambios
-                                  ?skip=&limit=&action=&dataset_id=&user_id=
+GET    /auth/users                       admin: todos | ?workspace_id=: miembros | ?list_all=true: todos (owners)
+PATCH  /auth/users/{id}/role             (admin) {role}
+PATCH  /auth/users/{id}/deactivate       (admin)
+GET    /auth/audit                       (admin) ?skip=&limit=&action=&dataset_id=&workspace_id=&user_id=
+
+# Workspaces
+GET    /workspaces
+POST   /workspaces                       (admin) {name, description?}
+GET    /workspaces/{id}
+PATCH  /workspaces/{id}                  (owner/admin_ws) {name?, description?}
+DELETE /workspaces/{id}                  (admin global)
+GET    /workspaces/{id}/members
+POST   /workspaces/{id}/members          (owner/admin_ws) {user_id, role}
+PATCH  /workspaces/{id}/members/{uid}    (owner/admin_ws) {role}
+DELETE /workspaces/{id}/members/{uid}    (owner/admin_ws)
+
+# Grupos
+GET    /groups                           ?workspace_id=
+POST   /groups                           (admin/owner/admin_ws) {name, description?, workspace_id?}
+DELETE /groups/{id}
+GET    /groups/{id}/members
+POST   /groups/{id}/members              {user_id}
+DELETE /groups/{id}/members/{user_id}
 
 # Datasets
-GET    /datasets
-POST   /datasets                  {name, description?}
+GET    /datasets                         ?workspace_id=
+POST   /datasets                         {name, description?, workspace_id?}
+PATCH  /datasets/{id}
 DELETE /datasets/{id}
 
-# Columns
+# Columnas
 GET    /datasets/{id}/columns
-POST   /datasets/{id}/columns     {name, field_key, data_type, rules, position}
+POST   /datasets/{id}/columns            {name, field_key, data_type, rules, position}
 PATCH  /datasets/{id}/columns/{col_id}
 DELETE /datasets/{id}/columns/{col_id}
 
-# Records (paginados)
-GET    /datasets/{id}/records     ?search=&include_deleted=&skip=&limit=
-                                  → array + header X-Total-Count
-POST   /datasets/{id}/records     {data: {...}}
+# Registros (paginados)
+GET    /datasets/{id}/records            ?search=&include_deleted=&skip=&limit=
+POST   /datasets/{id}/records            {data: {...}}
 PATCH  /datasets/{id}/records/{rec_id}
-DELETE /datasets/{id}/records/{rec_id}          (soft delete)
+DELETE /datasets/{id}/records/{rec_id}           (soft delete)
 POST   /datasets/{id}/records/{rec_id}/restore
-POST   /datasets/{id}/records/bulk-delete       {ids: [...]}
-POST   /datasets/{id}/records/import-excel      multipart/form-data campo: file
+POST   /datasets/{id}/records/bulk-delete        {ids: [...]}
+POST   /datasets/{id}/records/import-excel       multipart/form-data
 GET    /datasets/{id}/records/{rec_id}/history
 
 # Permisos por dataset
-GET    /datasets/{id}/permissions              (admin del dataset)
-PUT    /datasets/{id}/permissions              {user_id, role}
+GET    /datasets/{id}/permissions
+PUT    /datasets/{id}/permissions        {user_id, role}
 DELETE /datasets/{id}/permissions/{user_id}
 
+# Scripts Python (Computed Datasets)
+POST   /datasets/{id}/compute            ejecuta el script vía AWS Lambda
+
 # WebSocket (tiempo real)
-WS     /ws/{dataset_id}?token=<jwt>
-       → eventos: {type: "record_create"|"record_update"|"record_delete", dataset_id, record_id?}
+WS     /ws/{dataset_id}           primer mensaje = JWT token
 ```
 
 ---

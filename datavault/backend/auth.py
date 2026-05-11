@@ -21,14 +21,13 @@ ACCESS_TOKEN_EXPIRE_HOURS = 24
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
-ROLE_RANK = {"none": 0, "viewer": 1, "editor": 2, "manager": 3, "owner": 4, "admin": 5}
+ROLE_RANK = {"none": 0, "viewer": 1, "editor": 2, "member": 2, "admin_ws": 3, "owner": 4, "admin": 5}
 
 # Workspace role → equivalent dataset permission level
 WS_ROLE_TO_DS_ROLE = {
-    "owner":   "admin",
-    "manager": "editor",
-    "editor":  "editor",
-    "viewer":  "viewer",
+    "owner":    "admin",
+    "admin_ws": "editor",
+    "member":   "editor",
 }
 
 
@@ -256,9 +255,9 @@ def require_workspace_roles(*roles: str):
     return _check
 
 
-ws_require_owner   = require_workspace_roles("owner")
-ws_require_manager = require_workspace_roles("owner", "manager")
-ws_require_member  = require_workspace_roles("owner", "manager", "editor", "viewer")
+ws_require_owner    = require_workspace_roles("owner")
+ws_require_admin_ws = require_workspace_roles("owner", "admin_ws")
+ws_require_member   = require_workspace_roles("owner", "admin_ws", "member")
 
 
 async def count_users(db: AsyncSession) -> int:

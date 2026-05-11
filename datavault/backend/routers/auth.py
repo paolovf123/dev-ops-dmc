@@ -2,11 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from database import get_db
-from models import User
+from models import User, WorkspaceMember
 from schemas import UserRegister, UserLogin, UserOut, UserUpdateRole, Token
 from auth import (
     verify_password, hash_password, create_access_token,
-    get_current_user, require_admin, count_users,
+    get_current_user, require_admin, count_users, effective_workspace_role,
 )
 from models import ChangeHistory, Record, Dataset
 from limiter import limiter
@@ -66,10 +66,41 @@ async def me(current_user: User = Depends(get_current_user)):
 
 @router.get("/users", response_model=list[UserOut])
 async def list_users(
-    _: User = Depends(require_admin),
+    workspace_id: uuid.UUID | None = None,
+    list_all: bool = False,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(User).order_by(User.created_at))
+    if current_user.role == "admin":
+        result = await db.execute(select(User).order_by(User.created_at))
+        return result.scalars().all()
+
+    # Owner/admin_ws puede listar todos los usuarios para agregar a su workspace
+    if list_all:
+        managed = await db.execute(
+            select(WorkspaceMember).where(
+                WorkspaceMember.user_id == current_user.id,
+                WorkspaceMember.role.in_(["owner", "admin_ws"]),
+            )
+        )
+        if not managed.scalar_one_or_none():
+            raise HTTPException(status_code=403, detail="Solo owner o admin_ws pueden listar todos los usuarios")
+        result = await db.execute(select(User).order_by(User.created_at))
+        return result.scalars().all()
+
+    # Workspace owner/admin_ws: devuelve solo miembros de ese workspace
+    if workspace_id is None:
+        raise HTTPException(status_code=403, detail="Se requiere workspace_id, list_all=true, o rol admin")
+    ws_role = await effective_workspace_role(current_user, workspace_id, db)
+    if ws_role not in ("owner", "admin_ws"):
+        raise HTTPException(status_code=403, detail="Solo owner o admin_ws pueden listar usuarios del workspace")
+
+    result = await db.execute(
+        select(User)
+        .join(WorkspaceMember, User.id == WorkspaceMember.user_id)
+        .where(WorkspaceMember.workspace_id == workspace_id)
+        .order_by(User.created_at)
+    )
     return result.scalars().all()
 
 

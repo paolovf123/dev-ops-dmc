@@ -95,7 +95,7 @@ Secretos inyectados desde SSM Parameter Store (sin pasar por GitHub)
 - **Soft delete + papelera** — registros eliminados restaurables
 - **Busqueda full-text** — via GIN index en JSONB
 - **Tiempo real** — WebSocket sincroniza cambios entre usuarios
-- **Control de acceso** — roles globales (admin/editor/viewer) + permisos por dataset
+- **Control de acceso** — roles globales (admin/editor/viewer) + permisos por dataset + roles por workspace (owner/admin_ws/member)
 - **Diagrama de schema** — visualizacion SVG del modelo de datos
 
 ---
@@ -169,14 +169,31 @@ column_definitions  records ─────────────────�
 
 ## Roles y permisos
 
-| Rol | Datasets | Columnas | Registros | Usuarios | Permisos por dataset |
-|-----|:--------:|:--------:|:---------:|:--------:|:--------------------:|
+### Roles globales (nivel sistema)
+
+| Rol | Datasets | Columnas | Registros | Usuarios | Workspaces |
+|-----|:--------:|:--------:|:---------:|:--------:|:----------:|
 | **admin** | CRUD | CRUD | CRUD | CRUD | CRUD |
 | **editor** | lectura | lectura | CRUD | — | — |
 | **viewer** | lectura | lectura | lectura | — | — |
 
 - El **primer usuario registrado** recibe rol `admin` automaticamente.
 - Los permisos por dataset sobreescriben el rol global para ese dataset especifico.
+
+### Roles de workspace (nivel equipo)
+
+| Workspace role | Acceso a datos del workspace | Gestionar miembros/grupos | Eliminar workspace |
+|---|:---:|:---:|:---:|
+| **owner** | admin (CRUD total) | ✓ | ✓ |
+| **admin_ws** | editor (editar registros) | ✓ | ✗ |
+| **member** | editor (editar registros) | ✗ | ✗ |
+
+### Workspaces y grupos
+
+- Un usuario puede pertenecer a **múltiples workspaces** con roles distintos.
+- Cada workspace tiene sus propios **datasets** y **grupos**.
+- Los grupos permiten asignar permisos por conjunto de usuarios sobre datasets específicos.
+- Flujo de incorporación: admin/owner agrega al usuario en `/admin/workspaces` → owner/admin_ws lo agrega a grupos en `/admin/groups`.
 
 ---
 
@@ -314,28 +331,48 @@ Push a develop
 
 ```
 # Autenticacion
-POST   /auth/register             {email, username, password}
-POST   /auth/login                {email, password} → {access_token, user}
+POST   /auth/register                    {email, username, password}
+POST   /auth/login                       {email, password} → {access_token, user}
 GET    /auth/me
-GET    /auth/users                (admin only)
-PATCH  /auth/users/{id}/role      (admin) {role}
-GET    /auth/audit                (admin) ?skip=&limit=&action=
+GET    /auth/users                       admin: todos | ?workspace_id=: miembros del ws | ?list_all=true: todos (owners)
+PATCH  /auth/users/{id}/role             (admin) {role}
+PATCH  /auth/users/{id}/deactivate       (admin)
+GET    /auth/audit                       (admin) ?skip=&limit=&action=&workspace_id=&user_id=
+
+# Workspaces
+GET    /workspaces
+POST   /workspaces                       (admin) {name, description?}
+GET    /workspaces/{id}
+PATCH  /workspaces/{id}                  (owner/admin_ws) {name?, description?}
+DELETE /workspaces/{id}                  (admin global)
+GET    /workspaces/{id}/members
+POST   /workspaces/{id}/members          (owner/admin_ws) {user_id, role}
+PATCH  /workspaces/{id}/members/{uid}    (owner/admin_ws) {role}
+DELETE /workspaces/{id}/members/{uid}    (owner/admin_ws)
+
+# Grupos
+GET    /groups                           ?workspace_id=
+POST   /groups                           (admin/owner/admin_ws) {name, description?, workspace_id?}
+DELETE /groups/{id}
+GET    /groups/{id}/members
+POST   /groups/{id}/members              {user_id}
+DELETE /groups/{id}/members/{user_id}
 
 # Datasets
-GET    /datasets
-POST   /datasets                  {name, description?}
-PATCH  /datasets/{id}             {name?, description?}
+GET    /datasets                         ?workspace_id=
+POST   /datasets                         {name, description?, workspace_id?}
+PATCH  /datasets/{id}                    {name?, description?}
 DELETE /datasets/{id}
 
 # Columnas
 GET    /datasets/{id}/columns
-POST   /datasets/{id}/columns     {name, field_key, data_type, rules, position}
+POST   /datasets/{id}/columns            {name, field_key, data_type, rules, position}
 PATCH  /datasets/{id}/columns/{col_id}
 DELETE /datasets/{id}/columns/{col_id}
 
 # Registros (paginados)
-GET    /datasets/{id}/records     ?search=&include_deleted=&skip=&limit=
-POST   /datasets/{id}/records     {data: {...}}
+GET    /datasets/{id}/records            ?search=&include_deleted=&skip=&limit=
+POST   /datasets/{id}/records            {data: {...}}
 PATCH  /datasets/{id}/records/{rec_id}
 DELETE /datasets/{id}/records/{rec_id}           (soft delete)
 POST   /datasets/{id}/records/{rec_id}/restore
@@ -419,7 +456,10 @@ cd .github/workflows && terraform destroy
 - [x] CloudFront como reverse proxy HTTPS end-to-end
 - [x] Logs en CloudWatch
 - [x] Drag & drop para reordenar columnas
-- [ ] Permisos granulares por dataset desde la UI
+- [x] Workspaces (equipos) con roles owner / admin_ws / member
+- [x] Grupos de usuarios con permisos por dataset
+- [x] Scripts Python (Computed Datasets) via AWS Lambda
+- [x] AdminWorkspaces, AdminGroups, AdminUsers, AdminAudit con UX avanzada
 - [ ] Notificaciones en tiempo real por WebSocket para todos los cambios
 - [ ] Activar NAT Gateway + subnets privadas para produccion
 - [ ] Activar Redis para rate limiting distribuido
