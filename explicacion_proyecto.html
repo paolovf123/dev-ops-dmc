@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Explicación del Proyecto - DataVault (TransExcel)</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #040d1a;
+            --surface: #0a192f;
+            --surface-raised: #112240;
+            --border: #1e2d4a;
+            --border-light: #16253d;
+            --text: #ccd6f6;
+            --muted: #8892b0;
+            --primary: #3b82f6;
+            --green: #22c55e;
+            --blue: #0ea5e9;
+            --orange: #f59e0b;
+            --red: #ef4444;
+            --purple: #a855f7;
+        }
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 2rem 1.5rem;
+            line-height: 1.7;
+        }
+        .container { max-width: 1440px; margin: 0 auto; }
+
+        /* ── HEADER ── */
+        .header {
+            background: linear-gradient(135deg, #0a192f 0%, #112240 50%, #0a192f 100%);
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            padding: 3rem 2rem;
+            text-align: center;
+            margin-bottom: 2.5rem;
+            box-shadow: 0 20px 40px -10px rgba(0,0,0,0.5);
+            position: relative;
+            overflow: hidden;
+        }
+        .header::before {
+            content: '';
+            position: absolute; inset: 0;
+            background: radial-gradient(ellipse at 60% 0%, rgba(59,130,246,0.15) 0%, transparent 60%);
+        }
+        .header h1 { color: var(--primary); font-size: 3.5rem; font-weight: 800; margin: 0.5rem 0; letter-spacing: -2px; position: relative; }
+        .header p  { color: var(--muted); font-size: 1.1rem; margin: 0.5rem 0 1.5rem; position: relative; }
+        .badges { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center; position: relative; }
+        .badge { padding: 0.35rem 0.9rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+        .badge.indigo  { background: #1e3a8a; color: #bfdbfe; }
+        .badge.sky     { background: #0369a1; color: #e0f2fe; }
+        .badge.emerald { background: #065f46; color: #d1fae5; }
+        .badge.amber   { background: #78350f; color: #fef3c7; }
+        .badge.slate   { background: #1e293b; color: #f8fafc; }
+
+        /* ── SECTION ── */
+        .section { background: var(--surface); border-radius: 16px; padding: 2rem; margin-bottom: 2rem; border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .section-title { display: flex; align-items: center; gap: 0.75rem; font-size: 1.5rem; font-weight: 700; margin: 0 0 1.5rem; padding-bottom: 1rem; border-bottom: 2px solid var(--border); color: #e2e8f0; }
+        .section-title .icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0; }
+        .icon.purple { background: #3b0764; color: #d8b4fe; }
+        .icon.green  { background: #064e3b; color: #6ee7b7; }
+        .icon.blue   { background: #0f172a; color: #38bdf8; }
+        .icon.orange { background: #78350f; color: #fcd34d; }
+        .icon.red    { background: #7f1d1d; color: #fca5a5; }
+        .icon.slate  { background: #0f172a; color: #94a3b8; }
+
+        /* ── GRID ── */
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 1rem; }
+        @media(max-width:768px) { .grid-2,.grid-3 { grid-template-columns: 1fr; } }
+
+        /* ── CARD ── */
+        .card { background: var(--surface-raised); border-radius: 12px; padding: 1.25rem; border: 1px solid var(--border); transition: all 0.2s; }
+        .card:hover { border-color: var(--primary); box-shadow: 0 8px 20px rgba(59,130,246,0.1); transform: translateY(-2px); }
+        .card h4 { margin: 0.5rem 0 0.3rem; font-size: 0.95rem; font-weight: 700; color: #f1f5f9; }
+        .card p  { margin: 0; font-size: 0.85rem; color: var(--muted); }
+        .card .card-icon { font-size: 1.6rem; margin-bottom: 0.5rem; }
+
+        /* ── ROLE PILLS ── */
+        .role { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.75rem; font-weight: 700; }
+        .role.admin  { background: #78350f; color: #fef3c7; }
+        .role.editor { background: #14532d; color: #dcfce7; }
+        .role.viewer { background: #1e3a8a; color: #dbeafe; }
+        .role.owner  { background: #831843; color: #fce7f3; }
+        .role.member { background: #334155; color: #f1f5f9; }
+
+        /* ── TABLE ── */
+        table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+        th { background: var(--surface-raised); padding: 0.6rem 0.8rem; text-align: left; font-weight: 700; color: var(--muted); text-transform: uppercase; font-size: 0.72rem; border-bottom: 1px solid var(--border); }
+        td { padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--border-light); }
+        tr:hover td { background: rgba(255,255,255,0.03); }
+        code { background: #1e293b; padding: 0.15rem 0.4rem; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 0.83em; color: #38bdf8; }
+
+        /* ── STACK ROW ── */
+        .stack-row { display: flex; align-items: center; gap: 1rem; padding: 0.6rem 0; border-bottom: 1px solid var(--border-light); font-size: 0.88rem; color: #cbd5e1; }
+        .stack-row:last-child { border-bottom: none; }
+        .stack-label { font-weight: 700; min-width: 160px; color: var(--muted); font-size: 0.78rem; text-transform: uppercase; }
+        .stack-value { flex: 1; }
+
+        /* ── FLOW STEPS (deploy) ── */
+        .flow { display: flex; align-items: stretch; margin: 1.5rem 0; flex-wrap: wrap; }
+        .flow-step { flex: 1; min-width: 130px; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 0; padding: 1rem 0.8rem; text-align: center; position: relative; transition: all 0.2s; }
+        .flow-step:first-child { border-radius: 12px 0 0 12px; }
+        .flow-step:last-child  { border-radius: 0 12px 12px 0; }
+        .flow-step:not(:last-child)::after { content: '→'; position: absolute; right: -14px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 1.2rem; z-index: 1; }
+        .flow-step:hover { background: #1e293b; border-color: var(--primary); }
+        .flow-step i     { font-size: 1.5rem; display: block; margin-bottom: 0.4rem; }
+        .flow-step span  { font-size: 0.75rem; font-weight: 600; display: block; color: #f8fafc; }
+        .flow-step small { font-size: 0.68rem; color: var(--muted); }
+
+        /* ── CHECKLIST ── */
+        .checklist { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+        .checklist li { display: flex; align-items: flex-start; gap: 0.75rem; font-size: 0.9rem; color: #cbd5e1; }
+        .checklist .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 7px; }
+        .dot.done    { background: var(--green); }
+        .dot.pending { background: var(--amber); }
+        .dot.future  { background: #475569; }
+
+        /* ── ENDPOINTS ── */
+        .ep { display: flex; gap: 0.5rem; align-items: baseline; margin: 0.3rem 0; font-size: 0.85rem; }
+        .method { font-size: 0.7rem; font-weight: 800; padding: 0.15rem 0.5rem; border-radius: 4px; flex-shrink: 0; }
+        .method.get    { background: #064e3b; color: #6ee7b7; }
+        .method.post   { background: #1e3a8a; color: #93c5fd; }
+        .method.patch  { background: #78350f; color: #fcd34d; }
+        .method.delete { background: #7f1d1d; color: #fca5a5; }
+
+        /* ── INFO BOX ── */
+        .info-box { border-left: 4px solid var(--primary); background: rgba(59,130,246,0.1); padding: 0.8rem 1rem; border-radius: 0 8px 8px 0; font-size: 0.875rem; margin: 1rem 0; color: #e2e8f0; }
+
+        /* ════════════════════════════════════════════
+           DIAGRAM COMPONENTS — pure HTML/CSS
+           ════════════════════════════════════════════ */
+
+        /* Shared diagram wrapper */
+        .dg { background: var(--surface-raised); border-radius: 14px; overflow: hidden; border: 1px solid var(--border); box-shadow: 0 4px 15px rgba(0,0,0,0.3); margin: 1.5rem 0; }
+
+        /* ── Tag color classes ── */
+        .tg-teal   { background: #0f766e; color: #ccfbf1; }
+        .tg-sky    { background: #0369a1; color: #e0f2fe; }
+        .tg-violet { background: #4338ca; color: #e0e7ff; }
+        .tg-amber  { background: #92400e; color: #fef3c7; }
+        .tg-green  { background: #15803d; color: #dcfce7; }
+        .tg-slate  { background: #334155; color: #f8fafc; }
+
+        /* ── SWIMLANE / SEQUENCE DIAGRAM ── */
+        .sw-head { display: flex; background: #020617; border-bottom: 2px solid var(--border); }
+        .sw-acol { flex: 1; padding: 0.6rem 0.4rem; text-align: center; border-right: 1px solid var(--border); }
+        .sw-acol:last-child { border-right: none; }
+        .sw-badge { display: inline-block; padding: 0.3rem 0.55rem; border-radius: 8px; font-size: 0.72rem; font-weight: 700; line-height: 1.4; }
+        .sw-row { display: flex; align-items: center; gap: 0.45rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border-light); transition: background 0.1s; }
+        .sw-row:last-child { border-bottom: none; }
+        .sw-row:hover { background: var(--surface); }
+        .sw-num { width: 20px; height: 20px; background: var(--primary); color: white; border-radius: 50%; font-size: 0.63rem; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .sw-tag { padding: 0.12rem 0.38rem; border-radius: 4px; font-size: 0.67rem; font-weight: 700; white-space: nowrap; flex-shrink: 0; font-family: 'JetBrains Mono', monospace; }
+        .sw-arr { color: var(--orange); font-size: 0.95rem; flex-shrink: 0; font-weight: 900; }
+        .sw-ret { color: var(--primary); font-size: 0.95rem; flex-shrink: 0; font-weight: 900; }
+        .sw-msg { color: #e2e8f0; font-size: 0.82rem; flex: 1; font-family: 'JetBrains Mono', monospace; }
+        .sw-note { padding: 0.35rem 0.75rem; background: var(--surface); border-bottom: 1px solid var(--border); border-top: 1px solid var(--border); font-size: 0.76rem; color: var(--primary); font-weight: 600; letter-spacing: 0.01em; }
+
+        /* ── ARCHITECTURE DIAGRAM ── */
+        .arch { padding: 1.5rem; display: flex; flex-direction: column; align-items: center; gap: 0.2rem; }
+        .arch-user { background: #1e3a8a; color: white; border-radius: 999px; padding: 0.5rem 1.75rem; font-weight: 700; font-size: 0.85rem; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+        .arch-vc { display: flex; flex-direction: column; align-items: center; gap: 0; }
+        .arch-vc .vl { width: 2px; height: 20px; background: var(--primary); }
+        .arch-vc .lbl { font-size: 0.67rem; color: #bfdbfe; background: #1e3a8a; padding: 0.1rem 0.55rem; border-radius: 4px; font-weight: 700; border: 1px solid var(--primary); }
+        .arch-vc .arr { color: var(--primary); font-size: 0.85rem; line-height: 1; }
+        .arch-zone { width: 100%; border-radius: 12px; overflow: hidden; border: 1px solid; }
+        .arch-zone-name { padding: 0.4rem 1rem; font-size: 0.67rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
+        .arch-zone-inner { padding: 0.75rem; display: flex; justify-content: center; flex-wrap: wrap; gap: 0.75rem; }
+        .arch-tile { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; padding: 0.65rem 1rem; border-radius: 10px; min-width: 110px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); cursor: default; transition: transform 0.15s; }
+        .arch-tile:hover { transform: translateY(-2px); }
+        .arch-tile .at-ic { font-size: 1.25rem; }
+        .arch-tile .at-nm { font-weight: 700; font-size: 0.77rem; }
+        .arch-tile .at-sb { font-size: 0.65rem; opacity: 0.8; color: #f8fafc; }
+        .arch-2col { display: flex; gap: 1rem; width: 100%; }
+        .arch-fork { width: 80%; height: 2px; background: var(--primary); position: relative; margin: 0 auto; }
+        .arch-fork::before { content: '▼'; position: absolute; left: 18%; top: -8px; color: var(--primary); font-size: 0.85rem; }
+        .arch-fork::after  { content: '▼'; position: absolute; right: 18%; top: -8px; color: var(--primary); font-size: 0.85rem; }
+        /* zone themes */
+        .az-edge  { border-color: #7c2d12; }
+        .az-edge  .arch-zone-name  { background: #431407; color: #ffedd5; }
+        .az-edge  .arch-zone-inner { background: #0a192f; }
+        .az-fe    { border-color: #0369a1; }
+        .az-fe    .arch-zone-name  { background: #075985; color: #e0f2fe; }
+        .az-fe    .arch-zone-inner { background: #0f172a; }
+        .az-be    { border-color: #1e3a8a; }
+        .az-be    .arch-zone-name  { background: #1e3a8a; color: #bfdbfe; }
+        .az-be    .arch-zone-inner { background: #0f172a; }
+        .az-data  { border-color: #4c1d95; }
+        .az-data  .arch-zone-name  { background: #4c1d95; color: #ddd6fe; }
+        .az-data  .arch-zone-inner { background: #0f172a; }
+        .az-cicd  { border-color: #334155; }
+        .az-cicd  .arch-zone-name  { background: #1e293b; color: #f8fafc; }
+        .az-cicd  .arch-zone-inner { background: #0f172a; }
+        /* tile colors — brand colors preserved */
+        .at-cf     { background: #d97706; color: #fff; }
+        .at-s3     { background: #0369a1; color: #fff; }
+        .at-alb    { background: #475569; color: #fff; }
+        .at-ecs    { background: #1d4ed8; color: #fff; }
+        .at-lambda { background: #b45309; color: #fff; }
+        .at-rds    { background: #6d28d9; color: #fff; }
+        .at-redis  { background: #b91c1c; color: #fff; }
+        .at-ssm    { background: #64748b; color: #fff; }
+        .at-ecr    { background: #0ea5e9; color: #fff; }
+        .at-gh     { background: #1e293b; color: #fff; }
+
+        /* ── CI/CD PIPELINE ── */
+        .pl-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1rem; }
+        .pl-col  { border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: var(--surface); }
+        .pl-hd   { padding: 0.75rem 1rem; text-align: center; font-size: 0.8rem; font-weight: 800; }
+        .pl-hd.pr   { background: #1e293b; color: white; }
+        .pl-hd.stg  { background: #0f766e; color: white; }
+        .pl-hd.prod { background: #4338ca; color: white; }
+        .pl-hd span { display: block; font-size: 0.65rem; font-weight: 400; opacity: 0.75; margin-top: 2px; }
+        .pl-step { display: flex; align-items: center; gap: 0.55rem; padding: 0.55rem 0.75rem; border-bottom: 1px solid var(--border-light); font-size: 0.8rem; color: #e2e8f0; }
+        .pl-step:last-child { border-bottom: none; }
+        .pl-step .ic { font-size: 0.95rem; flex-shrink: 0; }
+        .pl-conn { text-align: center; padding: 0.12rem; color: var(--muted); font-weight: 900; background: var(--surface); border-bottom: 1px dashed var(--border-light); font-size: 0.9rem; }
+        @media(max-width:768px) { .pl-grid { grid-template-columns: 1fr; } }
+
+        /* ── ENTITY / ER DIAGRAM ── */
+        .er-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1.25rem; }
+        .er-col  { display: flex; flex-direction: column; gap: 0.6rem; }
+        .er-col-title { font-size: 0.67rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; padding: 0.25rem 0.6rem; border-radius: 5px; display: inline-block; }
+        .er-card { border-radius: 10px; overflow: hidden; border: 1px solid var(--border); box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .er-card-hd { padding: 0.45rem 0.8rem; font-weight: 700; font-size: 0.81rem; display: flex; align-items: center; gap: 0.4rem; }
+        .er-card-fields { padding: 0.4rem 0.8rem; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; line-height: 1.9; color: #94a3b8; background: #0a172b; }
+        .er-rels { padding: 0.3rem 0.8rem; background: #0f172a; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 0.3rem; }
+        .er-rel  { display: inline-flex; align-items: center; gap: 0.2rem; font-size: 0.68rem; color: #bfdbfe; font-weight: 600; background: #1e3a8a; padding: 0.1rem 0.4rem; border-radius: 4px; }
+        .er-auth  .er-card-hd   { background: #1e3a8a; color: #bfdbfe; }
+        .er-auth  .er-col-title { background: #1e3a8a; color: #bfdbfe; }
+        .er-data  .er-card-hd   { background: #4c1d95; color: #ddd6fe; }
+        .er-data  .er-col-title { background: #4c1d95; color: #ddd6fe; }
+        .er-perms .er-card-hd   { background: #78350f; color: #fef3c7; }
+        .er-perms .er-col-title { background: #78350f; color: #fef3c7; }
+        @media(max-width:900px) { .er-grid { grid-template-columns: 1fr; } }
+
+        /* ── PERMISSIONS DECISION TREE ── */
+        .pd { display: flex; flex-direction: column; gap: 0; padding: 1.5rem; }
+        .pd-step { display: flex; flex-direction: column; gap: 0.4rem; padding-left: 1.5rem; border-left: 2px solid var(--primary); position: relative; margin-left: 0.75rem; padding-bottom: 0.75rem; }
+        .pd-step::before { content: ''; position: absolute; left: -7px; top: 0.9rem; width: 12px; height: 12px; background: var(--primary); border-radius: 50%; border: 2px solid var(--surface); box-shadow: 0 0 0 2px var(--primary); }
+        .pd-q    { font-weight: 700; font-size: 0.87rem; color: #e2e8f0; }
+        .pd-y    { font-size: 0.82rem; font-weight: 600; background: #064e3b; color: #6ee7b7; padding: 0.28rem 0.75rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.3rem; border: 1px solid #059669; align-self: flex-start; }
+        .pd-n    { font-size: 0.73rem; color: #94a3b8; font-weight: 700; }
+        .pd-end  { margin-left: 0.75rem; padding-left: 1.5rem; }
+        .pd-result { font-size: 0.83rem; font-weight: 700; background: #1e3a8a; color: #bfdbfe; padding: 0.45rem 1rem; border-radius: 8px; border: 1px solid #2563eb; display: inline-block; }
+        .footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--muted);
+            border-top: 1px solid var(--border);
+            margin-top: 3rem;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <!-- ══ HEADER ══ -->
+    <div class="header">
+        <i class="fa-solid fa-database" style="font-size:3rem; color:#38bdf8;"></i>
+        <h1>DataVault</h1>
+        <p>Gestor de datos tabulares dinámicos · Similar a Airtable · Desplegado en AWS</p>
+        <div class="badges">
+            <span class="badge indigo"><i class="fa-brands fa-react"></i> React 19 + Vite</span>
+            <span class="badge sky"><i class="fa-brands fa-python"></i> FastAPI async</span>
+            <span class="badge emerald"><i class="fa-solid fa-database"></i> PostgreSQL 16 JSONB</span>
+            <span class="badge amber"><i class="fa-brands fa-aws"></i> ECS Fargate + CloudFront</span>
+            <span class="badge slate"><i class="fa-brands fa-github"></i> GitHub Actions CI/CD</span>
+            <span class="badge slate"><i class="fa-solid fa-layer-group"></i> Terraform IaC</span>
+        </div>
+    </div>
+
+    <!-- ══ 1. QUÉ ES ══ -->
+    <div class="section">
+        <h2 class="section-title"><span class="icon purple"><i class="fa-solid fa-lightbulb"></i></span> ¿Qué es DataVault?</h2>
+        <p style="font-size:1rem; color:var(--text); margin-top:0;">
+            Plataforma web donde equipos pueden <strong>crear sus propias bases de datos relacionales sin escribir SQL</strong>.
+            Cada tabla define sus columnas en runtime, los datos se guardan en JSONB, y todo cambio queda en un audit log completo.
+            Incluye colaboración en tiempo real, permisos granulares, scripts Python en la nube y deploy automático en AWS.
+        </p>
+        <div class="grid-3">
+            <div class="card" style="border-left:4px solid var(--primary)"><div class="card-icon">🗃️</div><h4>Datos dinámicos</h4><p>Columnas configurables en runtime. Sin ALTER TABLE. Sin redeploy.</p></div>
+            <div class="card" style="border-left:4px solid var(--green)"><div class="card-icon">👥</div><h4>Multi-equipo</h4><p>Workspaces con roles. Permisos por dataset, grupo o usuario.</p></div>
+            <div class="card" style="border-left:4px solid var(--blue)"><div class="card-icon">⚡</div><h4>Tiempo real</h4><p>WebSocket con auth JWT. Cambios visibles al instante en todos los clientes.</p></div>
+            <div class="card" style="border-left:4px solid var(--orange)"><div class="card-icon">🐍</div><h4>Scripts Python</h4><p>Ejecuta pandas / DuckDB / scikit-learn sobre tus datos en AWS Lambda.</p></div>
+            <div class="card" style="border-left:4px solid #a855f7"><div class="card-icon">📋</div><h4>Audit log</h4><p>Historial completo de quién cambió qué, cuándo y desde qué dataset.</p></div>
+            <div class="card" style="border-left:4px solid var(--primary)"><div class="card-icon">☁️</div><h4>Deploy automático</h4><p>Push a <code>develop</code> → staging. Push a <code>main</code> → producción.</p></div>
+        </div>
+    </div>
+
+    <!-- ══ 2. STACK ══ -->
+    <div class="section">
+        <h2 class="section-title"><span class="icon slate"><i class="fa-solid fa-layer-group"></i></span> Stack tecnológico</h2>
+        <div class="stack-row"><span class="stack-label">Frontend</span><span class="stack-value">React 19 + Vite + TypeScript · TanStack Query · Monaco Editor · WebSocket</span></div>
+        <div class="stack-row"><span class="stack-label">Backend</span><span class="stack-value">Python 3.11 · FastAPI async · SQLAlchemy async · Alembic · slowapi</span></div>
+        <div class="stack-row"><span class="stack-label">Base de datos</span><span class="stack-value">PostgreSQL 16 (JSONB + GIN index) · ElastiCache Redis (rate limiting + pub/sub)</span></div>
+        <div class="stack-row"><span class="stack-label">Auth</span><span class="stack-value">JWT (python-jose) · bcrypt/passlib · Roles: admin / editor / viewer</span></div>
+        <div class="stack-row"><span class="stack-label">Cómputo serverless</span><span class="stack-value">AWS Lambda · Python · pandas, numpy, scipy, scikit-learn, DuckDB, openpyxl</span></div>
+        <div class="stack-row"><span class="stack-label">Infra (AWS)</span><span class="stack-value">ECS Fargate · RDS · ECR · S3 · CloudFront · ALB · SSM Parameter Store · IAM OIDC</span></div>
+        <div class="stack-row"><span class="stack-label">IaC</span><span class="stack-value">Terraform ~5.0 · módulo VPC · backend S3 · estado versionado</span></div>
+        <div class="stack-row"><span class="stack-label">CI/CD</span><span class="stack-value">GitHub Actions · OIDC (sin claves estáticas) · 3 jobs: build → staging → prod</span></div>
+        <div class="stack-row"><span class="stack-label">Tests</span><span class="stack-value">pytest-asyncio + httpx · SQLite in-memory · fixtures admin_client</span></div>
+    </div>
+
+    <!-- ══ 3. MODELO DE DATOS ══ -->
+    <div class="section">
+        <h2 class="section-title"><span class="icon green"><i class="fa-solid fa-diagram-project"></i></span> Modelo de datos</h2>
+        <div class="er-grid">
+            <!-- Col 1: Auth / Org -->
+            <div class="er-col er-auth">
+                <span class="er-col-title">Auth / Organización</span>
+                <div class="er-card">
+                    <div class="er-card-hd">👤 users</div>
+                    <div class="er-card-fields">id · uuid PK<br>email · string<br>username · string<br>role · admin|editor|viewer<br>created_at · datetime</div>
+                </div>
+                <div class="er-card">
+                    <div class="er-card-hd">🏢 workspaces</div>
+                    <div class="er-card-fields">id · uuid PK<br>name · string<br>description · text<br>created_at · datetime</div>
+                </div>
+                <div class="er-card">
+                    <div class="er-card-hd">workspace_members</div>
+                    <div class="er-card-fields">workspace_id → FK<br>user_id → FK<br>role · owner|admin|member<br>joined_at · datetime</div>
+                    <div class="er-rels"><span class="er-rel">→ users</span><span class="er-rel">→ workspaces</span></div>
+                </div>
+                <div class="er-card">
+                    <div class="er-card-hd">👥 user_groups</div>
+                    <div class="er-card-fields">id · uuid PK<br>name · string<br>workspace_id → FK</div>
+                </div>
+                <div class="er-card">
+                    <div class="er-card-hd">user_group_members</div>
+                    <div class="er-card-fields">group_id → FK<br>user_id → FK</div>
+                    <div class="er-rels"><span class="er-rel">→ user_groups</span><span class="er-rel">→ users</span></div>
+                </div>
+            </div>
+            <!-- Col 2: Datos -->
+            <div class="er-col er-data">
+                <span class="er-col-title">Datos</span>
+                <div class="er-card">
+                    <div class="er-card-hd">📊 datasets</div>
+                    <div class="er-card-fields">id · uuid PK<br>name · string<br>workspace_id → FK<br>is_computed · boolean<br>deleted_at · datetime</div>
+                </div>
+                <div class="er-card">
+                    <div class="er-card-hd">📋 column_definitions</div>
+                    <div class="er-card-fields">id · uuid PK<br>dataset_id → FK<br>name · string<br>field_key · string<br>data_type · text|number|date…<br>rules · json<br>position · int</div>
+                    <div class="er-rels"><span class="er-rel">→ datasets</span></div>
+                </div>
+                <div class="er-card">
+                    <div class="er-card-hd">📝 records</div>
+                    <div class="er-card-fields">id · uuid PK<br>dataset_id → FK<br>data · <strong>JSONB</strong> ← datos reales<br>deleted_at · datetime</div>
+                    <div class="er-rels"><span class="er-rel">→ datasets</span></div>
+                </div>
+                <div class="er-card">
+                    <div class="er-card-hd">🕒 change_history</div>
+                    <div class="er-card-fields">id · uuid PK<br>record_id → FK<br>user_id → FK<br>field_key · string<br>action · string<br>old_value / new_value<br>changed_at · datetime</div>
+                    <div class="er-rels"><span class="er-rel">→ records</span><span class="er-rel">→ users</span></div>
+                </div>
+            </div>
+            <!-- Col 3: Permisos -->
+            <div class="er-col er-perms">
+                <span class="er-col-title">Permisos</span>
+                <div class="er-card">
+                    <div class="er-card-hd">dataset_permissions</div>
+                    <div class="er-card-fields">dataset_id → FK<br>user_id → FK<br>role · viewer|editor|admin</div>
+                    <div class="er-rels"><span class="er-rel">→ datasets</span><span class="er-rel">→ users</span></div>
+                </div>
+                <div class="er-card">
+                    <div class="er-card-hd">dataset_group_permissions</div>
+                    <div class="er-card-fields">dataset_id → FK<br>group_id → FK<br>role · viewer|editor|admin</div>
+                    <div class="er-rels"><span class="er-rel">→ datasets</span><span class="er-rel">→ user_groups</span></div>
+                </div>
+                <div style="background:rgba(59,130,246,0.1);border:1px solid var(--border);border-radius:10px;padding:1rem;margin-top:0.25rem;">
+                    <div style="font-size:0.77rem;font-weight:700;color:#e2e8f0;margin-bottom:0.5rem;">💡 Decisión clave</div>
+                    <div style="font-size:0.74rem;color:#cbd5e1;line-height:1.8;font-family:'JetBrains Mono',monospace;">
+                        records.data → JSONB<br>
+                        Sin ALTER TABLE al<br>
+                        agregar columnas.<br>
+                        Índice GIN para<br>
+                        búsquedas rápidas.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ 4. AUTH Y PERMISOS ══ -->
+    <div class="section">
+        <h2 class="section-title"><span class="icon orange"><i class="fa-solid fa-shield-halved"></i></span> Auth y modelo de permisos</h2>
+        <div class="grid-2">
+            <div>
+                <h4 style="margin-top:0;">Roles globales</h4>
+                <table>
+                    <tr><th>Rol</th><th>Qué puede hacer</th></tr>
+                    <tr><td><span class="role admin">admin</span></td><td>Todo: usuarios, datasets, audit log</td></tr>
+                    <tr><td><span class="role editor">editor</span></td><td>Crear/editar/borrar registros, importar</td></tr>
+                    <tr><td><span class="role viewer">viewer</span></td><td>Solo lectura</td></tr>
+                </table>
+                <h4 style="margin-top:1.5rem;">Roles en Workspace</h4>
+                <table>
+                    <tr><th>Rol</th><th>Alcance</th></tr>
+                    <tr><td><span class="role owner">owner</span></td><td>Control total del workspace</td></tr>
+                    <tr><td><span class="role admin">admin</span></td><td>Gestiona miembros y datasets</td></tr>
+                    <tr><td><span class="role member">member</span></td><td>Acceso según permisos de dataset</td></tr>
+                </table>
+                <div class="info-box" style="margin-top:1rem;">
+                    <strong>Token JWT</strong> incluye el rol global embebido. Sin sesiones en servidor. WebSocket autentica enviando el token como primer mensaje (no en query string).
+                </div>
+            </div>
+            <div>
+                <h4 style="margin-top:0;">Jerarquía de permisos por dataset</h4>
+                <div class="dg">
+                    <div class="pd">
+                        <div class="pd-step">
+                            <div class="pd-q">🔑 ¿Es admin global?</div>
+                            <div class="pd-y">✅ Sí → Acceso total a todo</div>
+                            <div class="pd-n">No ↓</div>
+                        </div>
+                        <div class="pd-step">
+                            <div class="pd-q">📋 ¿Tiene permiso directo en este dataset?</div>
+                            <div class="pd-y">✅ Sí → Usa ese rol asignado</div>
+                            <div class="pd-n">No ↓</div>
+                        </div>
+                        <div class="pd-step">
+                            <div class="pd-q">👥 ¿Pertenece a un grupo con permiso?</div>
+                            <div class="pd-y">✅ Sí → Mejor rol entre sus grupos</div>
+                            <div class="pd-n">No ↓</div>
+                        </div>
+                        <div class="pd-end">
+                            <div class="pd-result">🌐 Usa su rol global (viewer / editor)</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ 5. FEATURES ══ -->
+    <div class="section">
+        <h2 class="section-title"><span class="icon purple"><i class="fa-solid fa-rocket"></i></span> Features implementadas</h2>
+        <div class="grid-2" style="margin-bottom:1.5rem;">
+            <div>
+                <h4 style="margin-top:0; color:var(--primary);">🗃️ Core — Datasets y Registros</h4>
+                <ul class="checklist">
+                    <li><span class="dot done"></span>Datasets con columnas configurables en runtime</li>
+                    <li><span class="dot done"></span>CRUD de registros inline (edición en celda)</li>
+                    <li><span class="dot done"></span>Soft delete + papelera + restore</li>
+                    <li><span class="dot done"></span>Importar CSV / Excel (multipart)</li>
+                    <li><span class="dot done"></span>Exportar CSV (UTF-8 BOM) y Excel SpreadsheetML</li>
+                    <li><span class="dot done"></span>Joins automáticos entre tablas por <code>field_key</code></li>
+                    <li><span class="dot done"></span>Vista tabla editable, kanban, gráficos</li>
+                    <li><span class="dot done"></span>Drag & drop de columnas</li>
+                    <li><span class="dot done"></span>Pegar TSV desde Excel/Sheets (Ctrl+V)</li>
+                    <li><span class="dot done"></span>Búsqueda full-text con índice GIN</li>
+                </ul>
+            </div>
+            <div>
+                <h4 style="margin-top:0; color:var(--green);">👥 Colaboración y Organización</h4>
+                <ul class="checklist">
+                    <li><span class="dot done"></span>Workspaces con roles owner/admin/member</li>
+                    <li><span class="dot done"></span>WorkspaceSwitcher con avatares en la UI</li>
+                    <li><span class="dot done"></span>Grupos de usuarios con permisos por dataset</li>
+                    <li><span class="dot done"></span>Sincronización en tiempo real vía WebSocket</li>
+                    <li><span class="dot done"></span>Audit log con filtros multi-persona, workspace, dataset</li>
+                    <li><span class="dot done"></span>Rate limiting: 10/min en login, 5/min en registro</li>
+                    <li><span class="dot done"></span>Admin panel: usuarios, grupos, workspaces, audit</li>
+                </ul>
+                <h4 style="margin-top:1.5rem; color:var(--orange);">🐍 Scripts Python (Computed Datasets)</h4>
+                <ul class="checklist">
+                    <li><span class="dot done"></span>Editor Monaco, tema oscuro, 620px</li>
+                    <li><span class="dot done"></span>Sidebar: datasets fuente + chips de columnas</li>
+                    <li><span class="dot done"></span>Botón "Generar plantilla" con columnas reales</li>
+                    <li><span class="dot done"></span>Ejecuta en AWS Lambda — timeout 15 min</li>
+                    <li><span class="dot done"></span>Re-ejecutar reemplaza solo ese computed dataset</li>
+                </ul>
+            </div>
+        </div>
+        <h4 style="color:var(--muted);text-transform:uppercase;font-size:0.78rem;letter-spacing:0.05em;">Migraciones Alembic</h4>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <span class="badge slate">1 · init</span>
+            <span class="badge slate">2 · add_users_and_auth</span>
+            <span class="badge slate">3 · dataset_permissions_and_gin_index</span>
+            <span class="badge slate">4 · groups_and_computed_datasets</span>
+            <span class="badge slate">5 · add_workspaces</span>
+        </div>
+    </div>
+
+    <!-- ══ 6. API ══ -->
+    <div class="section">
+        <h2 class="section-title"><span class="icon blue"><i class="fa-solid fa-plug"></i></span> API principal</h2>
+        <div class="grid-2">
+            <div>
+                <h4 style="margin-top:0;">Auth y Usuarios</h4>
+                <div class="ep"><span class="method post">POST</span><code>/auth/register</code></div>
+                <div class="ep"><span class="method post">POST</span><code>/auth/login</code></div>
+                <div class="ep"><span class="method get">GET</span><code>/auth/me</code></div>
+                <div class="ep"><span class="method get">GET</span><code>/auth/users</code> <small>(admin)</small></div>
+                <div class="ep"><span class="method patch">PATCH</span><code>/auth/users/{id}/role</code></div>
+                <div class="ep"><span class="method get">GET</span><code>/auth/audit?dataset_id=&workspace_id=&user_id=&action=</code></div>
+                <h4>Datasets</h4>
+                <div class="ep"><span class="method get">GET</span><code>/datasets?workspace_id=</code></div>
+                <div class="ep"><span class="method post">POST</span><code>/datasets</code></div>
+                <div class="ep"><span class="method patch">PATCH</span><code>/datasets/{id}</code></div>
+                <div class="ep"><span class="method delete">DELETE</span><code>/datasets/{id}</code></div>
+                <div class="ep"><span class="method post">POST</span><code>/datasets/{id}/compute</code></div>
+                <h4>Columnas</h4>
+                <div class="ep"><span class="method get">GET</span><code>/datasets/{id}/columns</code></div>
+                <div class="ep"><span class="method post">POST</span><code>/datasets/{id}/columns</code></div>
+                <div class="ep"><span class="method patch">PATCH</span><code>/datasets/{id}/columns/{col_id}</code></div>
+                <div class="ep"><span class="method delete">DELETE</span><code>/datasets/{id}/columns/{col_id}</code></div>
+            </div>
+            <div>
+                <h4 style="margin-top:0;">Registros</h4>
+                <div class="ep"><span class="method get">GET</span><code>/datasets/{id}/records</code></div>
+                <div class="ep"><span class="method post">POST</span><code>/datasets/{id}/records</code></div>
+                <div class="ep"><span class="method patch">PATCH</span><code>/datasets/{id}/records/{rec_id}</code></div>
+                <div class="ep"><span class="method delete">DELETE</span><code>/datasets/{id}/records/{rec_id}</code></div>
+                <div class="ep"><span class="method post">POST</span><code>/datasets/{id}/records/{rec_id}/restore</code></div>
+                <div class="ep"><span class="method get">GET</span><code>/datasets/{id}/records/{rec_id}/history</code></div>
+                <div class="ep"><span class="method post">POST</span><code>/datasets/{id}/records/import-excel</code></div>
+                <div class="ep"><span class="method post">POST</span><code>/datasets/{id}/records/bulk-delete</code></div>
+                <h4>Grupos y Workspaces</h4>
+                <div class="ep"><span class="method get">GET</span><code>/groups?workspace_id=</code></div>
+                <div class="ep"><span class="method post">POST</span><code>/groups</code></div>
+                <div class="ep"><span class="method post">POST</span><code>/groups/{id}/members</code></div>
+                <div class="ep"><span class="method get">GET</span><code>/workspaces</code></div>
+                <div class="ep"><span class="method post">POST</span><code>/workspaces</code></div>
+                <div class="ep"><span class="method get">GET</span><code>/workspaces/{id}/members</code></div>
+                <div class="ep"><span class="method post">POST</span><code>/workspaces/{id}/members</code></div>
+                <div class="ep"><span class="method patch">PATCH</span><code>/workspaces/{id}/members/{uid}</code></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ 7. FLUJO USUARIO ══ -->
+    <div class="section">
+        <h2 class="section-title"><span class="icon green"><i class="fa-solid fa-user-check"></i></span> Flujo de usuario típico</h2>
+        <div class="dg">
+            <div class="sw-head">
+                <div class="sw-acol"><span class="sw-badge tg-teal">👤 Usuario</span></div>
+                <div class="sw-acol"><span class="sw-badge tg-sky">🌐 React</span></div>
+                <div class="sw-acol"><span class="sw-badge tg-violet">⚙️ FastAPI</span></div>
+                <div class="sw-acol"><span class="sw-badge tg-amber">🗄️ PostgreSQL</span></div>
+                <div class="sw-acol"><span class="sw-badge tg-green">⚡ WebSocket</span></div>
+            </div>
+            <div class="sw-note">🔐 Autenticación</div>
+            <div class="sw-row"><span class="sw-num">1</span><span class="sw-tag tg-teal">U</span><span class="sw-arr">→</span><span class="sw-tag tg-sky">RE</span><span class="sw-msg">Login (email + password)</span></div>
+            <div class="sw-row"><span class="sw-num">2</span><span class="sw-tag tg-sky">RE</span><span class="sw-arr">→</span><span class="sw-tag tg-violet">BE</span><span class="sw-msg">POST /auth/login</span></div>
+            <div class="sw-row"><span class="sw-num">3</span><span class="sw-tag tg-violet">BE</span><span class="sw-arr">→</span><span class="sw-tag tg-amber">DB</span><span class="sw-msg">Verificar credenciales bcrypt(password)</span></div>
+            <div class="sw-row"><span class="sw-num">4</span><span class="sw-tag tg-violet">BE</span><span class="sw-ret">←</span><span class="sw-tag tg-sky">RE</span><span class="sw-msg">JWT token → localStorage</span></div>
+            <div class="sw-note">🏢 Selección de workspace</div>
+            <div class="sw-row"><span class="sw-num">5</span><span class="sw-tag tg-sky">RE</span><span class="sw-arr">→</span><span class="sw-tag tg-violet">BE</span><span class="sw-msg">GET /workspaces</span></div>
+            <div class="sw-row"><span class="sw-num">6</span><span class="sw-tag tg-violet">BE</span><span class="sw-ret">←</span><span class="sw-tag tg-sky">RE</span><span class="sw-msg">Lista de workspaces con roles del usuario</span></div>
+            <div class="sw-note">📊 Apertura del dataset</div>
+            <div class="sw-row"><span class="sw-num">7</span><span class="sw-tag tg-sky">RE</span><span class="sw-arr">→</span><span class="sw-tag tg-violet">BE</span><span class="sw-msg">GET /datasets/{id}/records</span></div>
+            <div class="sw-row"><span class="sw-num">8</span><span class="sw-tag tg-violet">BE</span><span class="sw-arr">→</span><span class="sw-tag tg-amber">DB</span><span class="sw-msg">SELECT JSONB con índice GIN</span></div>
+            <div class="sw-row"><span class="sw-num">9</span><span class="sw-tag tg-violet">BE</span><span class="sw-ret">←</span><span class="sw-tag tg-sky">RE</span><span class="sw-msg">JSON paginado de registros</span></div>
+            <div class="sw-row"><span class="sw-num">10</span><span class="sw-tag tg-sky">RE</span><span class="sw-arr">→</span><span class="sw-tag tg-green">WS</span><span class="sw-msg">Conectar WebSocket — primer mensaje = JWT token</span></div>
+            <div class="sw-note">✏️ Edición en tiempo real</div>
+            <div class="sw-row"><span class="sw-num">11</span><span class="sw-tag tg-sky">RE</span><span class="sw-arr">→</span><span class="sw-tag tg-violet">BE</span><span class="sw-msg">PATCH /datasets/{id}/records/{rec_id}</span></div>
+            <div class="sw-row"><span class="sw-num">12</span><span class="sw-tag tg-violet">BE</span><span class="sw-arr">→</span><span class="sw-tag tg-amber">DB</span><span class="sw-msg">UPDATE records.data JSONB + INSERT change_history</span></div>
+            <div class="sw-row"><span class="sw-num">13</span><span class="sw-tag tg-violet">BE</span><span class="sw-arr">→</span><span class="sw-tag tg-green">WS</span><span class="sw-msg">Broadcast cambio → actualiza otros clientes</span></div>
+        </div>
+    </div>
+
+    <!-- ══ 8. SCRIPTS PYTHON ══ -->
+    <div class="section">
+        <h2 class="section-title"><span class="icon orange"><i class="fa-brands fa-python"></i></span> Flujo de Scripts Python (Computed Datasets)</h2>
+        <div class="dg">
+            <div class="sw-head">
+                <div class="sw-acol"><span class="sw-badge tg-teal">👤 Usuario</span></div>
+                <div class="sw-acol"><span class="sw-badge tg-sky">📝 Monaco</span></div>
+                <div class="sw-acol"><span class="sw-badge tg-violet">⚙️ FastAPI</span></div>
+                <div class="sw-acol"><span class="sw-badge tg-amber">🗄️ PostgreSQL</span></div>
+                <div class="sw-acol"><span class="sw-badge tg-green">λ Lambda</span></div>
+            </div>
+            <div class="sw-note">📝 Preparación</div>
+            <div class="sw-row"><span class="sw-num">1</span><span class="sw-tag tg-teal">U</span><span class="sw-arr">→</span><span class="sw-tag tg-sky">ME</span><span class="sw-msg">Escribe código Python en el editor</span></div>
+            <div class="sw-row"><span class="sw-num">2</span><span class="sw-tag tg-teal">U</span><span class="sw-arr">→</span><span class="sw-tag tg-sky">ME</span><span class="sw-msg">Selecciona datasets fuente + Click "Ejecutar"</span></div>
+            <div class="sw-note">🚀 Ejecución</div>
+            <div class="sw-row"><span class="sw-num">3</span><span class="sw-tag tg-sky">ME</span><span class="sw-arr">→</span><span class="sw-tag tg-violet">BE</span><span class="sw-msg">POST /datasets/{id}/compute  { code, source_ids }</span></div>
+            <div class="sw-row"><span class="sw-num">4</span><span class="sw-tag tg-violet">BE</span><span class="sw-arr">→</span><span class="sw-tag tg-amber">DB</span><span class="sw-msg">SELECT records de datasets fuente</span></div>
+            <div class="sw-row"><span class="sw-num">5</span><span class="sw-tag tg-violet">BE</span><span class="sw-arr">→</span><span class="sw-tag tg-green">L</span><span class="sw-msg">Invoke Lambda (code + DataFrames como JSON)</span></div>
+            <div class="sw-note">⚡ Procesamiento en Lambda — timeout 15 min — pandas · DuckDB · scikit-learn</div>
+            <div class="sw-row"><span class="sw-num">6</span><span class="sw-tag tg-green">L</span><span class="sw-arr">→</span><span class="sw-tag tg-green">L</span><span class="sw-msg">Ejecuta el script Python del usuario</span></div>
+            <div class="sw-row"><span class="sw-num">7</span><span class="sw-tag tg-green">L</span><span class="sw-ret">←</span><span class="sw-tag tg-violet">BE</span><span class="sw-msg">DataFrame resultado (JSON)</span></div>
+            <div class="sw-note">💾 Persistencia</div>
+            <div class="sw-row"><span class="sw-num">8</span><span class="sw-tag tg-violet">BE</span><span class="sw-arr">→</span><span class="sw-tag tg-amber">DB</span><span class="sw-msg">Reemplaza registros del computed dataset</span></div>
+            <div class="sw-row"><span class="sw-num">9</span><span class="sw-tag tg-violet">BE</span><span class="sw-ret">←</span><span class="sw-tag tg-sky">ME</span><span class="sw-msg">{ rows_written: N } — Preview del resultado</span></div>
+        </div>
+        <div class="info-box">
+            <strong>DuckDB en scripts:</strong> permite hacer JOINs entre datasets con SQL estándar. La columna interna <code>__id__</code> es el UUID del registro para usarlo en relaciones entre tablas.
+        </div>
+    </div>
+
+    <!-- ══ 9. INFRA AWS ══ -->
+    <div class="section">
+        <h2 class="section-title"><span class="icon red"><i class="fa-brands fa-aws"></i></span> Infraestructura AWS (Terraform)</h2>
+        <div class="dg">
+            <div class="arch">
+                <!-- User -->
+                <div class="arch-user">👤 Usuario</div>
+                <!-- Connector -->
+                <div class="arch-vc"><div class="vl"></div><div class="lbl">HTTPS / WSS</div><div class="vl"></div><div class="arr">▼</div></div>
+                <!-- CDN -->
+                <div class="arch-zone az-edge">
+                    <div class="arch-zone-name">🌐 Edge / CDN</div>
+                    <div class="arch-zone-inner">
+                        <div class="arch-tile at-cf"><div class="at-ic">🌐</div><div class="at-nm">CloudFront</div><div class="at-sb">CDN global</div></div>
+                    </div>
+                </div>
+                <!-- Fork -->
+                <div class="arch-fork"></div>
+                <!-- Two zones side by side -->
+                <div class="arch-2col">
+                    <!-- Frontend -->
+                    <div class="arch-zone az-fe" style="flex:1;">
+                        <div class="arch-zone-name">📦 Frontend estático</div>
+                        <div class="arch-zone-inner">
+                            <div class="arch-tile at-s3"><div class="at-ic">🪣</div><div class="at-nm">S3 Bucket</div><div class="at-sb">React build</div></div>
+                        </div>
+                    </div>
+                    <!-- Backend + Data -->
+                    <div style="display:flex;flex-direction:column;gap:0.5rem;flex:3;">
+                        <div class="arch-zone az-be">
+                            <div class="arch-zone-name">⚙️ Backend</div>
+                            <div class="arch-zone-inner">
+                                <div class="arch-tile at-alb"><div class="at-ic">⚖️</div><div class="at-nm">ALB</div><div class="at-sb">Load Balancer</div></div>
+                                <div class="arch-tile at-ecs"><div class="at-ic">🐳</div><div class="at-nm">ECS Fargate</div><div class="at-sb">FastAPI</div></div>
+                                <div class="arch-tile at-lambda"><div class="at-ic">λ</div><div class="at-nm">Lambda</div><div class="at-sb">pandas · DuckDB</div></div>
+                            </div>
+                        </div>
+                        <div class="arch-zone az-data">
+                            <div class="arch-zone-name">🗄️ Datos &amp; Config</div>
+                            <div class="arch-zone-inner">
+                                <div class="arch-tile at-rds"><div class="at-ic">🐘</div><div class="at-nm">RDS PostgreSQL</div><div class="at-sb">JSONB + GIN</div></div>
+                                <div class="arch-tile at-redis"><div class="at-ic">⚡</div><div class="at-nm">ElastiCache Redis</div><div class="at-sb">Rate limiting</div></div>
+                                <div class="arch-tile at-ssm"><div class="at-ic">🔐</div><div class="at-nm">SSM Params</div><div class="at-sb">Secrets seguros</div></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- CI/CD connector -->
+                <div class="arch-vc"><div class="vl"></div><div class="lbl">docker push + s3 sync</div><div class="vl"></div><div class="arr">▼</div></div>
+                <!-- CI/CD zone -->
+                <div class="arch-zone az-cicd">
+                    <div class="arch-zone-name">🔄 CI/CD — GitHub Actions OIDC</div>
+                    <div class="arch-zone-inner">
+                        <div class="arch-tile at-gh"><div class="at-ic">🐙</div><div class="at-nm">GitHub Actions</div><div class="at-sb">OIDC auth</div></div>
+                        <div class="arch-tile at-ecr"><div class="at-ic">📦</div><div class="at-nm">Amazon ECR</div><div class="at-sb">Imagen Docker</div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="grid-3">
+            <div class="card"><div class="card-icon">🌐</div><h4>CloudFront</h4><p>CDN global. Proxy API al ALB, estático a S3. Invalida caché en cada deploy.</p></div>
+            <div class="card"><div class="card-icon">📦</div><h4>ECS Fargate</h4><p>Serverless. Sin instancias EC2. Escala automáticamente con la demanda.</p></div>
+            <div class="card"><div class="card-icon">🔐</div><h4>IAM OIDC</h4><p>GitHub Actions asume rol IAM sin claves estáticas. <code>sts:AssumeRoleWithWebIdentity</code>.</p></div>
+        </div>
+    </div>
+
+    <!-- ══ 10. CI/CD ══ -->
+    <div class="section">
+        <h2 class="section-title"><span class="icon slate"><i class="fa-brands fa-github"></i></span> Pipeline CI/CD (GitHub Actions)</h2>
+        <div class="pl-grid">
+            <!-- PR -->
+            <div class="pl-col">
+                <div class="pl-hd pr">🔍 Pull Request → main<span>Solo validación, sin deploy</span></div>
+                <div class="pl-body">
+                    <div class="pl-step"><span class="ic">📥</span>Checkout del repo</div>
+                    <div class="pl-conn">↓</div>
+                    <div class="pl-step"><span class="ic">🧪</span>pytest + flake8</div>
+                    <div class="pl-conn">↓</div>
+                    <div class="pl-step"><span class="ic">✅</span>Tests OK — bloquea merge si fallan</div>
+                </div>
+            </div>
+            <!-- Staging -->
+            <div class="pl-col">
+                <div class="pl-hd stg">🚀 Push → develop<span>Deploy Staging automático</span></div>
+                <div class="pl-body">
+                    <div class="pl-step"><span class="ic">✅</span>Tests pass</div>
+                    <div class="pl-conn">↓</div>
+                    <div class="pl-step"><span class="ic">🐳</span>Docker build + push ECR staging</div>
+                    <div class="pl-conn">↓</div>
+                    <div class="pl-step"><span class="ic">📦</span>npm build + S3 sync + CF invalidate</div>
+                    <div class="pl-conn">↓</div>
+                    <div class="pl-step"><span class="ic">🗄️</span>Alembic upgrade head (ECS run-task)</div>
+                    <div class="pl-conn">↓</div>
+                    <div class="pl-step"><span class="ic">🔄</span>ECS update-service --force-new-deployment</div>
+                </div>
+            </div>
+            <!-- Prod -->
+            <div class="pl-col">
+                <div class="pl-hd prod">🏭 Push → main<span>Deploy Producción</span></div>
+                <div class="pl-body">
+                    <div class="pl-step"><span class="ic">✅</span>Tests pass</div>
+                    <div class="pl-conn">↓</div>
+                    <div class="pl-step"><span class="ic">🐳</span>Docker build + push ECR prod</div>
+                    <div class="pl-conn">↓</div>
+                    <div class="pl-step"><span class="ic">📦</span>S3 sync prod + CF invalidate</div>
+                    <div class="pl-conn">↓</div>
+                    <div class="pl-step"><span class="ic">🗄️</span>Alembic migrate producción</div>
+                    <div class="pl-conn">↓</div>
+                    <div class="pl-step"><span class="ic">🔄</span>ECS update-service producción</div>
+                </div>
+            </div>
+        </div>
+        <div class="info-box" style="margin-top:1.5rem;">
+            <strong>Auth OIDC:</strong> No hay claves AWS en ningún secreto. GitHub asume el rol IAM con <code>id-token: write</code>. La migración corre como ECS task independiente antes del deploy — si falla, el deploy no ocurre.
+        </div>
+        <h4>Pasos para el primer deploy</h4>
+        <div class="flow">
+            <div class="flow-step"><i class="fa-solid fa-bucket" style="color:var(--amber)"></i><span>bootstrap.sh</span><small>Bucket S3 de estado</small></div>
+            <div class="flow-step"><i class="fa-solid fa-layer-group" style="color:var(--primary)"></i><span>terraform apply</span><small>Toda la infra</small></div>
+            <div class="flow-step"><i class="fa-brands fa-github" style="color:#3d3d3d"></i><span>Secrets/Vars</span><small>AWS_ROLE_ARN + VITE_API_URL</small></div>
+            <div class="flow-step"><i class="fa-solid fa-code-branch" style="color:var(--green)"></i><span>git push develop</span><small>Pipeline automático</small></div>
+            <div class="flow-step"><i class="fa-solid fa-check-circle" style="color:var(--green)"></i><span>App en AWS</span><small>CloudFront URL lista</small></div>
+        </div>
+    </div>
+
+    <!-- ══ 11. RUTAS ══ -->
+    <div class="section">
+        <h2 class="section-title"><span class="icon blue"><i class="fa-brands fa-react"></i></span> Rutas del frontend</h2>
+        <div class="grid-2">
+            <table>
+                <tr><th>Ruta</th><th>Página</th></tr>
+                <tr><td><code>/</code></td><td>DatasetList</td></tr>
+                <tr><td><code>/create</code></td><td>CreateDataset</td></tr>
+                <tr><td><code>/datasets/:id</code></td><td>DatasetView — tabla/kanban/gráficos</td></tr>
+                <tr><td><code>/datasets/:id/new</code></td><td>RecordForm</td></tr>
+                <tr><td><code>/scripts</code></td><td>ScriptsHub</td></tr>
+                <tr><td><code>/computed/new</code></td><td>ComputedDatasetEditor nuevo</td></tr>
+                <tr><td><code>/datasets/:id/computed</code></td><td>ComputedDatasetEditor editar</td></tr>
+            </table>
+            <table>
+                <tr><th>Ruta</th><th>Página</th></tr>
+                <tr><td><code>/ws/:workspaceId</code></td><td>WorkspaceView</td></tr>
+                <tr><td><code>/admin/users</code></td><td>AdminUsers</td></tr>
+                <tr><td><code>/admin/audit</code></td><td>AdminAudit</td></tr>
+                <tr><td><code>/admin/groups</code></td><td>AdminGroups</td></tr>
+                <tr><td><code>/admin/workspaces</code></td><td>AdminWorkspaces</td></tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- ══ 12. PENDIENTES ══ -->
+    <div class="section">
+        <h2 class="section-title"><span class="icon orange"><i class="fa-solid fa-road"></i></span> Pendientes y próximos pasos</h2>
+        <div class="grid-2">
+            <div>
+                <h4 style="margin-top:0;">Infra — antes de producción real</h4>
+                <ul class="checklist">
+                    <li><span class="dot pending"></span>NAT Gateway + subnets privadas (<code>enable_nat_gateway = true</code>)</li>
+                    <li><span class="dot pending"></span>Deploy Lambda executor — agregar <code>LAMBDA_EXECUTOR_ARN</code> a SSM</li>
+                    <li><span class="dot pending"></span>Habilitar ElastiCache Redis y conectar <code>REDIS_URL</code></li>
+                    <li><span class="dot pending"></span>Dominio custom + certificado ACM + Route53</li>
+                    <li><span class="dot pending"></span>Snapshots automáticos de RDS</li>
+                </ul>
+            </div>
+            <div>
+                <h4 style="margin-top:0;">Features — posibles mejoras</h4>
+                <ul class="checklist">
+                    <li><span class="dot future"></span>Notificaciones en tiempo real (WebSocket ya existe)</li>
+                    <li><span class="dot future"></span>Comentarios por registro</li>
+                    <li><span class="dot future"></span>Vistas guardadas (filtros + sort nombrados)</li>
+                    <li><span class="dot future"></span>Webhooks al crear/editar registros</li>
+                    <li><span class="dot future"></span>Formulario público de entrada de datos</li>
+                    <li><span class="dot future"></span>Dashboard de métricas en admin</li>
+                </ul>
+            </div>
+        </div>
+        <div style="display:flex;gap:1rem;margin-top:0.75rem;">
+            <div style="display:flex;align-items:center;gap:0.4rem;font-size:0.8rem;"><span class="dot done" style="margin:0;"></span> Implementado</div>
+            <div style="display:flex;align-items:center;gap:0.4rem;font-size:0.8rem;"><span class="dot pending" style="margin:0;"></span> En progreso</div>
+            <div style="display:flex;align-items:center;gap:0.4rem;font-size:0.8rem;"><span class="dot future" style="margin:0;"></span> Futuro</div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <i class="fa-solid fa-layer-group"></i> DataVault · DMC Dev-Ops · Mayo 2026
+    </div>
+
+</div>
+</body>
+</html>
