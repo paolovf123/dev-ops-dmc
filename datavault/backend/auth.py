@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from database import get_db
-from models import User, DatasetPermission, DatasetGroupPermission, UserGroupMember, WorkspaceMember
+from models import User, DatasetPermission, DatasetGroupPermission, UserGroupMember, WorkspaceMember, Dataset
 
 SECRET_KEY = os.getenv("SECRET_KEY", "datavault-secret-change-in-production-xyz-123")
 ALGORITHM = "HS256"
@@ -127,6 +127,14 @@ async def effective_role(user: User, dataset_id: uuid.UUID | None, db: AsyncSess
     if group_perms:
         best = max(group_perms, key=lambda p: ROLE_RANK.get(p.role, 0))
         return best.role
+
+    # Check workspace membership via dataset's workspace_id
+    ds_result = await db.execute(select(Dataset).where(Dataset.id == dataset_id))
+    ds = ds_result.scalar_one_or_none()
+    if ds and ds.workspace_id:
+        ws_role = await effective_workspace_role(user, ds.workspace_id, db)
+        if ws_role:
+            return WS_ROLE_TO_DS_ROLE.get(ws_role, "viewer")
 
     return user.role
 
