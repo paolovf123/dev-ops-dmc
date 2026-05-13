@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient, useQueries } from "@tanstack/react-query";
 import { useAuth } from "../auth/AuthContext";
+import { useWorkspace } from "../workspace/WorkspaceContext";
 import { useRealtimeSync } from "../utils/useRealtimeSync";
 import {
   getDatasets, getColumns, createColumn, updateColumn, deleteColumn,
@@ -361,6 +362,10 @@ export default function DatasetView() {
 
   const confirm = useConfirm();
   const { user, isAdmin, isEditor, logout } = useAuth();
+  const { current: currentWs } = useWorkspace();
+  const wsRole = currentWs?.my_role;
+  const effectiveIsEditor = isEditor || ["member", "admin_ws", "owner"].includes(wsRole ?? "");
+  const effectiveIsAdmin  = isAdmin  || wsRole === "owner";
   const { connected: wsConnected } = useRealtimeSync(datasetId);
   const panelBadge = joinedCols.length + formulaCols.length;
 
@@ -577,7 +582,7 @@ export default function DatasetView() {
               )}
 
               {/* Bulk delete — editor+ only */}
-              {selectedIds.size > 0 && isEditor && (
+              {selectedIds.size > 0 && effectiveIsEditor && (
                 <button className="btn btn-danger-ghost"
                   onClick={async () => {
                     const ok = await confirm({
@@ -601,7 +606,7 @@ export default function DatasetView() {
                   if (f) handleCsvFile(f);
                   e.target.value = "";
                 }} />
-              {isEditor && (
+              {effectiveIsEditor && (
                 <button className="btn btn-secondary"
                   onClick={() => csvInputRef.current?.click()}
                   disabled={csvImporting || columns.length === 0}
@@ -646,7 +651,7 @@ export default function DatasetView() {
               <div className="toolbar-sep" />
 
               {/* Admin-only: new table + new column */}
-              {isAdmin && (
+              {effectiveIsAdmin && (
                 <button className="btn btn-secondary"
                   onClick={() => setShowLinkModal(true)}
                   disabled={!currentDataset}
@@ -655,12 +660,12 @@ export default function DatasetView() {
                   ⇢ Vincular tabla
                 </button>
               )}
-              {isAdmin && (
+              {effectiveIsAdmin && (
                 <button className="btn btn-secondary" onClick={() => setShowAddCol(true)}>
                   <span style={{ fontSize: 16, lineHeight: 1 }}>＋</span> Columna
                 </button>
               )}
-              {isEditor && (
+              {effectiveIsEditor && (
                 <button className="btn btn-primary"
                   onClick={() => navigate(`/datasets/${datasetId}/new`)}
                   disabled={columns.length === 0}>
@@ -733,10 +738,10 @@ export default function DatasetView() {
               onCellChange={handleCellChange}
               onAddRow={() => addRowMut.mutate()}
               onDeleteRow={(recordId) => deleteMut.mutate(recordId)}
-              onDeleteColumn={isAdmin ? (colId) => delColMut.mutate(colId) : undefined}
-              onEditColumn={isAdmin ? setEditingColumn : undefined}
+              onDeleteColumn={effectiveIsAdmin ? (colId) => delColMut.mutate(colId) : undefined}
+              onEditColumn={effectiveIsAdmin ? setEditingColumn : undefined}
               columnOrder={colOrder}
-              onReorderAny={isAdmin ? (fromId, toId) => {
+              onReorderAny={effectiveIsAdmin ? (fromId, toId) => {
                 setColOrder((prev) => {
                   const arr = [...prev];
                   const from = arr.indexOf(fromId);
