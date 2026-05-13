@@ -43,12 +43,13 @@ async def test_delete_dataset(admin_client):
 
 
 @pytest.mark.asyncio
-async def test_viewer_cannot_create_dataset(client):
-    # Register viewer
-    await client.post("/auth/register", json={"email": "a@t.com", "username": "a", "password": "p"})
-    await client.post("/auth/register", json={"email": "v@t.com", "username": "v", "password": "p"})
-    login = await client.post("/auth/login", json={"email": "v@t.com", "password": "p"})
+async def test_viewer_cannot_create_dataset(admin_client):
+    # Register viewer (inactive by default, admin must activate)
+    reg = await admin_client.post("/auth/register", json={"email": "v@t.com", "username": "v", "password": "password123"})
+    viewer_id = reg.json()["user"]["id"]
+    await admin_client.patch(f"/auth/users/{viewer_id}/activate")
+    login = await admin_client.post("/auth/login", json={"email": "v@t.com", "password": "password123"})
     token = login.json()["access_token"]
-    client.headers["Authorization"] = f"Bearer {token}"
-    res = await client.post("/datasets", json={"name": "Forbidden"})
+    admin_client.headers["Authorization"] = f"Bearer {token}"
+    res = await admin_client.post("/datasets", json={"name": "Forbidden"})
     assert res.status_code == 403
