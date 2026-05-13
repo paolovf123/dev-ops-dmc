@@ -18,10 +18,12 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError]       = useState("");
   const [loading, setLoading]   = useState(false);
+  const [pending, setPending]   = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setPending(false);
     setLoading(true);
     try {
       const url = mode === "login" ? "/auth/login" : "/auth/register";
@@ -30,6 +32,12 @@ export default function Login() {
         : { email, username, password };
 
       const { data } = await api.post<{ access_token: string; user: AuthUser }>(url, body);
+
+      if (!data.user.is_active) {
+        setPending(true);
+        return;
+      }
+
       login(data.access_token, data.user);
       navigate("/");
     } catch (err: unknown) {
@@ -107,8 +115,23 @@ export default function Login() {
             </div>
           )}
 
+          {pending && (
+            <div style={{
+              background: "#F0FDF4", border: "1.5px solid #86EFAC", borderRadius: 10,
+              padding: "12px 14px", display: "flex", gap: 10, alignItems: "flex-start",
+            }}>
+              <span style={{ fontSize: 18, lineHeight: 1 }}>✓</span>
+              <div>
+                <p style={{ margin: 0, fontWeight: 700, fontSize: 13, color: "#15803D" }}>Cuenta creada</p>
+                <p style={{ margin: "2px 0 0", fontSize: 12, color: "#166534" }}>
+                  Un administrador debe aprobarla antes de que puedas iniciar sesión.
+                </p>
+              </div>
+            </div>
+          )}
+
           <button type="submit" className="btn btn-primary" style={{ width: "100%", height: 40, fontSize: 14 }}
-            disabled={loading}>
+            disabled={loading || pending}>
             {loading
               ? (mode === "login" ? "Iniciando sesión…" : "Creando cuenta…")
               : (mode === "login" ? "Iniciar sesión" : "Crear cuenta")}

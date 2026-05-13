@@ -1,5 +1,8 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { getDatasets, getColumns } from "../api/datasets";
 import type { ColumnDefinition } from "../types";
+import { useWorkspace } from "../workspace/WorkspaceContext";
 
 interface Props {
   column: ColumnDefinition;
@@ -8,19 +11,45 @@ interface Props {
 }
 
 const TYPE_OPTIONS: { value: ColumnDefinition["data_type"]; label: string; icon: string; color: string }[] = [
-  { value: "text",   label: "Texto",  icon: "Aa", color: "#64748B" },
-  { value: "number", label: "Número", icon: "#",  color: "#2563EB" },
-  { value: "date",   label: "Fecha",  icon: "▦",  color: "#7C3AED" },
-  { value: "enum",   label: "Lista",  icon: "≡",  color: "#D97706" },
+  { value: "text",     label: "Texto",    icon: "Aa", color: "#64748B" },
+  { value: "number",   label: "Número",   icon: "#",  color: "#2563EB" },
+  { value: "date",     label: "Fecha",    icon: "▦",  color: "#7C3AED" },
+  { value: "enum",     label: "Lista",    icon: "≡",  color: "#D97706" },
+  { value: "relation", label: "Relación", icon: "⇢",  color: "#DB2777" },
 ];
 
 export default function EditColumnModal({ column, onSave, onClose }: Props) {
-  const [name, setName]         = useState(column.name);
-  const [dataType, setDataType] = useState(column.data_type);
-  const [required, setRequired] = useState(!!column.rules.required);
-  const [options, setOptions]   = useState((column.rules.options ?? []).join(", "));
-  const [min, setMin]           = useState(column.rules.min !== undefined ? String(column.rules.min) : "");
-  const [max, setMax]           = useState(column.rules.max !== undefined ? String(column.rules.max) : "");
+  const [name, setName]                       = useState(column.name);
+  const [dataType, setDataType]               = useState(column.data_type);
+  const [required, setRequired]               = useState(!!column.rules.required);
+  const [options, setOptions]                 = useState((column.rules.options ?? []).join(", "));
+  const [min, setMin]                         = useState(column.rules.min !== undefined ? String(column.rules.min) : "");
+  const [max, setMax]                         = useState(column.rules.max !== undefined ? String(column.rules.max) : "");
+  const [relatedDatasetId, setRelatedDatasetId] = useState(column.rules.related_dataset_id ?? "");
+  const [displayField, setDisplayField]         = useState(column.rules.display_field ?? "");
+
+  const { current: workspace } = useWorkspace();
+  const wsId = workspace?.id;
+
+  const { data: datasets = [] } = useQuery({
+    queryKey: ["datasets", wsId],
+    queryFn: () => getDatasets(wsId ? { workspace_id: wsId } : undefined),
+    enabled: dataType === "relation",
+  });
+
+  const { data: relatedColumns = [] } = useQuery({
+    queryKey: ["columns", relatedDatasetId],
+    queryFn: () => getColumns(relatedDatasetId),
+    enabled: dataType === "relation" && !!relatedDatasetId,
+  });
+
+  const handleTypeChange = (t: ColumnDefinition["data_type"]) => {
+    setDataType(t);
+    if (t !== "relation") {
+      setRelatedDatasetId("");
+      setDisplayField("");
+    }
+  };
 
   const handleSave = () => {
     const rules: ColumnDefinition["rules"] = {};
@@ -31,10 +60,15 @@ export default function EditColumnModal({ column, onSave, onClose }: Props) {
       if (min !== "") rules.min = Number(min);
       if (max !== "") rules.max = Number(max);
     }
+    if (dataType === "relation") {
+      rules.related_dataset_id = relatedDatasetId;
+      if (displayField) rules.display_field = displayField;
+    }
     onSave({ name, data_type: dataType, rules });
   };
 
-  const selectedType = TYPE_OPTIONS.find((t) => t.value === dataType)!;
+  const selectedType = TYPE_OPTIONS.find((t) => t.value === dataType) ?? TYPE_OPTIONS[0];
+  const saveDisabled = !name.trim() || (dataType === "relation" && !relatedDatasetId);
 
   return (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -86,7 +120,7 @@ export default function EditColumnModal({ column, onSave, onClose }: Props) {
                 <button key={t.value} type="button"
                   className={`type-option type-option--compact${dataType === t.value ? " active" : ""}`}
                   style={dataType === t.value ? { borderColor: t.color, background: t.color + "10" } : {}}
-                  onClick={() => setDataType(t.value)}>
+                  onClick={() => handleTypeChange(t.value)}>
                   <span className="type-option-icon" style={{ color: dataType === t.value ? t.color : "var(--color-text-muted)" }}>
                     {t.icon}
                   </span>
@@ -95,6 +129,38 @@ export default function EditColumnModal({ column, onSave, onClose }: Props) {
               ))}
             </div>
           </div>
+
+          {/* Relation config */}
+          {dataType === "relation" && (
+            <>
+              <div className="form-group">
+                <label className="form-label">Dataset destino</label>
+                <select value={relatedDatasetId} onChange={(e) => { setRelatedDatasetId(e.target.value); setDisplayField(""); }}>
+                  <option value="">— Seleccionar dataset —</option>
+                  {datasets.map((ds) => (
+                    <option key={ds.id} value={ds.id}>{ds.name}</option>
+                  ))}
+                </select>
+                <span style={{ fontSize: 11.5, color: "var(--color-text-muted)" }}>
+                  El dropdown mostrará registros de este dataset
+                </span>
+              </div>
+              {relatedDatasetId && (
+                <div className="form-group">
+                  <label className="form-label">Campo a mostrar como label</label>
+                  <select value={displayField} onChange={(e) => setDisplayField(e.target.value)}>
+                    <option value="">— Mostrar ID (por defecto) —</option>
+                    {relatedColumns.map((col) => (
+                      <option key={col.id} value={col.field_key}>{col.name} ({col.field_key})</option>
+                    ))}
+                  </select>
+                  <span style={{ fontSize: 11.5, color: "var(--color-text-muted)" }}>
+                    El valor guardado siempre será el ID del registro seleccionado
+                  </span>
+                </div>
+              )}
+            </>
+          )}
 
           {dataType === "enum" && (
             <div className="form-group">
@@ -118,18 +184,20 @@ export default function EditColumnModal({ column, onSave, onClose }: Props) {
             </div>
           )}
 
-          <label className="checkbox-row-v2">
-            <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} />
-            <span className="checkbox-row-v2-text">
-              Campo requerido
-              <span>No permite guardar el registro si está vacío</span>
-            </span>
-          </label>
+          {dataType !== "relation" && (
+            <label className="checkbox-row-v2">
+              <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} />
+              <span className="checkbox-row-v2-text">
+                Campo requerido
+                <span>No permite guardar el registro si está vacío</span>
+              </span>
+            </label>
+          )}
         </div>
 
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={!name.trim()}>
+          <button className="btn btn-primary" onClick={handleSave} disabled={saveDisabled}>
             Guardar cambios
           </button>
         </div>

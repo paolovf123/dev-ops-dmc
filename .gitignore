@@ -60,3 +60,5 @@ build/
 *.tar.gz
 
 .claude/settings.local.json
+# Added by code-review-graph
+#.code-review-graph/

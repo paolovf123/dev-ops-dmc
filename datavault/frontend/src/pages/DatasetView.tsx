@@ -17,6 +17,8 @@ import TrashPanel from "../components/TrashPanel";
 import SchemaDiagram from "../components/SchemaDiagram";
 import RecordHistoryPanel from "../components/RecordHistoryPanel";
 import EditColumnModal from "../components/EditColumnModal";
+import RelatedRecordsPanel from "../components/RelatedRecordsPanel";
+import LinkTableModal from "../components/LinkTableModal";
 import CsvMappingModal from "../components/CsvMappingModal";
 import { useConfirm } from "../components/ConfirmDialog";
 import type { ColumnDefinition, JoinedColDef, FormulaColDef } from "../types";
@@ -44,6 +46,8 @@ export default function DatasetView() {
   const [showSavedViews, setShowSavedViews] = useState(false);
   const [showSchema, setShowSchema] = useState(false);
   const [historyRecordId, setHistoryRecordId] = useState<string | null>(null);
+  const [relatedPanelRecordId, setRelatedPanelRecordId] = useState<string | null>(null);
+  const [showLinkModal, setShowLinkModal] = useState(false);
   const [editingColumn, setEditingColumn] = useState<ColumnDefinition | null>(null);
   const [csvMappingFile, setCsvMappingFile] = useState<File | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("table");
@@ -560,6 +564,18 @@ export default function DatasetView() {
 
               <div className="toolbar-sep" />
 
+              {/* Related records panel — when exactly 1 row selected */}
+              {selectedIds.size === 1 && (
+                <button
+                  className="btn btn-secondary"
+                  style={{ borderColor: "var(--pm-violet-100)", color: "var(--pm-violet-600)" }}
+                  onClick={() => setRelatedPanelRecordId([...selectedIds][0])}
+                  title="Ver registros relacionados de este registro"
+                >
+                  ⇢ Relacionados
+                </button>
+              )}
+
               {/* Bulk delete — editor+ only */}
               {selectedIds.size > 0 && isEditor && (
                 <button className="btn btn-danger-ghost"
@@ -632,10 +648,11 @@ export default function DatasetView() {
               {/* Admin-only: new table + new column */}
               {isAdmin && (
                 <button className="btn btn-secondary"
-                  onClick={() => navigate(`/create?linkedTo=${datasetId}&linkedName=${encodeURIComponent(currentDataset?.name ?? "")}`)}
+                  onClick={() => setShowLinkModal(true)}
                   disabled={!currentDataset}
-                  style={{ borderColor: "var(--pm-orange-500)", color: "var(--pm-orange-600)" }}>
-                  🔗 Nueva tabla
+                  style={{ borderColor: "#DB2777", color: "#DB2777" }}
+                  title="Vincular este dataset con otro mediante una columna FK">
+                  ⇢ Vincular tabla
                 </button>
               )}
               {isAdmin && (
@@ -803,6 +820,15 @@ export default function DatasetView() {
         <AddColumnModal onSave={(col) => addColMut.mutate(col)} onClose={() => setShowAddCol(false)} />
       )}
 
+      {showLinkModal && currentDataset && (
+        <LinkTableModal
+          currentDatasetId={datasetId!}
+          currentDatasetName={currentDataset.name}
+          onSave={(col) => { addColMut.mutate(col); setShowLinkModal(false); }}
+          onClose={() => setShowLinkModal(false)}
+        />
+      )}
+
       {historyRecordId && (
         <RecordHistoryPanel
           datasetId={datasetId!}
@@ -837,6 +863,18 @@ export default function DatasetView() {
           onClose={() => setCsvMappingFile(null)}
         />
       )}
+
+      {relatedPanelRecordId && (() => {
+        const rec = records.find((r) => r.id === relatedPanelRecordId);
+        return rec ? (
+          <RelatedRecordsPanel
+            parentDatasetId={datasetId!}
+            parentRecord={rec}
+            parentColumns={columns}
+            onClose={() => setRelatedPanelRecordId(null)}
+          />
+        ) : null;
+      })()}
 
       {showColPanel && (
         <ColumnPanel

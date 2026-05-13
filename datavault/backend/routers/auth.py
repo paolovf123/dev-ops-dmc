@@ -26,14 +26,15 @@ async def register(request: Request, body: UserRegister, db: AsyncSession = Depe
         raise HTTPException(status_code=400, detail="El email ya está registrado")
 
     total = await count_users(db)
-    # First user ever becomes admin; subsequent users are viewers until promoted
-    role = "admin" if total == 0 else "viewer"
+    is_first = total == 0
+    role = "admin" if is_first else "viewer"
 
     user = User(
         email=body.email.lower().strip(),
         username=body.username.strip(),
         hashed_password=hash_password(body.password),
         role=role,
+        is_active=is_first,  # solo el primer usuario queda activo automáticamente
     )
     db.add(user)
     await db.commit()
@@ -144,6 +145,22 @@ async def deactivate_user(
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     user.is_active = False
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+@router.patch("/users/{user_id}/activate", response_model=UserOut)
+async def activate_user(
+    user_id: uuid.UUID,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    user.is_active = True
     await db.commit()
     await db.refresh(user)
     return user

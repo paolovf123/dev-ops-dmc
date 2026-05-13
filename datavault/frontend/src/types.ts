@@ -14,12 +14,14 @@ export interface ColumnDefinition {
   dataset_id: string;
   name: string;
   field_key: string;
-  data_type: "text" | "number" | "date" | "enum" | "boolean";
+  data_type: "text" | "number" | "date" | "enum" | "boolean" | "relation";
   rules: {
     required?: boolean;
     min?: number;
     max?: number;
     options?: string[];
+    related_dataset_id?: string;
+    display_field?: string;
   };
   position: number;
   created_at: string;

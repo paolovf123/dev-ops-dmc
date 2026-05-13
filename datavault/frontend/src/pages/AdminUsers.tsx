@@ -195,6 +195,12 @@ export default function AdminUsers() {
     onError: () => toast("No se pudo desactivar la cuenta", "error"),
   });
 
+  const activateM = useMutation({
+    mutationFn: (id: string) => api.patch(`/auth/users/${id}/activate`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-users"] }); toast("Cuenta activada", "success"); },
+    onError: () => toast("No se pudo activar la cuenta", "error"),
+  });
+
   async function saveRole(user: UserRow) {
     if (pendingRole === user.role) { setEditingId(null); return; }
     const ok = await confirm({
@@ -633,19 +639,35 @@ export default function AdminUsers() {
                           onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#7C3AED"; (e.currentTarget as HTMLElement).style.color = "#7C3AED"; }}
                           onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)"; (e.currentTarget as HTMLElement).style.color = "var(--color-text-secondary)"; }}
                         >✎</button>
-                        <button
-                          onClick={() => deactivate(user)}
-                          title="Desactivar cuenta"
-                          disabled={deactivateM.isPending}
-                          style={{
-                            height: 30, width: 30, borderRadius: 8, border: "1px solid var(--color-border)",
-                            background: "var(--color-bg)", cursor: "pointer", display: "flex",
-                            alignItems: "center", justifyContent: "center", fontSize: 14, color: "var(--color-text-secondary)",
-                            transition: "all 0.12s",
-                          }}
-                          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#F87171"; (e.currentTarget as HTMLElement).style.color = "#DC2626"; }}
-                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)"; (e.currentTarget as HTMLElement).style.color = "var(--color-text-secondary)"; }}
-                        >⊘</button>
+                        {user.is_active ? (
+                          <button
+                            onClick={() => deactivate(user)}
+                            title="Desactivar cuenta"
+                            disabled={deactivateM.isPending}
+                            style={{
+                              height: 30, width: 30, borderRadius: 8, border: "1px solid var(--color-border)",
+                              background: "var(--color-bg)", cursor: "pointer", display: "flex",
+                              alignItems: "center", justifyContent: "center", fontSize: 14, color: "var(--color-text-secondary)",
+                              transition: "all 0.12s",
+                            }}
+                            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#F87171"; (e.currentTarget as HTMLElement).style.color = "#DC2626"; }}
+                            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)"; (e.currentTarget as HTMLElement).style.color = "var(--color-text-secondary)"; }}
+                          >⊘</button>
+                        ) : (
+                          <button
+                            onClick={() => activateM.mutate(user.id)}
+                            title="Activar cuenta"
+                            disabled={activateM.isPending}
+                            style={{
+                              height: 30, width: 30, borderRadius: 8, border: "1px solid var(--color-border)",
+                              background: "var(--color-bg)", cursor: "pointer", display: "flex",
+                              alignItems: "center", justifyContent: "center", fontSize: 14, color: "var(--color-text-secondary)",
+                              transition: "all 0.12s",
+                            }}
+                            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#4ADE80"; (e.currentTarget as HTMLElement).style.color = "#16A34A"; }}
+                            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)"; (e.currentTarget as HTMLElement).style.color = "var(--color-text-secondary)"; }}
+                          >✓</button>
+                        )}
                       </>
                     )}
                   </div>
