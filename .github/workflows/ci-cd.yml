@@ -96,11 +96,9 @@ jobs:
           BUCKET="datavault-frontend-${ENVIRONMENT}-${ACCOUNT_ID}"
           aws s3 sync dist/ s3://$BUCKET --delete
 
-          # Invalidar CloudFront buscando la distribución por bucket de origen
-          DIST_ID=$(aws cloudfront list-distributions \
-            --query "DistributionList.Items[?Origins.Items[0].DomainName=='${BUCKET}.s3.amazonaws.com'].Id | [0]" \
-            --output text)
-          if [ "$DIST_ID" != "None" ] && [ -n "$DIST_ID" ]; then
+          # Invalidar CloudFront usando el ID de la distribución directamente
+          DIST_ID="${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}"
+          if [ -n "$DIST_ID" ]; then
             echo "Invalidando CloudFront $DIST_ID..."
             aws cloudfront create-invalidation --distribution-id $DIST_ID --paths "/*"
           fi
