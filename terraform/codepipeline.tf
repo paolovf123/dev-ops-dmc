@@ -48,7 +48,7 @@ resource "aws_iam_role_policy" "codebuild" {
       {
         Sid    = "S3Artifacts"
         Effect = "Allow"
-        Action = ["s3:GetObject", "s3:PutObject", "s3:GetBucketVersioning", "s3:GetBucketLocation"]
+        Action = ["s3:GetObject", "s3:PutObject", "s3:GetBucketVersioning", "s3:GetBucketLocation", "s3:ListBucket"]
         Resource = [
           aws_s3_bucket.pipeline_artifacts.arn,
           "${aws_s3_bucket.pipeline_artifacts.arn}/*",
