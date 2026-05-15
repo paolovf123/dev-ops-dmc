@@ -1,10 +1,7 @@
 name: CI/CD Pipeline
 
 on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main]
+  workflow_dispatch: # deshabilitado: CI/CD migrado a AWS CodePipeline (terraform/codepipeline.tf)
 
 jobs:
   # ─────────────────────────────────────────────────────────
