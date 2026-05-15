@@ -38,3 +38,13 @@ output "ecs_cluster_name" {
   description = "Nombre del cluster ECS"
   value       = aws_ecs_cluster.main.name
 }
+
+output "codepipeline_name" {
+  description = "Nombre del pipeline CodePipeline (alternativa AWS-nativa a GitHub Actions)"
+  value       = aws_codepipeline.main.name
+}
+
+output "codestar_connection_arn" {
+  description = "ARN de la conexión GitHub. IMPORTANTE: activar manualmente en AWS Console → Developer Tools → Connections"
+  value       = aws_codestarconnections_connection.github.arn
+}

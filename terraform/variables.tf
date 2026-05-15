@@ -33,3 +33,15 @@ variable "redis_node_type" {
   type        = string
   default     = "cache.t4g.micro"
 }
+
+variable "github_owner" {
+  description = "Usuario u organización de GitHub dueño del repositorio"
+  type        = string
+  default     = "paolovf123"
+}
+
+variable "github_repo" {
+  description = "Nombre del repositorio de GitHub"
+  type        = string
+  default     = "dev-ops-dmc"
+}

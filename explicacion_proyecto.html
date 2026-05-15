@@ -328,7 +328,7 @@
                 </div>
                 <div class="er-card">
                     <div class="er-card-hd">workspace_members</div>
-                    <div class="er-card-fields">workspace_id → FK<br>user_id → FK<br>role · owner|admin|member<br>joined_at · datetime</div>
+                    <div class="er-card-fields">workspace_id → FK<br>user_id → FK<br>role · owner|admin_ws|member<br>joined_at · datetime</div>
                     <div class="er-rels"><span class="er-rel">→ users</span><span class="er-rel">→ workspaces</span></div>
                 </div>
                 <div class="er-card">
@@ -405,10 +405,10 @@
                 </table>
                 <h4 style="margin-top:1.5rem;">Roles en Workspace</h4>
                 <table>
-                    <tr><th>Rol</th><th>Alcance</th></tr>
-                    <tr><td><span class="role owner">owner</span></td><td>Control total del workspace</td></tr>
-                    <tr><td><span class="role admin">admin</span></td><td>Gestiona miembros y datasets</td></tr>
-                    <tr><td><span class="role member">member</span></td><td>Acceso según permisos de dataset</td></tr>
+                    <tr><th>Rol</th><th>Alcance</th><th>Dataset efectivo</th></tr>
+                    <tr><td><span class="role owner">owner</span></td><td>Control total del workspace</td><td><code>admin</code></td></tr>
+                    <tr><td><span class="role admin">admin_ws</span></td><td>Gestiona miembros y datasets</td><td><code>editor</code></td></tr>
+                    <tr><td><span class="role member">member</span></td><td>Acceso a datasets del workspace</td><td><code>editor</code></td></tr>
                 </table>
                 <div class="info-box" style="margin-top:1rem;">
                     <strong>Token JWT</strong> incluye el rol global embebido. Sin sesiones en servidor. WebSocket autentica enviando el token como primer mensaje (no en query string).
@@ -420,7 +420,12 @@
                     <div class="pd">
                         <div class="pd-step">
                             <div class="pd-q">🔑 ¿Es admin global?</div>
-                            <div class="pd-y">✅ Sí → Acceso total a todo</div>
+                            <div class="pd-y">✅ Sí → Acceso total (<code>admin</code>)</div>
+                            <div class="pd-n">No ↓</div>
+                        </div>
+                        <div class="pd-step">
+                            <div class="pd-q">🏢 ¿El dataset pertenece a un workspace del que es miembro?</div>
+                            <div class="pd-y">✅ Sí → Usa rol del workspace mapeado (<code>owner→admin · admin_ws→editor · member→editor</code>)</div>
                             <div class="pd-n">No ↓</div>
                         </div>
                         <div class="pd-step">
@@ -429,7 +434,7 @@
                             <div class="pd-n">No ↓</div>
                         </div>
                         <div class="pd-step">
-                            <div class="pd-q">👥 ¿Pertenece a un grupo con permiso?</div>
+                            <div class="pd-q">👥 ¿Pertenece a un grupo con permiso en este dataset?</div>
                             <div class="pd-y">✅ Sí → Mejor rol entre sus grupos</div>
                             <div class="pd-n">No ↓</div>
                         </div>
@@ -471,6 +476,8 @@
                     <li><span class="dot done"></span>Audit log con filtros multi-persona, workspace, dataset</li>
                     <li><span class="dot done"></span>Rate limiting: 10/min en login, 5/min en registro</li>
                     <li><span class="dot done"></span>Admin panel: usuarios, grupos, workspaces, audit</li>
+                    <li><span class="dot done"></span><code>effective_role</code> considera workspace — miembros ven y editan según su rol en el workspace</li>
+                    <li><span class="dot done"></span>Botones de edición visibles correctamente según rol efectivo en DatasetView</li>
                 </ul>
                 <h4 style="margin-top:1.5rem; color:var(--orange);">🐍 Scripts Python (Computed Datasets)</h4>
                 <ul class="checklist">
@@ -489,6 +496,7 @@
             <span class="badge slate">3 · dataset_permissions_and_gin_index</span>
             <span class="badge slate">4 · groups_and_computed_datasets</span>
             <span class="badge slate">5 · add_workspaces</span>
+            <span class="badge slate">6 · workspace_roles_v2</span>
         </div>
     </div>
 
@@ -532,9 +540,20 @@
                 <div class="ep"><span class="method post">POST</span><code>/groups/{id}/members</code></div>
                 <div class="ep"><span class="method get">GET</span><code>/workspaces</code></div>
                 <div class="ep"><span class="method post">POST</span><code>/workspaces</code></div>
+                <div class="ep"><span class="method get">GET</span><code>/workspaces/{id}</code></div>
+                <div class="ep"><span class="method patch">PATCH</span><code>/workspaces/{id}</code></div>
+                <div class="ep"><span class="method delete">DELETE</span><code>/workspaces/{id}</code></div>
                 <div class="ep"><span class="method get">GET</span><code>/workspaces/{id}/members</code></div>
                 <div class="ep"><span class="method post">POST</span><code>/workspaces/{id}/members</code></div>
                 <div class="ep"><span class="method patch">PATCH</span><code>/workspaces/{id}/members/{uid}</code></div>
+                <div class="ep"><span class="method delete">DELETE</span><code>/workspaces/{id}/members/{uid}</code></div>
+                <h4>Permisos de Dataset</h4>
+                <div class="ep"><span class="method get">GET</span><code>/datasets/{id}/permissions</code></div>
+                <div class="ep"><span class="method put">PUT</span><code>/datasets/{id}/permissions</code> <small>(user)</small></div>
+                <div class="ep"><span class="method delete">DELETE</span><code>/datasets/{id}/permissions/{uid}</code></div>
+                <div class="ep"><span class="method get">GET</span><code>/datasets/{id}/permissions/groups</code></div>
+                <div class="ep"><span class="method put">PUT</span><code>/datasets/{id}/permissions/groups</code></div>
+                <div class="ep"><span class="method delete">DELETE</span><code>/datasets/{id}/permissions/groups/{gid}</code></div>
             </div>
         </div>
     </div>
@@ -784,7 +803,7 @@
     </div>
 
     <div class="footer">
-        <i class="fa-solid fa-layer-group"></i> DataVault · DMC Dev-Ops · Mayo 2026
+        <i class="fa-solid fa-layer-group"></i> DataVault · DMC Dev-Ops · Mayo 2026 · commit 2d76a8c
     </div>
 
 </div>
