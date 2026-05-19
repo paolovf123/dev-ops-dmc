@@ -6,7 +6,7 @@ from typing import Optional
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -17,6 +17,12 @@ from models import User, DatasetPermission, DatasetGroupPermission, UserGroupMem
 SECRET_KEY = os.getenv("SECRET_KEY", "datavault-secret-change-in-production-xyz-123")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24
+WS_TICKET_EXPIRE_SECONDS = 60
+
+# Cookie config — el frontend nunca lee la cookie (httpOnly) y el navegador la envía sola
+COOKIE_NAME = "dv_token"
+COOKIE_SAMESITE = os.getenv("COOKIE_SAMESITE", "lax").lower()  # lax | strict | none
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
@@ -58,9 +64,24 @@ def decode_token(token: str) -> dict | None:
 
 
 async def _resolve_token(
+    request: Request,
     header_token: Optional[str] = Depends(oauth2_scheme),
 ) -> Optional[str]:
-    return header_token
+    """Resuelve el JWT desde el header Authorization o desde la cookie httpOnly."""
+    if header_token:
+        return header_token
+    return request.cookies.get(COOKIE_NAME)
+
+
+def create_ws_ticket(user_id: str) -> str:
+    """JWT ephemeral (60s) emitido tras autenticarse, usado SOLO para el handshake del WebSocket.
+
+    Vive en JS (no httpOnly) por la duración del handshake; expira antes de poder reusarse.
+    """
+    return create_access_token(
+        {"sub": user_id, "scope": "ws"},
+        expires_delta=timedelta(seconds=WS_TICKET_EXPIRE_SECONDS),
+    )
 
 
 async def get_current_user(

@@ -8,10 +8,10 @@ import type { AuthUser } from "../auth/AuthContext";
 type Mode = "login" | "register";
 
 export default function Login() {
-  const { login, token } = useAuth();
+  const { login, user } = useAuth();
   const navigate   = useNavigate();
 
-  if (token) return <Navigate to="/" replace />;
+  if (user) return <Navigate to="/" replace />;
   const [mode, setMode]         = useState<Mode>("login");
   const [email, setEmail]       = useState("");
   const [username, setUsername] = useState("");
@@ -38,7 +38,8 @@ export default function Login() {
         return;
       }
 
-      login(data.access_token, data.user);
+      // El backend ya seteó la cookie httpOnly `dv_token`; solo guardamos el user
+      login(data.user);
       navigate("/");
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {

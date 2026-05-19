@@ -1,7 +1,7 @@
 from __future__ import annotations
 import uuid
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -108,6 +108,10 @@ class RecordCreate(BaseModel):
 
 class RecordUpdate(BaseModel):
     data: dict
+
+
+class BulkDeleteBody(BaseModel):
+    ids: list[str] = Field(..., min_length=1, max_length=1000)
 
 
 class RecordOut(BaseModel):

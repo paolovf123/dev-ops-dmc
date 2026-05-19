@@ -41,8 +41,10 @@ function axios_status(err: unknown): number | null {
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { token } = useAuth();
-  if (!token) return <Navigate to="/login" replace />;
+  const { user, hydrated } = useAuth();
+  // Mientras AuthContext valida la sesión vía /auth/me, no redirigir todavía
+  if (!hydrated && !user) return null;
+  if (!user) return <Navigate to="/login" replace />;
   return <WorkspaceProvider>{children}</WorkspaceProvider>;
 }
 

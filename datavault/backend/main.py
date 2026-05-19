@@ -1,5 +1,6 @@
 import os
 print("DataVault backend starting... [deploy us-east-1]")
+import logging
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -11,6 +12,12 @@ from routers.groups import router as groups_router
 from routers.workspaces import router as workspaces_router
 from auth import decode_token
 import json
+
+logger = logging.getLogger("datavault")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
+IS_PRODUCTION = ENVIRONMENT == "production"
 
 
 # ── Rate limiter ──────────────────────────────────────────────────────────────
@@ -57,9 +64,23 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+    expose_headers=["X-Total-Count"],
 )
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    if IS_PRODUCTION:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
 
 app.include_router(auth_router)
 app.include_router(workspaces_router)
@@ -85,9 +106,11 @@ async def ws_endpoint(websocket: WebSocket, dataset_id: str):
         first = await websocket.receive_text()
         payload = decode_token(first.strip())
         if not payload:
+            logger.warning("WebSocket auth failed for dataset %s: invalid token", dataset_id)
             await websocket.close(code=4001)
             return
-    except Exception:
+    except Exception as e:
+        logger.warning("WebSocket auth error for dataset %s: %s", dataset_id, e)
         await websocket.close(code=4001)
         return
 
@@ -97,5 +120,6 @@ async def ws_endpoint(websocket: WebSocket, dataset_id: str):
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(dataset_id, websocket)
-    except Exception:
+    except Exception as e:
+        logger.error("WebSocket error on dataset %s: %s", dataset_id, e, exc_info=True)
         manager.disconnect(dataset_id, websocket)

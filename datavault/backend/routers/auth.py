@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from database import get_db
 from models import User, WorkspaceMember
 from schemas import UserRegister, UserLogin, UserOut, UserUpdateRole, Token
 from auth import (
-    verify_password, hash_password, create_access_token,
+    verify_password, hash_password, create_access_token, create_ws_ticket,
     get_current_user, require_admin, count_users, effective_workspace_role,
+    ACCESS_TOKEN_EXPIRE_HOURS, COOKIE_NAME, COOKIE_SAMESITE, COOKIE_SECURE,
 )
 from models import ChangeHistory, Record, Dataset
 from limiter import limiter
@@ -14,12 +15,24 @@ import uuid
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+
+def _set_auth_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=token,
+        max_age=ACCESS_TOKEN_EXPIRE_HOURS * 3600,
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite=COOKIE_SAMESITE,
+        path="/",
+    )
+
 VALID_ROLES = {"admin", "editor", "viewer"}
 
 
 @router.post("/register", response_model=Token, status_code=201)
 @limiter.limit("5/minute")
-async def register(request: Request, body: UserRegister, db: AsyncSession = Depends(get_db)):
+async def register(request: Request, response: Response, body: UserRegister, db: AsyncSession = Depends(get_db)):
     # Check email unique
     existing = await db.execute(select(User).where(User.email == body.email.lower()))
     if existing.scalar_one_or_none():
@@ -41,12 +54,13 @@ async def register(request: Request, body: UserRegister, db: AsyncSession = Depe
     await db.refresh(user)
 
     token = create_access_token({"sub": str(user.id), "role": user.role})
+    _set_auth_cookie(response, token)
     return Token(access_token=token, user=UserOut.model_validate(user))
 
 
 @router.post("/login", response_model=Token)
 @limiter.limit("10/minute")
-async def login(request: Request, body: UserLogin, db: AsyncSession = Depends(get_db)):
+async def login(request: Request, response: Response, body: UserLogin, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == body.email.lower()))
     user = result.scalar_one_or_none()
     if not user or not verify_password(body.password, user.hashed_password):
@@ -55,7 +69,24 @@ async def login(request: Request, body: UserLogin, db: AsyncSession = Depends(ge
         raise HTTPException(status_code=403, detail="Cuenta desactivada")
 
     token = create_access_token({"sub": str(user.id), "role": user.role})
+    _set_auth_cookie(response, token)
     return Token(access_token=token, user=UserOut.model_validate(user))
+
+
+@router.post("/logout")
+async def logout(response: Response):
+    response.delete_cookie(COOKIE_NAME, path="/")
+    return {"ok": True}
+
+
+@router.post("/ws-ticket")
+async def issue_ws_ticket(current_user: User = Depends(get_current_user)):
+    """Devuelve un JWT efímero (60s) usado como primer mensaje del WebSocket.
+
+    Sirve para autenticar el handshake del WS sin exponer el token de sesión
+    al JavaScript (la cookie es httpOnly y no es legible desde el cliente).
+    """
+    return {"ticket": create_ws_ticket(str(current_user.id))}
 
 
 @router.get("/me", response_model=UserOut)

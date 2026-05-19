@@ -1,14 +1,25 @@
 from __future__ import annotations
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Response, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, cast, Text, func
 from datetime import datetime, timezone
 from database import get_db
 from models import Dataset, ColumnDefinition, Record, ChangeHistory, User
-from schemas import RecordCreate, RecordUpdate, RecordOut
+from schemas import RecordCreate, RecordUpdate, RecordOut, BulkDeleteBody
 from auth import get_current_user, require_editor, require_viewer, ds_require_editor, ds_require_viewer
+from limiter import limiter
+import logging
 import uuid
 import io
+
+logger = logging.getLogger("datavault.records")
+
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+ALLOWED_EXCEL_MIME = {
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel",
+    "application/octet-stream",  # algunos navegadores envían esto
+}
 
 router = APIRouter(prefix="/datasets/{dataset_id}/records", tags=["records"])
 
@@ -84,7 +95,9 @@ async def list_records(
 
 
 @router.post("", response_model=RecordOut, status_code=201)
+@limiter.limit("60/minute")
 async def create_record(
+    request: Request,
     dataset_id: uuid.UUID,
     body: RecordCreate,
     current_user: User = Depends(ds_require_editor),
@@ -112,7 +125,9 @@ async def create_record(
 
 
 @router.patch("/{record_id}", response_model=RecordOut)
+@limiter.limit("120/minute")
 async def update_record(
+    request: Request,
     dataset_id: uuid.UUID,
     record_id: uuid.UUID,
     body: RecordUpdate,
@@ -201,35 +216,59 @@ async def get_record_history(
     ]
 
 
-@router.post("/bulk-delete", status_code=204)
+@router.post("/bulk-delete")
+@limiter.limit("20/minute")
 async def bulk_delete(
+    request: Request,
     dataset_id: uuid.UUID,
-    body: dict,
+    body: BulkDeleteBody,
     current_user: User = Depends(ds_require_editor),
     db: AsyncSession = Depends(get_db),
 ):
     from main import manager
-    ids = body.get("ids", [])
-    for rid in ids:
+
+    parsed_ids: list[uuid.UUID] = []
+    invalid_ids: list[str] = []
+    for raw in body.ids:
         try:
-            result = await db.execute(
-                select(Record).where(
-                    Record.id == uuid.UUID(str(rid)),
-                    Record.dataset_id == dataset_id,
-                    Record.deleted_at.is_(None),
-                )
-            )
-            record = result.scalar_one_or_none()
-            if record:
-                record.deleted_at = datetime.now(timezone.utc)
-                db.add(ChangeHistory(
-                    record_id=record.id, action="delete",
-                    user_id=current_user.id, user_name=current_user.username,
-                ))
-        except Exception:
-            pass
-    await db.commit()
+            parsed_ids.append(uuid.UUID(str(raw)))
+        except (ValueError, AttributeError):
+            invalid_ids.append(str(raw))
+
+    if not parsed_ids:
+        raise HTTPException(status_code=400, detail={"message": "Ningún ID válido", "invalid": invalid_ids})
+
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        select(Record).where(
+            Record.id.in_(parsed_ids),
+            Record.dataset_id == dataset_id,
+            Record.deleted_at.is_(None),
+        )
+    )
+    records = result.scalars().all()
+    found_ids = {r.id for r in records}
+    for record in records:
+        record.deleted_at = now
+        db.add(ChangeHistory(
+            record_id=record.id, action="delete",
+            user_id=current_user.id, user_name=current_user.username,
+        ))
+
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        logger.error("bulk_delete commit failed for dataset %s: %s", dataset_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Error al eliminar registros")
+
+    not_found = [str(i) for i in parsed_ids if i not in found_ids]
     await manager.broadcast(str(dataset_id), {"type": "record_delete", "dataset_id": str(dataset_id)})
+    return {
+        "deleted": len(records),
+        "not_found": not_found,
+        "invalid": invalid_ids,
+    }
 
 
 @router.post("/{record_id}/restore", response_model=RecordOut)
@@ -252,28 +291,56 @@ async def restore_record(
 
 
 @router.post("/import-excel", status_code=201)
+@limiter.limit("10/minute")
 async def import_excel(
+    request: Request,
     dataset_id: uuid.UUID,
     file: UploadFile = File(...),
     _: User = Depends(ds_require_editor),
     db: AsyncSession = Depends(get_db),
 ):
     import openpyxl
+
+    # ── Validate file metadata before reading ─────────────────────────────────
+    if file.content_type and file.content_type not in ALLOWED_EXCEL_MIME:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Tipo de archivo no soportado: {file.content_type}. Se espera .xlsx",
+        )
+    if file.filename and not file.filename.lower().endswith((".xlsx", ".xlsm")):
+        raise HTTPException(status_code=400, detail="El archivo debe tener extensión .xlsx")
+
+    # ── Stream-bounded read so a giant upload never fills memory ──────────────
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(64 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail=f"Archivo demasiado grande (límite {MAX_UPLOAD_BYTES // (1024*1024)} MB)")
+        chunks.append(chunk)
+    content = b"".join(chunks)
+
     columns = await _get_columns(dataset_id, db)
     field_map = {col.name.lower(): col.field_key for col in columns}
+    col_by_key = {col.field_key: col for col in columns}
 
-    content = await file.read()
-    wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    except Exception as e:
+        logger.warning("Excel parse failed for dataset %s: %s", dataset_id, e)
+        raise HTTPException(status_code=400, detail="Archivo Excel inválido o corrupto")
     ws = wb.active
 
     rows = list(ws.iter_rows(values_only=True))
     if not rows:
-        raise HTTPException(status_code=400, detail="Empty file")
+        raise HTTPException(status_code=400, detail="Archivo vacío")
 
     headers = [str(h).lower().strip() if h else "" for h in rows[0]]
-    created = 0
-    errors = []
-    col_by_key = {col.field_key: col for col in columns}
+    errors: list[dict] = []
+    new_records: list[Record] = []
 
     for i, row in enumerate(rows[1:], start=2):
         data = {}
@@ -294,11 +361,19 @@ async def import_excel(
             errors.append({"row": i, "errors": row_errors})
             continue
 
-        record = Record(dataset_id=dataset_id, data=data)
+        new_records.append(Record(dataset_id=dataset_id, data=data))
+
+    # ── Atomic: import all-or-nothing if any row had validation errors ────────
+    if errors:
+        return {"created": 0, "errors": errors}
+
+    for record in new_records:
         db.add(record)
-        created += 1
-
-    if created:
+    try:
         await db.commit()
+    except Exception as e:
+        await db.rollback()
+        logger.error("import_excel commit failed for dataset %s: %s", dataset_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Error al insertar registros importados")
 
-    return {"created": created, "errors": errors}
+    return {"created": len(new_records), "errors": []}

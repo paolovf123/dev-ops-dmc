@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import api from "../api/client";
 
 const WS_BASE = import.meta.env.VITE_WS_URL ?? "ws://localhost:8000";
 
@@ -19,18 +20,28 @@ export function useRealtimeSync(datasetId: string | undefined) {
     if (!datasetId) return;
     let active = true;
 
-    function connect() {
+    async function connect() {
       if (!active) return;
-      const token = localStorage.getItem("dv_token") ?? "";
+
+      // Pedir ticket WS al backend; la cookie httpOnly autentica esta llamada
+      let ticket = "";
+      try {
+        const r = await api.post<{ ticket: string }>("/auth/ws-ticket");
+        ticket = r.data.ticket;
+      } catch {
+        // Sin ticket no podemos autenticar el WS; reintentar más tarde
+        if (active) reconnectTimer.current = setTimeout(connect, 5000);
+        return;
+      }
+      if (!active) return;
+
       const url = `${WS_BASE}/ws/${datasetId}`;
       const ws = new WebSocket(url);
       wsRef.current = ws;
 
       ws.onopen = () => {
-        // Send token as first message for authentication
-        if (token) ws.send(token);
+        ws.send(ticket);
         if (active) setConnected(true);
-        // Heartbeat every 25s to keep the connection alive through proxies
         const ping = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) ws.send("ping");
           else clearInterval(ping);
