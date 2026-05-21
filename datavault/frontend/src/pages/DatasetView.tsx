@@ -44,7 +44,7 @@ export default function DatasetView() {
   const [showColPanel, setShowColPanel] = useState(false);
   const [showFilterRow, setShowFilterRow] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
-  const [showSavedViews, setShowSavedViews] = useState(false);
+  const [, setShowSavedViews] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showSchema, setShowSchema] = useState(false);
   const [historyRecordId, setHistoryRecordId] = useState<string | null>(null);
@@ -156,10 +156,6 @@ export default function DatasetView() {
 
   const currentDataset = datasets.find((d) => d.id === datasetId);
   const currentWorkspaceId = currentDataset?.workspace_id ?? undefined;
-  // Only show datasets from the same workspace in relation pickers
-  const workspaceDatasets = currentWorkspaceId
-    ? datasets.filter((d) => d.workspace_id === currentWorkspaceId)
-    : datasets;
 
   const uniqueSourceIds = useMemo(
     () => [...new Set(joinedCols.map((j) => j.sourceDatasetId))],
@@ -836,7 +832,6 @@ export default function DatasetView() {
         <LinkTableModal
           currentDatasetId={datasetId!}
           currentDatasetName={currentDataset.name}
-          workspaceId={currentWorkspaceId}
           onSave={(col) => { addColMut.mutate(col); setShowLinkModal(false); }}
           onClose={() => setShowLinkModal(false)}
         />
