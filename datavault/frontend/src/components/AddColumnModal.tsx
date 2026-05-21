@@ -9,25 +9,52 @@ interface Props {
   onClose: () => void;
 }
 
-const TYPE_OPTIONS: { value: ColumnDefinition["data_type"]; label: string; icon: string; desc: string; color: string }[] = [
-  { value: "text",     label: "Texto",     icon: "Aa", desc: "Nombres, descripciones",          color: "#64748B" },
-  { value: "number",   label: "Número",    icon: "#",  desc: "Cantidades, importes",             color: "#2563EB" },
-  { value: "date",     label: "Fecha",     icon: "▦",  desc: "Fechas y horarios",                color: "#7C3AED" },
-  { value: "enum",     label: "Lista",     icon: "≡",  desc: "Opciones predefinidas",            color: "#D97706" },
-  { value: "boolean",  label: "Booleano",  icon: "✓",  desc: "Sí / No, verdadero / falso",      color: "#059669" },
-  { value: "relation", label: "Relación",  icon: "⇢",  desc: "Apunta a registros de otro dataset", color: "#DB2777" },
+type ColType = ColumnDefinition["data_type"];
+
+interface TypeOption {
+  value: ColType;
+  label: string;
+  icon: string;
+  desc: string;
+  color: string;
+  group: string;
+}
+
+const TYPE_OPTIONS: TypeOption[] = [
+  // Texto
+  { value: "text",       label: "Texto",        icon: "Aa", desc: "Nombres, descripciones cortas",      color: "#64748B", group: "Texto" },
+  { value: "long_text",  label: "Texto largo",  icon: "¶",  desc: "Párrafos, notas, comentarios",       color: "#475569", group: "Texto" },
+  { value: "url",        label: "Enlace",        icon: "⎋",  desc: "Dirección web (https://...)",        color: "#0891B2", group: "Texto" },
+  { value: "email",      label: "Email",         icon: "✉",  desc: "Dirección de correo electrónico",    color: "#0284C7", group: "Texto" },
+  { value: "phone",      label: "Teléfono",      icon: "☎",  desc: "Número de teléfono",                 color: "#0369A1", group: "Texto" },
+  // Número
+  { value: "number",     label: "Número",        icon: "#",  desc: "Cantidades, decimales",              color: "#2563EB", group: "Número" },
+  { value: "currency",   label: "Moneda",        icon: "$",  desc: "Importes con símbolo de moneda",     color: "#16A34A", group: "Número" },
+  { value: "percent",    label: "Porcentaje",    icon: "%",  desc: "Valor de 0 a 100",                   color: "#7C3AED", group: "Número" },
+  { value: "rating",     label: "Calificación",  icon: "★",  desc: "Estrellas (1–5 por defecto)",        color: "#D97706", group: "Número" },
+  // Selección
+  { value: "enum",       label: "Lista",         icon: "≡",  desc: "Una opción de una lista fija",       color: "#EA580C", group: "Selección" },
+  { value: "multiselect",label: "Multi-lista",   icon: "☰",  desc: "Varias opciones de una lista fija",  color: "#C2410C", group: "Selección" },
+  { value: "boolean",    label: "Sí / No",       icon: "✓",  desc: "Verdadero o falso",                  color: "#059669", group: "Selección" },
+  // Especial
+  { value: "date",       label: "Fecha",         icon: "▦",  desc: "Fechas y horarios",                  color: "#9333EA", group: "Especial" },
+  { value: "relation",   label: "Relación",      icon: "⇢",  desc: "Apunta a registros de otro dataset", color: "#DB2777", group: "Especial" },
 ];
 
+const GROUPS = ["Texto", "Número", "Selección", "Especial"];
+
 export default function AddColumnModal({ onSave, onClose }: Props) {
-  const [name, setName]                       = useState("");
-  const [fieldKey, setFieldKey]               = useState("");
-  const [dataType, setDataType]               = useState<ColumnDefinition["data_type"]>("text");
-  const [required, setRequired]               = useState(false);
-  const [options, setOptions]                 = useState("");
-  const [min, setMin]                         = useState("");
-  const [max, setMax]                         = useState("");
+  const [name, setName]                         = useState("");
+  const [fieldKey, setFieldKey]                 = useState("");
+  const [dataType, setDataType]                 = useState<ColType>("text");
+  const [required, setRequired]                 = useState(false);
+  const [options, setOptions]                   = useState("");
+  const [min, setMin]                           = useState("");
+  const [max, setMax]                           = useState("");
   const [relatedDatasetId, setRelatedDatasetId] = useState("");
-  const [displayField, setDisplayField]       = useState("");
+  const [displayField, setDisplayField]         = useState("");
+  const [currencySymbol, setCurrencySymbol]     = useState("$");
+  const [maxRating, setMaxRating]               = useState(5);
 
   const { current: workspace } = useWorkspace();
   const wsId = workspace?.id;
@@ -49,7 +76,7 @@ export default function AddColumnModal({ onSave, onClose }: Props) {
     setFieldKey(v.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""));
   };
 
-  const handleTypeChange = (t: ColumnDefinition["data_type"]) => {
+  const handleTypeChange = (t: ColType) => {
     setDataType(t);
     setRelatedDatasetId("");
     setDisplayField("");
@@ -58,11 +85,19 @@ export default function AddColumnModal({ onSave, onClose }: Props) {
   const handleSave = () => {
     const rules: ColumnDefinition["rules"] = {};
     if (required) rules.required = true;
-    if (dataType === "enum" && options)
+    if ((dataType === "enum" || dataType === "multiselect") && options)
       rules.options = options.split(",").map((o) => o.trim()).filter(Boolean);
     if (dataType === "number") {
       if (min !== "") rules.min = Number(min);
       if (max !== "") rules.max = Number(max);
+    }
+    if (dataType === "currency") {
+      rules.currency_symbol = currencySymbol || "$";
+      if (min !== "") rules.min = Number(min);
+      if (max !== "") rules.max = Number(max);
+    }
+    if (dataType === "rating") {
+      rules.max_rating = maxRating;
     }
     if (dataType === "relation") {
       rules.related_dataset_id = relatedDatasetId;
@@ -78,8 +113,7 @@ export default function AddColumnModal({ onSave, onClose }: Props) {
 
   return (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal modal-v2">
-        {/* Accent bar */}
+      <div className="modal modal-v2" style={{ maxWidth: 560 }}>
         <div className="modal-accent" style={{ background: selectedType.color }} />
 
         <div className="modal-header">
@@ -120,30 +154,45 @@ export default function AddColumnModal({ onSave, onClose }: Props) {
               onChange={(e) => setFieldKey(e.target.value)} />
           </div>
 
-          {/* Type selector — visual cards */}
+          {/* Type selector — grouped */}
           <div className="form-group" style={{ marginBottom: 20 }}>
             <label className="form-label">Tipo de dato</label>
-            <div className="type-selector">
-              {TYPE_OPTIONS.map((t) => (
-                <button key={t.value} type="button"
-                  className={`type-option${dataType === t.value ? " active" : ""}`}
-                  style={dataType === t.value ? {
-                    borderColor: t.color,
-                    background: t.color + "10",
-                    "--type-color": t.color,
-                  } as React.CSSProperties : {}}
-                  onClick={() => handleTypeChange(t.value)}>
-                  <span className="type-option-icon" style={{ color: dataType === t.value ? t.color : "var(--color-text-muted)" }}>
-                    {t.icon}
-                  </span>
-                  <span className="type-option-label">{t.label}</span>
-                  <span className="type-option-desc">{t.desc}</span>
-                </button>
-              ))}
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {GROUPS.map((group) => {
+                const groupTypes = TYPE_OPTIONS.filter((t) => t.group === group);
+                return (
+                  <div key={group}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-text-muted)",
+                      textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
+                      {group}
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: 6 }}>
+                      {groupTypes.map((t) => (
+                        <button key={t.value} type="button"
+                          className={`type-option${dataType === t.value ? " active" : ""}`}
+                          style={dataType === t.value ? {
+                            borderColor: t.color,
+                            background: t.color + "12",
+                            "--type-color": t.color,
+                          } as React.CSSProperties : {}}
+                          onClick={() => handleTypeChange(t.value)}>
+                          <span className="type-option-icon" style={{ color: dataType === t.value ? t.color : "var(--color-text-muted)" }}>
+                            {t.icon}
+                          </span>
+                          <span className="type-option-label">{t.label}</span>
+                          <span className="type-option-desc">{t.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          {/* Relation config */}
+          {/* ── Type-specific rules ── */}
+
+          {/* Relation */}
           {dataType === "relation" && (
             <>
               <div className="form-group">
@@ -175,10 +224,10 @@ export default function AddColumnModal({ onSave, onClose }: Props) {
             </>
           )}
 
-          {/* Enum options */}
-          {dataType === "enum" && (
+          {/* Enum / Multiselect options */}
+          {(dataType === "enum" || dataType === "multiselect") && (
             <div className="form-group">
-              <label className="form-label">Opciones de la lista</label>
+              <label className="form-label">Opciones</label>
               <input placeholder="Activo, Inactivo, Pendiente" value={options}
                 onChange={(e) => setOptions(e.target.value)} />
               <span style={{ fontSize: 11.5, color: "var(--color-text-muted)" }}>Separa cada opción con una coma</span>
@@ -196,6 +245,49 @@ export default function AddColumnModal({ onSave, onClose }: Props) {
                 <label className="form-label">Máximo</label>
                 <input type="number" placeholder="Sin límite" value={max} onChange={(e) => setMax(e.target.value)} />
               </div>
+            </div>
+          )}
+
+          {/* Currency */}
+          {dataType === "currency" && (
+            <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr", gap: 12 }}>
+              <div className="form-group">
+                <label className="form-label">Símbolo</label>
+                <input value={currencySymbol} onChange={(e) => setCurrencySymbol(e.target.value)} placeholder="$" maxLength={5} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Mínimo</label>
+                <input type="number" placeholder="Sin límite" value={min} onChange={(e) => setMin(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Máximo</label>
+                <input type="number" placeholder="Sin límite" value={max} onChange={(e) => setMax(e.target.value)} />
+              </div>
+            </div>
+          )}
+
+          {/* Rating max */}
+          {dataType === "rating" && (
+            <div className="form-group">
+              <label className="form-label">Escala máxima</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                {[3, 5, 10].map((n) => (
+                  <button key={n} type="button"
+                    onClick={() => setMaxRating(n)}
+                    style={{
+                      padding: "4px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                      cursor: "pointer", border: "1.5px solid",
+                      background: maxRating === n ? "#D97706" : "transparent",
+                      color: maxRating === n ? "#fff" : "var(--color-text-secondary)",
+                      borderColor: maxRating === n ? "#D97706" : "var(--color-border)",
+                    }}>
+                    {"★".repeat(n > 5 ? 1 : n)} {n}
+                  </button>
+                ))}
+              </div>
+              <span style={{ fontSize: 11.5, color: "var(--color-text-muted)", marginTop: 4, display: "block" }}>
+                Vista previa: {"★".repeat(maxRating)}
+              </span>
             </div>
           )}
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os
 import uuid
+import uuid as _uuid_module
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -14,14 +15,29 @@ from sqlalchemy import select, func
 from database import get_db
 from models import User, DatasetPermission, DatasetGroupPermission, UserGroupMember, WorkspaceMember, Dataset
 
-SECRET_KEY = os.getenv("SECRET_KEY", "datavault-secret-change-in-production-xyz-123")
+# ── Secret key — obligatorio en producción ────────────────────────────────────
+_is_testing = os.getenv("TESTING", "false").lower() == "true"
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    if _is_testing:
+        SECRET_KEY = "test-secret-insecure-do-not-use-in-production-xyz-abc"
+    else:
+        raise RuntimeError(
+            "La variable de entorno SECRET_KEY debe estar configurada. "
+            "Genera una con: openssl rand -hex 32"
+        )
+elif len(SECRET_KEY) < 32 and not _is_testing:
+    raise RuntimeError("SECRET_KEY debe tener al menos 32 caracteres")
+
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_HOURS = 24
+ACCESS_TOKEN_EXPIRE_HOURS = 1
+REFRESH_TOKEN_EXPIRE_DAYS = 14
 WS_TICKET_EXPIRE_SECONDS = 60
 
-# Cookie config — el frontend nunca lee la cookie (httpOnly) y el navegador la envía sola
+# Cookie config
 COOKIE_NAME = "dv_token"
-COOKIE_SAMESITE = os.getenv("COOKIE_SAMESITE", "lax").lower()  # lax | strict | none
+REFRESH_COOKIE_NAME = "dv_refresh"
+COOKIE_SAMESITE = os.getenv("COOKIE_SAMESITE", "lax").lower()
 COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -29,13 +45,41 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 ROLE_RANK = {"none": 0, "viewer": 1, "editor": 2, "member": 2, "admin_ws": 3, "owner": 4, "admin": 5}
 
-# Workspace role → equivalent dataset permission level
 WS_ROLE_TO_DS_ROLE = {
     "owner":    "admin",
     "admin_ws": "editor",
     "member":   "editor",
 }
 
+# ── Redis opcional para revocación de refresh tokens ─────────────────────────
+try:
+    import redis.asyncio as _aioredis
+    _REDIS_URL = os.getenv("REDIS_URL")
+    _redis = _aioredis.from_url(_REDIS_URL, decode_responses=True) if _REDIS_URL else None
+except ImportError:
+    _redis = None
+
+
+async def revoke_token(jti: str, ttl_seconds: int) -> None:
+    """Marca un refresh token como revocado. No-op si Redis no está disponible."""
+    if _redis is None or ttl_seconds <= 0:
+        return
+    try:
+        await _redis.setex(f"revoked:{jti}", ttl_seconds, "1")
+    except Exception:
+        pass
+
+
+async def is_token_revoked(jti: str) -> bool:
+    if _redis is None:
+        return False
+    try:
+        return bool(await _redis.exists(f"revoked:{jti}"))
+    except Exception:
+        return False
+
+
+# ── Token helpers ─────────────────────────────────────────────────────────────
 
 def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
@@ -54,13 +98,31 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
+def create_refresh_token(user_id: str) -> tuple[str, str]:
+    """Devuelve (token, jti). El jti se usa para revocación en Redis."""
+    jti = str(_uuid_module.uuid4())
+    token = create_access_token(
+        {"sub": user_id, "scope": "refresh", "jti": jti},
+        expires_delta=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+    )
+    return token, jti
+
+
 def decode_token(token: str) -> dict | None:
-    """Decode and validate a JWT token. Returns payload dict or None."""
+    """Decodifica y valida un JWT. Devuelve el payload o None."""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload if payload.get("sub") else None
     except JWTError:
         return None
+
+
+def create_ws_ticket(user_id: str) -> str:
+    """JWT efímero (60s) para el handshake del WebSocket."""
+    return create_access_token(
+        {"sub": user_id, "scope": "ws"},
+        expires_delta=timedelta(seconds=WS_TICKET_EXPIRE_SECONDS),
+    )
 
 
 async def _resolve_token(
@@ -71,17 +133,6 @@ async def _resolve_token(
     if header_token:
         return header_token
     return request.cookies.get(COOKIE_NAME)
-
-
-def create_ws_ticket(user_id: str) -> str:
-    """JWT ephemeral (60s) emitido tras autenticarse, usado SOLO para el handshake del WebSocket.
-
-    Vive en JS (no httpOnly) por la duración del handshake; expira antes de poder reusarse.
-    """
-    return create_access_token(
-        {"sub": user_id, "scope": "ws"},
-        expires_delta=timedelta(seconds=WS_TICKET_EXPIRE_SECONDS),
-    )
 
 
 async def get_current_user(
@@ -111,20 +162,20 @@ async def get_current_user(
 
 
 async def effective_role(user: User, dataset_id: uuid.UUID | None, db: AsyncSession) -> str:
-    """Return the effective role for a user on a specific dataset.
+    """Rol efectivo del usuario sobre un dataset específico.
 
-    Priority:
-    1. Global admin → always admin
-    2. Direct DatasetPermission (user-level) → use that role
-    3. Best DatasetGroupPermission from user's groups → use highest role
-    4. Global user role (fallback)
+    Prioridad:
+    1. Admin global → siempre admin
+    2. Permiso directo de usuario (DatasetPermission)
+    3. Mejor permiso de grupo (DatasetGroupPermission)
+    4. Workspace membership → mapea a rol de dataset
+    5. Rol global del usuario (fallback)
     """
     if dataset_id is None:
         return user.role
     if user.role == "admin":
         return "admin"
 
-    # Check direct user permission (highest priority after admin)
     direct = await db.execute(
         select(DatasetPermission).where(
             DatasetPermission.dataset_id == dataset_id,
@@ -135,7 +186,6 @@ async def effective_role(user: User, dataset_id: uuid.UUID | None, db: AsyncSess
     if perm is not None:
         return perm.role
 
-    # Check group permissions — return highest role across all groups
     group_perms_result = await db.execute(
         select(DatasetGroupPermission)
         .join(UserGroupMember, DatasetGroupPermission.group_id == UserGroupMember.group_id)
@@ -149,7 +199,6 @@ async def effective_role(user: User, dataset_id: uuid.UUID | None, db: AsyncSess
         best = max(group_perms, key=lambda p: ROLE_RANK.get(p.role, 0))
         return best.role
 
-    # Check workspace membership via dataset's workspace_id
     ds_result = await db.execute(select(Dataset).where(Dataset.id == dataset_id))
     ds = ds_result.scalar_one_or_none()
     if ds and ds.workspace_id:
@@ -161,7 +210,6 @@ async def effective_role(user: User, dataset_id: uuid.UUID | None, db: AsyncSess
 
 
 def require_roles(*roles: str):
-    """Returns a FastAPI dependency that enforces role membership (global, no dataset context)."""
     async def _check(current_user: User = Depends(get_current_user)) -> User:
         if current_user.role not in roles:
             raise HTTPException(
@@ -173,7 +221,6 @@ def require_roles(*roles: str):
 
 
 def require_dataset_roles(*roles: str):
-    """Dependency factory that checks per-dataset permissions (including groups)."""
     async def _check(
         dataset_id: uuid.UUID,
         current_user: User = Depends(get_current_user),
@@ -189,22 +236,16 @@ def require_dataset_roles(*roles: str):
     return _check
 
 
-# Global role shortcuts (no dataset context)
 require_admin  = require_roles("admin")
 require_editor = require_roles("admin", "editor")
 require_viewer = require_roles("admin", "editor", "viewer")
 
-# Dataset-aware shortcuts
 ds_require_admin  = require_dataset_roles("admin")
 ds_require_editor = require_dataset_roles("admin", "editor")
 ds_require_viewer = require_dataset_roles("admin", "editor", "viewer")
 
 
 async def effective_workspace_role(user: User, workspace_id: uuid.UUID, db: AsyncSession) -> str | None:
-    """Devuelve el rol del usuario en un workspace: owner|manager|editor|viewer, o None.
-
-    Admin global siempre retorna 'owner'.
-    """
     if user.role == "admin":
         return "owner"
     result = await db.execute(
@@ -220,25 +261,12 @@ async def effective_workspace_role(user: User, workspace_id: uuid.UUID, db: Asyn
 async def effective_role_in_workspace(
     user: User, dataset_id: uuid.UUID | None, workspace_id: uuid.UUID | None, db: AsyncSession
 ) -> str:
-    """Rol efectivo considerando workspace primero, luego dataset perms, luego rol global.
-
-    Prioridad:
-    1. Admin global → siempre 'admin'
-    2. Rol de workspace → se convierte en permiso de dataset
-    3. Permiso directo de dataset
-    4. Mejor permiso de grupo en dataset
-    5. Rol global como fallback
-    """
     if user.role == "admin":
         return "admin"
-
-    # Workspace role takes priority over global role
     if workspace_id:
         ws_role = await effective_workspace_role(user, workspace_id, db)
         if ws_role:
             return WS_ROLE_TO_DS_ROLE.get(ws_role, "viewer")
-
-    # Fallback to dataset-level permissions
     if dataset_id:
         direct = await db.execute(
             select(DatasetPermission).where(
@@ -249,8 +277,6 @@ async def effective_role_in_workspace(
         perm = direct.scalar_one_or_none()
         if perm is not None:
             return perm.role
-
-        user_group_ids = select(UserGroupMember.group_id).where(UserGroupMember.user_id == user.id)
         group_perms_result = await db.execute(
             select(DatasetGroupPermission)
             .join(UserGroupMember, DatasetGroupPermission.group_id == UserGroupMember.group_id)
@@ -263,12 +289,10 @@ async def effective_role_in_workspace(
         if group_perms:
             best = max(group_perms, key=lambda p: ROLE_RANK.get(p.role, 0))
             return best.role
-
     return user.role
 
 
 def require_workspace_roles(*roles: str):
-    """Dependency que verifica que el usuario tenga uno de los roles dados en el workspace."""
     async def _check(
         workspace_id: uuid.UUID,
         current_user: User = Depends(get_current_user),

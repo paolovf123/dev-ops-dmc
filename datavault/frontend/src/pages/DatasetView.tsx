@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient, useQueries } from "@tanstack/react-query";
 import { useAuth } from "../auth/AuthContext";
@@ -45,6 +45,7 @@ export default function DatasetView() {
   const [showFilterRow, setShowFilterRow] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showSavedViews, setShowSavedViews] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showSchema, setShowSchema] = useState(false);
   const [historyRecordId, setHistoryRecordId] = useState<string | null>(null);
   const [relatedPanelRecordId, setRelatedPanelRecordId] = useState<string | null>(null);
@@ -54,7 +55,7 @@ export default function DatasetView() {
   const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [search, setSearch] = useState("");
   const exportRef = useRef<HTMLDivElement>(null);
-  const savedViewsRef = useRef<HTMLDivElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
   const [csvImporting, setCsvImporting] = useState(false);
@@ -116,8 +117,8 @@ export default function DatasetView() {
     const handler = (e: MouseEvent) => {
       if (exportRef.current && !exportRef.current.contains(e.target as Node))
         setShowExportMenu(false);
-      if (savedViewsRef.current && !savedViewsRef.current.contains(e.target as Node))
-        setShowSavedViews(false);
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node))
+        setShowMoreMenu(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -154,6 +155,11 @@ export default function DatasetView() {
   const totalRecords = recsResult?.total ?? 0;
 
   const currentDataset = datasets.find((d) => d.id === datasetId);
+  const currentWorkspaceId = currentDataset?.workspace_id ?? undefined;
+  // Only show datasets from the same workspace in relation pickers
+  const workspaceDatasets = currentWorkspaceId
+    ? datasets.filter((d) => d.workspace_id === currentWorkspaceId)
+    : datasets;
 
   const uniqueSourceIds = useMemo(
     () => [...new Set(joinedCols.map((j) => j.sourceDatasetId))],
@@ -369,11 +375,11 @@ export default function DatasetView() {
   const { connected: wsConnected } = useRealtimeSync(datasetId);
   const panelBadge = joinedCols.length + formulaCols.length;
 
-  const VIEW_MODES: { key: ViewMode; label: string; icon: string }[] = [
-    { key: "table", label: "Tabla", icon: "⊞" },
-    { key: "kanban", label: "Kanban", icon: "▦" },
-    { key: "chart", label: "Gráficos", icon: "📊" },
-    { key: "trash", label: "Papelera", icon: "🗑" },
+  const VIEW_MODES: { key: ViewMode; label: string; icon: React.ReactNode }[] = [
+    { key: "table",  label: "Tabla",    icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg> },
+    { key: "kanban", label: "Kanban",   icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="3" width="6" height="18" rx="1"/><rect x="9" y="3" width="6" height="12" rx="1"/><rect x="16" y="3" width="6" height="15" rx="1"/></svg> },
+    { key: "chart",  label: "Gráficos", icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> },
+    { key: "trash",  label: "Papelera", icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg> },
   ];
 
   return (
@@ -488,12 +494,14 @@ export default function DatasetView() {
           <>
             <div className="toolbar">
               {/* Search */}
-              <div style={{ position: "relative", flex: "1 1 200px", maxWidth: 300 }}>
-                <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)",
-                  color: "var(--color-text-muted)", pointerEvents: "none", fontSize: 14 }}>🔍</span>
-                <input placeholder="Buscar en todos los campos..."
+              <div style={{ position: "relative", flex: "1 1 180px", maxWidth: 280 }}>
+                <svg style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
+                  width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2">
+                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                </svg>
+                <input placeholder="Buscar..."
                   value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-                  style={{ paddingLeft: 32 }} />
+                  style={{ paddingLeft: 30 }} />
               </div>
 
               {/* Filter toggle */}
@@ -503,7 +511,8 @@ export default function DatasetView() {
                   borderColor: showFilterRow ? "var(--color-primary-border)" : undefined,
                   color: showFilterRow ? "var(--pm-green-600)" : undefined,
                 }}>
-                ⚡ Filtros
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                Filtros
                 {activeFilterCount > 0 && <span className="btn-badge">{activeFilterCount}</span>}
               </button>
 
@@ -515,73 +524,27 @@ export default function DatasetView() {
                   borderColor: showColPanel ? "var(--color-primary-border)" : undefined,
                   color: showColPanel ? "var(--pm-green-600)" : undefined,
                 }}>
-                ⊞ Columnas
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="18"/><rect x="14" y="3" width="7" height="18"/></svg>
+                Columnas
                 {columns.length > 0 && (
                   <span style={{ fontSize: 11, color: "var(--color-text-muted)", fontWeight: 400 }}>
-                    ({columns.length - hiddenCount}/{columns.length})
+                    {columns.length - hiddenCount}/{columns.length}
                   </span>
                 )}
                 {panelBadge > 0 && <span className="btn-badge">{panelBadge}</span>}
               </button>
 
-              <div className="toolbar-sep" />
-
-              {/* Saved views */}
-              <div style={{ position: "relative" }} ref={savedViewsRef}>
-                <button className="btn btn-secondary"
-                  onClick={() => setShowSavedViews((v) => !v)}
-                  style={{
-                    background: showSavedViews ? "var(--color-primary-bg)" : undefined,
-                    borderColor: showSavedViews ? "var(--color-primary-border)" : undefined,
-                  }}>
-                  ◉ Vistas
-                  {savedViews.length > 0 && <span className="btn-badge">{savedViews.length}</span>}
-                </button>
-                {showSavedViews && (
-                  <div className="export-menu" style={{ minWidth: 220 }}>
-                    <div style={{ padding: "8px 12px 4px", borderBottom: "1px solid var(--color-border-light)" }}>
-                      <button className="btn btn-primary" style={{ width: "100%", fontSize: 12 }}
-                        onClick={saveCurrentView}>
-                        + Guardar vista actual
-                      </button>
-                    </div>
-                    {savedViews.length === 0 && (
-                      <p style={{ padding: "12px", fontSize: 12, color: "var(--color-text-muted)", margin: 0 }}>
-                        No hay vistas guardadas
-                      </p>
-                    )}
-                    {savedViews.map((v) => (
-                      <div key={v.id} className="export-menu-item" style={{ cursor: "default" }}>
-                        <button className="btn btn-ghost" style={{ flex: 1, textAlign: "left", fontSize: 13 }}
-                          onClick={() => applyView(v)}>
-                          ◉ {v.name}
-                        </button>
-                        <button onClick={() => deleteView(v.id)}
-                          style={{ background: "none", border: "none", cursor: "pointer",
-                            color: "var(--color-text-muted)", fontSize: 16, padding: "0 4px" }}>×</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
               <div style={{ flex: 1 }} />
 
-              <div className="toolbar-sep" />
-
-              {/* Related records panel — when exactly 1 row selected */}
+              {/* Selection actions — only visible when rows are selected */}
               {selectedIds.size === 1 && (
-                <button
-                  className="btn btn-secondary"
+                <button className="btn btn-secondary"
                   style={{ borderColor: "var(--pm-violet-100)", color: "var(--pm-violet-600)" }}
-                  onClick={() => setRelatedPanelRecordId([...selectedIds][0])}
-                  title="Ver registros relacionados de este registro"
-                >
-                  ⇢ Relacionados
+                  onClick={() => setRelatedPanelRecordId([...selectedIds][0])}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Relacionados
                 </button>
               )}
-
-              {/* Bulk delete — editor+ only */}
               {selectedIds.size > 0 && effectiveIsEditor && (
                 <button className="btn btn-danger-ghost"
                   onClick={async () => {
@@ -594,45 +557,43 @@ export default function DatasetView() {
                     if (ok) bulkDeleteMut.mutate([...selectedIds]);
                   }}
                   disabled={bulkDeleteMut.isPending}>
-                  🗑 Eliminar ({selectedIds.size})
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+                  Eliminar ({selectedIds.size})
                 </button>
               )}
 
               {/* CSV/Excel import — editor+ only */}
-              <input ref={csvInputRef} type="file" accept=".csv,.xlsx,.xls"
-                style={{ display: "none" }}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) handleCsvFile(f);
-                  e.target.value = "";
-                }} />
+              <input ref={csvInputRef} type="file" accept=".csv,.xlsx,.xls" style={{ display: "none" }}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCsvFile(f); e.target.value = ""; }} />
               {effectiveIsEditor && (
                 <button className="btn btn-secondary"
                   onClick={() => csvInputRef.current?.click()}
                   disabled={csvImporting || columns.length === 0}
                   title="Importar CSV o Excel">
-                  {csvImporting ? "Importando..." : "⬆ Importar"}
+                  {csvImporting
+                    ? <><span className="csv-loading-spinner" style={{ width: 11, height: 11 }} /> Importando…</>
+                    : <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Importar</>
+                  }
                 </button>
               )}
 
               {/* Export dropdown */}
               <div style={{ position: "relative" }} ref={exportRef}>
-                <button className="btn btn-secondary"
-                  onClick={() => setShowExportMenu((v) => !v)}
-                  style={{ gap: 5 }}>
-                  <span style={{ fontSize: 14 }}>⬇</span> Exportar
-                  <span style={{ fontSize: 10, opacity: 0.6 }}>▾</span>
+                <button className="btn btn-secondary" onClick={() => setShowExportMenu((v) => !v)}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Exportar
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>
                 </button>
                 {showExportMenu && (
                   <div className="export-menu">
-                    <button className="export-menu-item" onClick={() => handleExport("csv")}>
+                    <button className="export-menu-item" onClick={() => { handleExport("csv"); setShowExportMenu(false); }}>
                       <span className="export-menu-icon" style={{ background: "#E8F7EE", color: "#007A36" }}>CSV</span>
                       <div>
                         <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>Exportar como CSV</p>
                         <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>Compatible con cualquier herramienta</p>
                       </div>
                     </button>
-                    <button className="export-menu-item" onClick={() => handleExport("xlsx")}>
+                    <button className="export-menu-item" onClick={() => { handleExport("xlsx"); setShowExportMenu(false); }}>
                       <span className="export-menu-icon" style={{ background: "#E8F7EE", color: "#007A36" }}>XLS</span>
                       <div>
                         <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>Exportar como Excel</p>
@@ -640,36 +601,81 @@ export default function DatasetView() {
                       </div>
                     </button>
                     <div style={{ padding: "6px 12px 8px", borderTop: "1px solid var(--color-border-light)" }}>
-                      <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>
-                        {filteredRecords.length} filas visibles
-                      </p>
+                      <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>{filteredRecords.length} filas visibles</p>
                     </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ⋯ Más — vistas, diagrama, vincular */}
+              <div style={{ position: "relative" }} ref={moreMenuRef}>
+                <button className="btn btn-secondary" onClick={() => setShowMoreMenu((v) => !v)}
+                  title="Más opciones"
+                  style={{ background: showMoreMenu ? "var(--color-primary-bg)" : undefined, borderColor: showMoreMenu ? "var(--color-primary-border)" : undefined }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                  {(savedViews.length > 0) && <span className="btn-badge">{savedViews.length}</span>}
+                </button>
+                {showMoreMenu && (
+                  <div className="export-menu" style={{ minWidth: 240, right: 0, left: "auto" }}>
+                    {/* Saved views section */}
+                    <div style={{ padding: "8px 12px 6px", borderBottom: "1px solid var(--color-border-light)" }}>
+                      <p style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-text-muted)" }}>Vistas guardadas</p>
+                      <button className="btn btn-primary" style={{ width: "100%", fontSize: 12 }} onClick={() => { saveCurrentView(); }}>
+                        + Guardar vista actual
+                      </button>
+                      {savedViews.length === 0 && (
+                        <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--color-text-muted)" }}>No hay vistas guardadas</p>
+                      )}
+                      {savedViews.map((v) => (
+                        <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
+                          <button className="btn btn-ghost" style={{ flex: 1, textAlign: "left", fontSize: 12, height: 28 }} onClick={() => { applyView(v); setShowMoreMenu(false); }}>
+                            ◉ {v.name}
+                          </button>
+                          <button onClick={() => deleteView(v.id)}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)", fontSize: 15, padding: "0 4px", lineHeight: 1 }}>×</button>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Other actions */}
+                    <button className="export-menu-item" onClick={() => { setShowSchema(true); setShowMoreMenu(false); }} disabled={columns.length === 0}>
+                      <span className="export-menu-icon" style={{ background: "#F0F9FF", color: "#0284C7" }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="3" width="6" height="6" rx="1"/><rect x="3" y="15" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/></svg>
+                      </span>
+                      <div>
+                        <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>Ver diagrama</p>
+                        <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>Relaciones entre datasets</p>
+                      </div>
+                    </button>
+                    {effectiveIsAdmin && (
+                      <button className="export-menu-item" onClick={() => { setShowLinkModal(true); setShowMoreMenu(false); }} disabled={!currentDataset}>
+                        <span className="export-menu-icon" style={{ background: "#FFF0F6", color: "#DB2777" }}>⇢</span>
+                        <div>
+                          <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>Vincular tabla</p>
+                          <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>Crear columna FK hacia otro dataset</p>
+                        </div>
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
 
               <div className="toolbar-sep" />
 
-              {/* Admin-only: new table + new column */}
-              {effectiveIsAdmin && (
-                <button className="btn btn-secondary"
-                  onClick={() => setShowLinkModal(true)}
-                  disabled={!currentDataset}
-                  style={{ borderColor: "#DB2777", color: "#DB2777" }}
-                  title="Vincular este dataset con otro mediante una columna FK">
-                  ⇢ Vincular tabla
-                </button>
-              )}
+              {/* Admin: add column */}
               {effectiveIsAdmin && (
                 <button className="btn btn-secondary" onClick={() => setShowAddCol(true)}>
-                  <span style={{ fontSize: 16, lineHeight: 1 }}>＋</span> Columna
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Columna
                 </button>
               )}
+
+              {/* Editor+: new record */}
               {effectiveIsEditor && (
                 <button className="btn btn-primary"
                   onClick={() => navigate(`/datasets/${datasetId}/new`)}
                   disabled={columns.length === 0}>
-                  <span style={{ fontSize: 16, lineHeight: 1 }}>＋</span> Nuevo registro
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Nuevo registro
                 </button>
               )}
             </div>
@@ -817,6 +823,7 @@ export default function DatasetView() {
             currentDatasetId={datasetId!}
             currentDatasetName={currentDataset.name}
             currentColumns={columns}
+            workspaceId={currentWorkspaceId}
           />
         )}
       </main>
@@ -829,6 +836,7 @@ export default function DatasetView() {
         <LinkTableModal
           currentDatasetId={datasetId!}
           currentDatasetName={currentDataset.name}
+          workspaceId={currentWorkspaceId}
           onSave={(col) => { addColMut.mutate(col); setShowLinkModal(false); }}
           onClose={() => setShowLinkModal(false)}
         />
@@ -848,6 +856,7 @@ export default function DatasetView() {
           currentDatasetId={datasetId!}
           currentDatasetName={currentDataset.name}
           currentColumns={columns}
+          workspaceId={currentWorkspaceId}
           onClose={() => setShowSchema(false)}
         />
       )}
@@ -885,6 +894,7 @@ export default function DatasetView() {
         <ColumnPanel
           currentDatasetId={datasetId!}
           currentDatasetName={currentDataset?.name ?? ""}
+          workspaceId={currentWorkspaceId}
           columns={columns}
           hiddenCols={hiddenCols}
           joinedCols={joinedCols}

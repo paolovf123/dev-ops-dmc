@@ -1,4 +1,3 @@
-from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Response, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, cast, Text, func
@@ -7,6 +6,7 @@ from database import get_db
 from models import Dataset, ColumnDefinition, Record, ChangeHistory, User
 from schemas import RecordCreate, RecordUpdate, RecordOut, BulkDeleteBody
 from auth import get_current_user, require_editor, require_viewer, ds_require_editor, ds_require_viewer
+from pagination import MAX_RECORDS_PER_REQUEST, DEFAULT_PAGE_SIZE
 from limiter import limiter
 import logging
 import uuid
@@ -37,14 +37,14 @@ def _validate(data: dict, columns: list[ColumnDefinition], skip_required: bool =
         value = data.get(col.field_key)
         rules = col.rules or {}
 
-        if not skip_required and rules.get("required") and (value is None or value == ""):
+        if not skip_required and rules.get("required") and (value is None or value == "" or value == []):
             errors.append(f"'{col.name}' is required")
             continue
 
-        if value is None or value == "":
+        if value is None or value == "" or value == []:
             continue
 
-        if col.data_type == "number":
+        if col.data_type in ("number", "currency"):
             try:
                 num = float(value)
             except (TypeError, ValueError):
@@ -55,14 +55,50 @@ def _validate(data: dict, columns: list[ColumnDefinition], skip_required: bool =
             if "max" in rules and num > rules["max"]:
                 errors.append(f"'{col.name}' must be <= {rules['max']}")
 
-        if col.data_type == "enum":
+        elif col.data_type == "percent":
+            try:
+                num = float(value)
+            except (TypeError, ValueError):
+                errors.append(f"'{col.name}' must be a number")
+                continue
+            if num < 0 or num > 100:
+                errors.append(f"'{col.name}' must be between 0 and 100")
+
+        elif col.data_type == "rating":
+            try:
+                num = int(float(value))
+            except (TypeError, ValueError):
+                errors.append(f"'{col.name}' must be a number")
+                continue
+            max_rating = rules.get("max_rating", 5)
+            if num < 1 or num > max_rating:
+                errors.append(f"'{col.name}' must be between 1 and {max_rating}")
+
+        elif col.data_type == "enum":
             options = rules.get("options", [])
-            if value not in options:
+            if options and value not in options:
                 errors.append(f"'{col.name}' must be one of {options}")
 
-        if col.data_type == "boolean":
+        elif col.data_type == "multiselect":
+            options = rules.get("options", [])
+            if options:
+                vals = value if isinstance(value, list) else [v.strip() for v in str(value).split(",") if v.strip()]
+                invalid = [v for v in vals if v not in options]
+                if invalid:
+                    errors.append(f"'{col.name}' invalid options: {invalid}")
+
+        elif col.data_type == "boolean":
             if not isinstance(value, bool) and str(value).lower() not in ("true", "false", "1", "0"):
                 errors.append(f"'{col.name}' must be true or false")
+
+        elif col.data_type == "email":
+            s = str(value)
+            if "@" not in s or "." not in s.split("@")[-1]:
+                errors.append(f"'{col.name}' must be a valid email")
+
+        elif col.data_type == "url":
+            if not str(value).startswith(("http://", "https://")):
+                errors.append(f"'{col.name}' must start with http:// or https://")
 
     return errors
 
@@ -74,7 +110,7 @@ async def list_records(
     search: str | None = Query(None),
     include_deleted: bool = Query(False),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, le=1000),
+    limit: int = Query(DEFAULT_PAGE_SIZE, le=MAX_RECORDS_PER_REQUEST),
     _: User = Depends(ds_require_viewer),
     db: AsyncSession = Depends(get_db),
 ):

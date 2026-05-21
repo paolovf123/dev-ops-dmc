@@ -10,23 +10,36 @@ interface Props {
   onClose: () => void;
 }
 
-const TYPE_OPTIONS: { value: ColumnDefinition["data_type"]; label: string; icon: string; color: string }[] = [
-  { value: "text",     label: "Texto",    icon: "Aa", color: "#64748B" },
-  { value: "number",   label: "Número",   icon: "#",  color: "#2563EB" },
-  { value: "date",     label: "Fecha",    icon: "▦",  color: "#7C3AED" },
-  { value: "enum",     label: "Lista",    icon: "≡",  color: "#D97706" },
-  { value: "relation", label: "Relación", icon: "⇢",  color: "#DB2777" },
+type ColType = ColumnDefinition["data_type"];
+
+const TYPE_OPTIONS: { value: ColType; label: string; icon: string; color: string }[] = [
+  { value: "text",        label: "Texto",       icon: "Aa", color: "#64748B" },
+  { value: "long_text",   label: "Texto largo", icon: "¶",  color: "#475569" },
+  { value: "url",         label: "Enlace",      icon: "⎋",  color: "#0891B2" },
+  { value: "email",       label: "Email",       icon: "✉",  color: "#0284C7" },
+  { value: "phone",       label: "Teléfono",    icon: "☎",  color: "#0369A1" },
+  { value: "number",      label: "Número",      icon: "#",  color: "#2563EB" },
+  { value: "currency",    label: "Moneda",      icon: "$",  color: "#16A34A" },
+  { value: "percent",     label: "Porcentaje",  icon: "%",  color: "#7C3AED" },
+  { value: "rating",      label: "Calific.",    icon: "★",  color: "#D97706" },
+  { value: "enum",        label: "Lista",       icon: "≡",  color: "#EA580C" },
+  { value: "multiselect", label: "Multi-lista", icon: "☰",  color: "#C2410C" },
+  { value: "boolean",     label: "Sí / No",     icon: "✓",  color: "#059669" },
+  { value: "date",        label: "Fecha",       icon: "▦",  color: "#9333EA" },
+  { value: "relation",    label: "Relación",    icon: "⇢",  color: "#DB2777" },
 ];
 
 export default function EditColumnModal({ column, onSave, onClose }: Props) {
-  const [name, setName]                       = useState(column.name);
-  const [dataType, setDataType]               = useState(column.data_type);
-  const [required, setRequired]               = useState(!!column.rules.required);
-  const [options, setOptions]                 = useState((column.rules.options ?? []).join(", "));
-  const [min, setMin]                         = useState(column.rules.min !== undefined ? String(column.rules.min) : "");
-  const [max, setMax]                         = useState(column.rules.max !== undefined ? String(column.rules.max) : "");
+  const [name, setName]                         = useState(column.name);
+  const [dataType, setDataType]                 = useState<ColType>(column.data_type);
+  const [required, setRequired]                 = useState(!!column.rules.required);
+  const [options, setOptions]                   = useState((column.rules.options ?? []).join(", "));
+  const [min, setMin]                           = useState(column.rules.min !== undefined ? String(column.rules.min) : "");
+  const [max, setMax]                           = useState(column.rules.max !== undefined ? String(column.rules.max) : "");
   const [relatedDatasetId, setRelatedDatasetId] = useState(column.rules.related_dataset_id ?? "");
   const [displayField, setDisplayField]         = useState(column.rules.display_field ?? "");
+  const [currencySymbol, setCurrencySymbol]     = useState(column.rules.currency_symbol ?? "$");
+  const [maxRating, setMaxRating]               = useState(column.rules.max_rating ?? 5);
 
   const { current: workspace } = useWorkspace();
   const wsId = workspace?.id;
@@ -43,7 +56,7 @@ export default function EditColumnModal({ column, onSave, onClose }: Props) {
     enabled: dataType === "relation" && !!relatedDatasetId,
   });
 
-  const handleTypeChange = (t: ColumnDefinition["data_type"]) => {
+  const handleTypeChange = (t: ColType) => {
     setDataType(t);
     if (t !== "relation") {
       setRelatedDatasetId("");
@@ -54,11 +67,19 @@ export default function EditColumnModal({ column, onSave, onClose }: Props) {
   const handleSave = () => {
     const rules: ColumnDefinition["rules"] = {};
     if (required) rules.required = true;
-    if (dataType === "enum" && options)
+    if ((dataType === "enum" || dataType === "multiselect") && options)
       rules.options = options.split(",").map((o) => o.trim()).filter(Boolean);
     if (dataType === "number") {
       if (min !== "") rules.min = Number(min);
       if (max !== "") rules.max = Number(max);
+    }
+    if (dataType === "currency") {
+      rules.currency_symbol = currencySymbol || "$";
+      if (min !== "") rules.min = Number(min);
+      if (max !== "") rules.max = Number(max);
+    }
+    if (dataType === "rating") {
+      rules.max_rating = maxRating;
     }
     if (dataType === "relation") {
       rules.related_dataset_id = relatedDatasetId;
@@ -72,7 +93,7 @@ export default function EditColumnModal({ column, onSave, onClose }: Props) {
 
   return (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal modal-v2">
+      <div className="modal modal-v2" style={{ maxWidth: 560 }}>
         <div className="modal-accent" style={{ background: selectedType.color }} />
 
         <div className="modal-header">
@@ -95,7 +116,7 @@ export default function EditColumnModal({ column, onSave, onClose }: Props) {
         </div>
 
         <div className="modal-body">
-          {/* field_key read-only */}
+          {/* field_key read-only badge */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18,
             padding: "8px 12px", background: "var(--color-bg)", borderRadius: "var(--radius-sm)",
             border: "1px solid var(--color-border-light)" }}>
@@ -115,7 +136,8 @@ export default function EditColumnModal({ column, onSave, onClose }: Props) {
 
           <div className="form-group" style={{ marginBottom: 20 }}>
             <label className="form-label">Tipo de dato</label>
-            <div className="type-selector type-selector--compact">
+            <div className="type-selector type-selector--compact"
+              style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(86px, 1fr))", gap: 6 }}>
               {TYPE_OPTIONS.map((t) => (
                 <button key={t.value} type="button"
                   className={`type-option type-option--compact${dataType === t.value ? " active" : ""}`}
@@ -130,7 +152,8 @@ export default function EditColumnModal({ column, onSave, onClose }: Props) {
             </div>
           </div>
 
-          {/* Relation config */}
+          {/* ── Type-specific rules ── */}
+
           {dataType === "relation" && (
             <>
               <div className="form-group">
@@ -141,9 +164,6 @@ export default function EditColumnModal({ column, onSave, onClose }: Props) {
                     <option key={ds.id} value={ds.id}>{ds.name}</option>
                   ))}
                 </select>
-                <span style={{ fontSize: 11.5, color: "var(--color-text-muted)" }}>
-                  El dropdown mostrará registros de este dataset
-                </span>
               </div>
               {relatedDatasetId && (
                 <div className="form-group">
@@ -154,20 +174,16 @@ export default function EditColumnModal({ column, onSave, onClose }: Props) {
                       <option key={col.id} value={col.field_key}>{col.name} ({col.field_key})</option>
                     ))}
                   </select>
-                  <span style={{ fontSize: 11.5, color: "var(--color-text-muted)" }}>
-                    El valor guardado siempre será el ID del registro seleccionado
-                  </span>
                 </div>
               )}
             </>
           )}
 
-          {dataType === "enum" && (
+          {(dataType === "enum" || dataType === "multiselect") && (
             <div className="form-group">
-              <label className="form-label">Opciones de la lista</label>
+              <label className="form-label">Opciones (separadas por coma)</label>
               <input placeholder="Activo, Inactivo, Pendiente" value={options}
                 onChange={(e) => setOptions(e.target.value)} />
-              <span style={{ fontSize: 11.5, color: "var(--color-text-muted)" }}>Separa cada opción con una coma</span>
             </div>
           )}
 
@@ -180,6 +196,44 @@ export default function EditColumnModal({ column, onSave, onClose }: Props) {
               <div className="form-group">
                 <label className="form-label">Máximo</label>
                 <input type="number" placeholder="Sin límite" value={max} onChange={(e) => setMax(e.target.value)} />
+              </div>
+            </div>
+          )}
+
+          {dataType === "currency" && (
+            <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr", gap: 12 }}>
+              <div className="form-group">
+                <label className="form-label">Símbolo</label>
+                <input value={currencySymbol} onChange={(e) => setCurrencySymbol(e.target.value)} placeholder="$" maxLength={5} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Mínimo</label>
+                <input type="number" placeholder="Sin límite" value={min} onChange={(e) => setMin(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Máximo</label>
+                <input type="number" placeholder="Sin límite" value={max} onChange={(e) => setMax(e.target.value)} />
+              </div>
+            </div>
+          )}
+
+          {dataType === "rating" && (
+            <div className="form-group">
+              <label className="form-label">Escala máxima</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                {[3, 5, 10].map((n) => (
+                  <button key={n} type="button"
+                    onClick={() => setMaxRating(n)}
+                    style={{
+                      padding: "4px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                      cursor: "pointer", border: "1.5px solid",
+                      background: maxRating === n ? "#D97706" : "transparent",
+                      color: maxRating === n ? "#fff" : "var(--color-text-secondary)",
+                      borderColor: maxRating === n ? "#D97706" : "var(--color-border)",
+                    }}>
+                    ★ {n}
+                  </button>
+                ))}
               </div>
             </div>
           )}

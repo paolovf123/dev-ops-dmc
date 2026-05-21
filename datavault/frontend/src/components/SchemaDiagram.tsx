@@ -7,179 +7,231 @@ interface Props {
   currentDatasetId: string;
   currentDatasetName: string;
   currentColumns: ColumnDefinition[];
+  workspaceId?: string;
   onClose: () => void;
 }
 
-// ── FK detection (mirrors RelatedDatasets) ────────────────────────────────────
 function normalize(name: string) { return name.toLowerCase().replace(/\s+/g, "_"); }
 function keyword(name: string) {
   const parts = normalize(name).split("_");
   return parts[parts.length - 1];
 }
 
-// ── Layout constants ──────────────────────────────────────────────────────────
-const BOX_W = 230;
-const HEADER_H = 38;
-const ROW_H = 22;
-const BOX_PAD = 10;
-const GAP_Y = 24;
-const COL_GAP = 100;     // horizontal gap between columns
-const MARGIN = 40;
+// ── Layout ────────────────────────────────────────────────────────────────────
+const BOX_W    = 268;
+const HDR_H    = 44;
+const ROW_H    = 26;
+const BOX_PAD  = 14;
+const GAP_Y    = 44;
+const COL_GAP  = 188;
+const MARGIN   = 52;
+const MAX_ROWS = 10;
 
-const TYPE_COLORS: Record<string, string> = {
-  text: "#718096",
-  number: "#3182ce",
-  date: "#805ad5",
-  enum: "#d69e2e",
+// ── Type styling ──────────────────────────────────────────────────────────────
+const TYPE_SHORT: Record<string, string> = {
+  text:"txt", long_text:"↕txt", url:"url", email:"mail", phone:"tel",
+  number:"num", currency:"$", percent:"%", rating:"★",
+  enum:"list", multiselect:"list+", boolean:"bool", date:"date", relation:"→",
+};
+const TYPE_FG: Record<string, string> = {
+  text:"#64748B", long_text:"#475569", url:"#0891B2", email:"#0284C7", phone:"#0369A1",
+  number:"#2563EB", currency:"#16A34A", percent:"#7C3AED", rating:"#D97706",
+  enum:"#B45309", multiselect:"#C2410C", boolean:"#059669", date:"#7C3AED", relation:"#DB2777",
+};
+const TYPE_BG: Record<string, string> = {
+  text:"#F1F5F9", long_text:"#F1F5F9", url:"#E0F2FE", email:"#E0F2FE", phone:"#DBEAFE",
+  number:"#DBEAFE", currency:"#DCFCE7", percent:"#EDE9FE", rating:"#FEF3C7",
+  enum:"#FEF9C3", multiselect:"#FEE2E2", boolean:"#DCFCE7", date:"#EDE9FE", relation:"#FCE7F3",
 };
 
-// ── SVG box for one table ─────────────────────────────────────────────────────
-function TableBox({
-  x, y, name, columns, isCurrent, accent,
-}: {
-  x: number; y: number; name: string; columns: ColumnDefinition[];
-  isCurrent?: boolean; accent?: string;
-}) {
-  const headerColor = isCurrent ? "#009A44"
-    : accent === "parent" ? "#3B82F6"
-    : accent === "child" ? "#F5821F"
-    : "#6B7280";
+function boxH(cols: ColumnDefinition[]) {
+  return HDR_H + Math.min(cols.length, MAX_ROWS) * ROW_H + BOX_PAD
+    + (cols.length > MAX_ROWS ? ROW_H : 0);
+}
 
-  const height = HEADER_H + columns.length * ROW_H + BOX_PAD;
-  const colLimit = Math.min(columns.length, 10);
+// ── Table box ─────────────────────────────────────────────────────────────────
+function TableBox({ x, y, name, columns, accent, isCurrent }: {
+  x: number; y: number; name: string;
+  columns: ColumnDefinition[]; accent: string; isCurrent?: boolean;
+}) {
+  const h = boxH(columns);
+  const shown = Math.min(columns.length, MAX_ROWS);
+  const STRIPE = 5;
 
   return (
     <g>
-      {/* Shadow */}
-      <rect x={x + 3} y={y + 3} width={BOX_W} height={height}
-        rx={8} fill="rgba(0,0,0,0.08)" />
-      {/* Box */}
-      <rect x={x} y={y} width={BOX_W} height={height}
-        rx={8} fill="white" stroke={headerColor} strokeWidth={isCurrent ? 2.5 : 1.5} />
-      {/* Header */}
-      <rect x={x} y={y} width={BOX_W} height={HEADER_H}
-        rx={8} fill={headerColor} />
-      <rect x={x} y={y + HEADER_H - 8} width={BOX_W} height={8} fill={headerColor} />
-      {/* Table name */}
-      <text x={x + BOX_W / 2} y={y + HEADER_H / 2 + 5}
-        textAnchor="middle" fill="white" fontSize={13} fontWeight={700}
-        fontFamily="Inter, system-ui, sans-serif"
-        style={{ letterSpacing: 0.2 }}>
-        {name.length > 22 ? name.slice(0, 21) + "…" : name}
+      {/* soft shadow */}
+      <rect x={x + 3} y={y + 3} width={BOX_W} height={h} rx={10}
+        fill="rgba(0,0,0,0.07)" />
+      {/* card body */}
+      <rect x={x} y={y} width={BOX_W} height={h} rx={10}
+        fill="white" stroke={isCurrent ? accent : "#E2E8F0"}
+        strokeWidth={isCurrent ? 2.5 : 1} />
+      {/* left accent stripe */}
+      <rect x={x} y={y} width={STRIPE} height={h} rx={10} fill={accent} />
+      <rect x={x} y={y + 8} width={STRIPE} height={h - 16} fill={accent} />
+      {/* header bg */}
+      {isCurrent && (
+        <rect x={x + STRIPE} y={y} width={BOX_W - STRIPE} height={HDR_H}
+          rx={10} fill={accent + "18"} />
+      )}
+      {/* header divider */}
+      <line x1={x + STRIPE} y1={y + HDR_H} x2={x + BOX_W} y2={y + HDR_H}
+        stroke="#E2E8F0" strokeWidth={1} />
+      {/* table name */}
+      <text x={x + STRIPE + 12} y={y + HDR_H / 2 + 5}
+        fill={accent} fontSize={13} fontWeight={700}
+        fontFamily="Inter,system-ui,sans-serif">
+        {name.length > 24 ? name.slice(0, 23) + "…" : name}
+      </text>
+      {/* column count badge */}
+      <rect x={x + BOX_W - 42} y={y + 13} width={34} height={18} rx={9}
+        fill={accent + "22"} />
+      <text x={x + BOX_W - 25} y={y + 25} textAnchor="middle"
+        fontSize={10} fill={accent} fontWeight={700}
+        fontFamily="Inter,system-ui,sans-serif">
+        {columns.length} col
       </text>
 
-      {/* Columns */}
-      {columns.slice(0, colLimit).map((col, i) => {
-        const cy = y + HEADER_H + i * ROW_H + ROW_H / 2 + 5;
+      {/* column rows */}
+      {columns.slice(0, shown).map((col, i) => {
+        const ry = y + HDR_H + i * ROW_H;
+        const cy = ry + ROW_H / 2 + 4;
         const isFk = col.field_key.startsWith("id_");
+        const tShort = TYPE_SHORT[col.data_type] ?? col.data_type.slice(0, 4);
+        const tFg = TYPE_FG[col.data_type] ?? "#64748B";
+        const tBg = TYPE_BG[col.data_type] ?? "#F1F5F9";
+        const badgeW = Math.max(tShort.length * 7 + 10, 32);
+
         return (
           <g key={col.id}>
-            {/* Alternating row bg */}
-            {i % 2 === 1 && (
-              <rect x={x + 1} y={y + HEADER_H + i * ROW_H + 1}
-                width={BOX_W - 2} height={ROW_H} fill="#F9FAFB" />
+            {/* alternating row bg */}
+            {i % 2 === 0 && (
+              <rect x={x + STRIPE + 1} y={ry + 1} width={BOX_W - STRIPE - 2}
+                height={ROW_H - 1} fill="#FAFBFC" />
             )}
-            {/* FK indicator */}
+            {/* FK icon */}
             {isFk && (
-              <text x={x + 14} y={cy} fontSize={10} fill="#F5821F" fontWeight={700}>🔑</text>
+              <rect x={x + STRIPE + 6} y={ry + 6} width={18} height={14}
+                rx={4} fill="#FEF3C7" />
             )}
-            {/* Field name */}
-            <text x={x + (isFk ? 28 : 14)} y={cy}
-              fontSize={11.5} fill="#374151" fontFamily="Inter, system-ui, sans-serif">
-              {col.field_key.length > 20 ? col.field_key.slice(0, 19) + "…" : col.field_key}
+            {isFk && (
+              <text x={x + STRIPE + 15} y={cy} textAnchor="middle"
+                fontSize={9} fill="#D97706" fontWeight={700}
+                fontFamily="Inter,system-ui,sans-serif">FK</text>
+            )}
+            {/* field name */}
+            <text x={x + STRIPE + (isFk ? 30 : 10)} y={cy}
+              fontSize={11.5} fill={isFk ? "#92400E" : "#374151"}
+              fontFamily="Inter,system-ui,sans-serif"
+              fontWeight={isFk ? 600 : 400}>
+              {col.field_key.length > 21
+                ? col.field_key.slice(0, 20) + "…"
+                : col.field_key}
             </text>
-            {/* Type badge */}
-            <text x={x + BOX_W - 12} y={cy} fontSize={10}
-              fill={TYPE_COLORS[col.data_type] ?? "#6B7280"}
-              textAnchor="end" fontFamily="Inter, system-ui, sans-serif" fontWeight={600}>
-              {col.data_type}
+            {/* type badge */}
+            <rect x={x + BOX_W - badgeW - 8} y={ry + 5}
+              width={badgeW} height={ROW_H - 10} rx={5} fill={tBg} />
+            <text x={x + BOX_W - badgeW / 2 - 8} y={cy}
+              textAnchor="middle" fontSize={9.5}
+              fill={tFg} fontWeight={700}
+              fontFamily="Inter,system-ui,sans-serif">
+              {tShort}
             </text>
           </g>
         );
       })}
 
-      {/* "…more" truncation */}
-      {columns.length > colLimit && (
-        <text x={x + BOX_W / 2} y={y + HEADER_H + colLimit * ROW_H + 6}
-          textAnchor="middle" fontSize={11} fill="#9CA3AF" fontFamily="Inter, system-ui, sans-serif">
-          +{columns.length - colLimit} más…
+      {/* overflow */}
+      {columns.length > MAX_ROWS && (
+        <text x={x + BOX_W / 2} y={y + HDR_H + MAX_ROWS * ROW_H + BOX_PAD - 2}
+          textAnchor="middle" fontSize={10.5} fill="#94A3B8"
+          fontFamily="Inter,system-ui,sans-serif">
+          +{columns.length - MAX_ROWS} columnas más
         </text>
       )}
     </g>
   );
 }
 
-// ── Bezier connection line ────────────────────────────────────────────────────
+// ── Bezier connection with label near source ───────────────────────────────────
 function Connection({
-  x1, y1, x2, y2, label, color,
+  x1, y1, x2, y2, label, color, markerId,
 }: {
   x1: number; y1: number; x2: number; y2: number;
-  label: string; color: string;
+  label: string; color: string; markerId: string;
 }) {
   const mx = (x1 + x2) / 2;
-  const d = `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`;
-  const lx = mx;
-  const ly = (y1 + y2) / 2;
+  const d = `M ${x1} ${y1} C ${mx} ${y1} ${mx} ${y2} ${x2} ${y2}`;
+
+  // Label at ~25% along bezier (near source)
+  const lx = 0.703 * x1 + 0.297 * x2;
+  const ly = 0.844 * y1 + 0.156 * y2 - 18;
+  const text = label.length > 16 ? label.slice(0, 15) + "…" : label;
+  const pw = text.length * 6.8 + 16;
 
   return (
     <g>
-      <path d={d} fill="none" stroke={color} strokeWidth={1.8}
-        strokeDasharray={label.startsWith("id_") ? "none" : "5,3"} opacity={0.7} />
-      {/* Arrow at target */}
-      <polygon
-        points={`${x2},${y2} ${x2 - 8},${y2 - 4} ${x2 - 8},${y2 + 4}`}
-        fill={color} opacity={0.8} />
-      {/* FK label pill */}
-      <rect x={lx - 36} y={ly - 10} width={72} height={18}
-        rx={9} fill="white" stroke={color} strokeWidth={1} />
+      <path d={d} fill="none" stroke={color} strokeWidth={2} opacity={0.65}
+        markerEnd={`url(#${markerId})`} />
+      <rect x={lx - pw / 2} y={ly - 10} width={pw} height={19}
+        rx={9} fill="white" stroke={color} strokeWidth={1.2} opacity={0.95} />
       <text x={lx} y={ly + 4} textAnchor="middle"
-        fontSize={10} fill={color} fontWeight={600}
-        fontFamily="Inter, system-ui, sans-serif">
-        {label.length > 12 ? label.slice(0, 11) + "…" : label}
+        fontSize={10} fill={color} fontWeight={700}
+        fontFamily="Inter,system-ui,sans-serif">
+        {text}
       </text>
     </g>
   );
 }
 
-// ── Download SVG as PNG ───────────────────────────────────────────────────────
+// ── PNG export ────────────────────────────────────────────────────────────────
 function downloadPng(svgEl: SVGSVGElement, name: string) {
-  const serializer = new XMLSerializer();
-  let src = serializer.serializeToString(svgEl);
-  // embed font style inline so canvas renders text
-  src = src.replace("<svg", `<svg xmlns="http://www.w3.org/2000/svg"`);
-
-  const { width, height } = svgEl.viewBox.baseVal;
+  const { width: W, height: H } = svgEl.viewBox.baseVal;
   const scale = 2;
+
+  // Clone and stamp explicit dimensions so the image renderer uses the full viewBox
+  const clone = svgEl.cloneNode(true) as SVGSVGElement;
+  clone.setAttribute("width", String(W));
+  clone.setAttribute("height", String(H));
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+
   const canvas = document.createElement("canvas");
-  canvas.width = width * scale;
-  canvas.height = height * scale;
+  canvas.width = W * scale;
+  canvas.height = H * scale;
   const ctx = canvas.getContext("2d")!;
-  ctx.fillStyle = "#F4F6F9";
+  ctx.fillStyle = "#EFF2F7";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.scale(scale, scale);
 
+  const src = new XMLSerializer().serializeToString(clone);
   const blob = new Blob([src], { type: "image/svg+xml;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const img = new Image();
   img.onload = () => {
-    ctx.drawImage(img, 0, 0);
+    ctx.drawImage(img, 0, 0, W, H);
     URL.revokeObjectURL(url);
     const a = document.createElement("a");
     a.download = `${name}-schema.png`;
     a.href = canvas.toDataURL("image/png");
     a.click();
   };
+  img.onerror = () => URL.revokeObjectURL(url);
   img.src = url;
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Main ──────────────────────────────────────────────────────────────────────
 export default function SchemaDiagram({
-  currentDatasetId, currentDatasetName, currentColumns, onClose,
+  currentDatasetId, currentDatasetName, currentColumns, workspaceId, onClose,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const curKw = keyword(currentDatasetName);
 
-  const { data: allDatasets = [] } = useQuery({ queryKey: ["datasets"], queryFn: () => getDatasets() });
+  const { data: allDatasets = [] } = useQuery({
+    queryKey: ["datasets", workspaceId ?? "all"],
+    queryFn: () => getDatasets(workspaceId ? { workspace_id: workspaceId } : undefined),
+  });
   const otherDatasets = allDatasets.filter((d) => d.id !== currentDatasetId);
 
   const colQueries = useQueries({
@@ -190,7 +242,7 @@ export default function SchemaDiagram({
     })),
   });
 
-  // Detect parents (current has id_X → points to X)
+  // FK detection
   const parentRels = currentColumns
     .filter((c) => c.field_key.startsWith("id_"))
     .map((c) => {
@@ -203,7 +255,6 @@ export default function SchemaDiagram({
     })
     .filter(Boolean) as { ds: { id: string; name: string }; fkKey: string }[];
 
-  // Detect children (other has id_<curKw> → points here)
   const childRels = otherDatasets
     .map((ds, i) => {
       const cols = colQueries[i]?.data ?? [];
@@ -214,11 +265,7 @@ export default function SchemaDiagram({
     })
     .filter(Boolean) as { ds: { id: string; name: string }; fkKey: string }[];
 
-  // Fetch columns for all related datasets for display in boxes
-  const relatedIds = [
-    ...parentRels.map((r) => r.ds.id),
-    ...childRels.map((r) => r.ds.id),
-  ];
+  const relatedIds = [...parentRels.map((r) => r.ds.id), ...childRels.map((r) => r.ds.id)];
   const relColQueries = useQueries({
     queries: relatedIds.map((id) => ({
       queryKey: ["columns", id],
@@ -231,47 +278,50 @@ export default function SchemaDiagram({
   );
 
   const isLoading = colQueries.some((q) => q.isLoading) || relColQueries.some((q) => q.isLoading);
+  const hasSiblings = parentRels.length > 0 || childRels.length > 0;
 
-  // ── Layout: parents LEFT | current CENTER | children RIGHT ────────────────
-  function boxHeight(cols: ColumnDefinition[]) {
-    return HEADER_H + Math.min(cols.length, 10) * ROW_H + BOX_PAD +
-      (cols.length > 10 ? ROW_H : 0);
-  }
+  // ── Layout ────────────────────────────────────────────────────────────────
+  const parentItems = parentRels.map((r) => ({ cols: relColsMap.get(r.ds.id) ?? [] }));
+  const childItems  = childRels.map((r)  => ({ cols: relColsMap.get(r.ds.id) ?? [] }));
+  const curH = boxH(currentColumns);
 
   function stackY(items: { cols: ColumnDefinition[] }[]) {
     let y = MARGIN;
     return items.map((it) => {
       const top = y;
-      y += boxHeight(it.cols) + GAP_Y;
+      y += boxH(it.cols) + GAP_Y;
       return top;
     });
   }
 
-  const parentItems = parentRels.map((r) => ({ cols: relColsMap.get(r.ds.id) ?? [] }));
-  const childItems = childRels.map((r) => ({ cols: relColsMap.get(r.ds.id) ?? [] }));
-  const curH = boxHeight(currentColumns);
-
   const parentYs = stackY(parentItems);
-  const childYs = stackY(childItems);
+  const childYs  = stackY(childItems);
 
-  const totalParentH = parentItems.reduce((s, it) => s + boxHeight(it.cols) + GAP_Y, 0);
-  const totalChildH = childItems.reduce((s, it) => s + boxHeight(it.cols) + GAP_Y, 0);
-  const totalCenterH = curH;
+  const totalParentH = parentItems.reduce((s, it) => s + boxH(it.cols) + GAP_Y, 0);
+  const totalChildH  = childItems.reduce((s, it)  => s + boxH(it.cols) + GAP_Y, 0);
+  const svgH = Math.max(totalParentH, totalChildH, curH) + MARGIN * 2;
 
-  const svgH = Math.max(totalParentH, totalChildH, totalCenterH) + MARGIN * 2;
-
-  const hasSiblings = parentRels.length > 0 || childRels.length > 0;
   const numCols = hasSiblings ? 3 : 1;
   const svgW = numCols === 1
     ? MARGIN * 2 + BOX_W
     : MARGIN + BOX_W + COL_GAP + BOX_W + COL_GAP + BOX_W + MARGIN;
 
-  // Column X positions
   const colX = hasSiblings
     ? [MARGIN, MARGIN + BOX_W + COL_GAP, MARGIN + BOX_W * 2 + COL_GAP * 2]
     : [MARGIN];
   const centerX = hasSiblings ? colX[1] : colX[0];
   const centerY = MARGIN + Math.max(0, (svgH - MARGIN * 2 - curH) / 2);
+
+  // Port Y for a column in a box
+  function portY(boxTop: number, cols: ColumnDefinition[], fkKey: string) {
+    const idx = cols.findIndex((c) => c.field_key === fkKey);
+    if (idx < 0 || idx >= MAX_ROWS) return boxTop + boxH(cols) / 2;
+    return boxTop + HDR_H + idx * ROW_H + ROW_H / 2 + 2;
+  }
+
+  const ACCENT_PARENT = "#3B82F6";
+  const ACCENT_CHILD  = "#F5821F";
+  const ACCENT_CUR    = "#009A44";
 
   return (
     <div className="schema-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -298,57 +348,89 @@ export default function SchemaDiagram({
 
         {/* Legend */}
         <div className="schema-legend">
-          <span><span className="schema-legend-dot" style={{ background: "#009A44" }} />Tabla actual</span>
-          {parentRels.length > 0 && <span><span className="schema-legend-dot" style={{ background: "#3B82F6" }} />Tabla padre (referenciada)</span>}
-          {childRels.length > 0 && <span><span className="schema-legend-dot" style={{ background: "#F5821F" }} />Tabla hija (referencia aquí)</span>}
+          <span><span className="schema-legend-dot" style={{ background: ACCENT_CUR }} />Tabla actual</span>
+          {parentRels.length > 0 && <span><span className="schema-legend-dot" style={{ background: ACCENT_PARENT }} />Padre (referenciada)</span>}
+          {childRels.length > 0 && <span><span className="schema-legend-dot" style={{ background: ACCENT_CHILD }} />Hija (referencia aquí)</span>}
           <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--color-text-muted)" }}>
-            🔑 = clave foránea
+            FK = clave foránea
           </span>
         </div>
 
         {/* Diagram */}
         <div className="schema-body">
           {isLoading ? (
-            <div style={{ padding: "64px", textAlign: "center", color: "var(--color-text-muted)" }}>
+            <div style={{ padding: 64, textAlign: "center", color: "var(--color-text-muted)" }}>
               Cargando diagrama…
             </div>
           ) : (
             <svg ref={svgRef} viewBox={`0 0 ${svgW} ${svgH}`}
-              style={{ width: "100%", height: "auto", minHeight: Math.min(svgH, 520) }}
+              style={{ width: "100%", height: "auto", minHeight: Math.min(svgH, 540) }}
               xmlns="http://www.w3.org/2000/svg">
 
-              {/* Background */}
-              <rect width={svgW} height={svgH} fill="#F4F6F9" />
-
-              {/* Grid dots */}
               <defs>
-                <pattern id="dots" width={24} height={24} patternUnits="userSpaceOnUse">
-                  <circle cx={12} cy={12} r={1} fill="#CBD5E0" opacity={0.6} />
+                <pattern id="sdots" width={28} height={28} patternUnits="userSpaceOnUse">
+                  <circle cx={14} cy={14} r={1.2} fill="#C4CDD6" opacity={0.55} />
                 </pattern>
+                <marker id="arr-parent" markerWidth={9} markerHeight={9}
+                  refX={7} refY={4} orient="auto">
+                  <path d="M0,0 L0,8 L9,4 z" fill={ACCENT_PARENT} opacity={0.85} />
+                </marker>
+                <marker id="arr-child" markerWidth={9} markerHeight={9}
+                  refX={7} refY={4} orient="auto">
+                  <path d="M0,0 L0,8 L9,4 z" fill={ACCENT_CHILD} opacity={0.85} />
+                </marker>
               </defs>
-              <rect width={svgW} height={svgH} fill="url(#dots)" />
 
-              {/* Connection lines — PARENTS (center ← left) */}
+              {/* Background */}
+              <rect width={svgW} height={svgH} fill="#EFF2F7" />
+              <rect width={svgW} height={svgH} fill="url(#sdots)" />
+
+              {/* Column headers */}
+              {hasSiblings && (
+                <>
+                  {[
+                    { label: "PADRES", x: colX[0] + BOX_W / 2, color: ACCENT_PARENT },
+                    { label: "TABLA ACTUAL", x: centerX + BOX_W / 2, color: ACCENT_CUR },
+                    { label: "HIJOS", x: colX[2] + BOX_W / 2, color: ACCENT_CHILD },
+                  ].map(({ label, x, color }) => (
+                    <g key={label}>
+                      <rect x={x - 48} y={14} width={96} height={20} rx={10}
+                        fill={color + "22"} />
+                      <text x={x} y={28} textAnchor="middle"
+                        fontSize={10} fill={color} fontWeight={700}
+                        fontFamily="Inter,system-ui,sans-serif" letterSpacing={1}>
+                        {label}
+                      </text>
+                    </g>
+                  ))}
+                </>
+              )}
+
+              {/* Parent connections */}
               {parentRels.map((rel, i) => {
-                const parentCenterY = parentYs[i] + boxHeight(parentItems[i].cols) / 2;
-                const curCenterY = centerY + curH / 2;
+                const parentCols = parentItems[i].cols;
+                const py = parentYs[i] + boxH(parentCols) / 2;
+                const cy = portY(centerY, currentColumns, rel.fkKey);
                 return (
                   <Connection key={rel.ds.id}
-                    x1={colX[0] + BOX_W} y1={parentCenterY}
-                    x2={centerX} y2={curCenterY}
-                    label={rel.fkKey} color="#3B82F6" />
+                    x1={colX[0] + BOX_W} y1={py}
+                    x2={centerX} y2={cy}
+                    label={rel.fkKey} color={ACCENT_PARENT}
+                    markerId="arr-parent" />
                 );
               })}
 
-              {/* Connection lines — CHILDREN (center → right) */}
+              {/* Child connections */}
               {childRels.map((rel, i) => {
-                const childCenterY = childYs[i] + boxHeight(childItems[i].cols) / 2;
-                const curCenterY = centerY + curH / 2;
+                const childCols = relColsMap.get(rel.ds.id) ?? [];
+                const cy = portY(childYs[i], childCols, rel.fkKey);
+                const srcY = centerY + curH / 2;
                 return (
                   <Connection key={rel.ds.id}
-                    x1={centerX + BOX_W} y1={curCenterY}
-                    x2={colX[2]} y2={childCenterY}
-                    label={rel.fkKey} color="#F5821F" />
+                    x1={centerX + BOX_W} y1={srcY}
+                    x2={colX[2]} y2={cy}
+                    label={rel.fkKey} color={ACCENT_CHILD}
+                    markerId="arr-child" />
                 );
               })}
 
@@ -357,8 +439,8 @@ export default function SchemaDiagram({
                 <TableBox key={rel.ds.id}
                   x={colX[0]} y={parentYs[i]}
                   name={rel.ds.name}
-                  columns={relColsMap.get(rel.ds.id) ?? []}
-                  accent="parent" />
+                  columns={parentItems[i].cols}
+                  accent={ACCENT_PARENT} />
               ))}
 
               {/* Current box */}
@@ -366,6 +448,7 @@ export default function SchemaDiagram({
                 x={centerX} y={centerY}
                 name={currentDatasetName}
                 columns={currentColumns}
+                accent={ACCENT_CUR}
                 isCurrent />
 
               {/* Child boxes */}
@@ -374,14 +457,13 @@ export default function SchemaDiagram({
                   x={colX[2]} y={childYs[i]}
                   name={rel.ds.name}
                   columns={relColsMap.get(rel.ds.id) ?? []}
-                  accent="child" />
+                  accent={ACCENT_CHILD} />
               ))}
 
-              {/* No relations message */}
               {!hasSiblings && (
-                <text x={svgW / 2} y={svgH - 24}
-                  textAnchor="middle" fontSize={12} fill="#9CA3AF"
-                  fontFamily="Inter, system-ui, sans-serif">
+                <text x={svgW / 2} y={svgH - 22}
+                  textAnchor="middle" fontSize={12} fill="#94A3B8"
+                  fontFamily="Inter,system-ui,sans-serif">
                   Sin tablas relacionadas detectadas
                 </text>
               )}

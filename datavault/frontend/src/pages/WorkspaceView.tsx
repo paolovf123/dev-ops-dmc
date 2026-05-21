@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getDatasets, deleteDataset, getColumns, getRecords } from "../api/datasets";
+import ImportExcelModal from "../components/ImportExcelModal";
 import { getWorkspaces } from "../api/workspaces";
 import GlobalSchemaDiagram from "../components/GlobalSchemaDiagram";
 import { useConfirm } from "../components/ConfirmDialog";
@@ -43,7 +44,7 @@ function SchemaPreview({ datasets, colQueries }: {
   datasets: Dataset[];
   colQueries: UseQueryResult<ColumnDefinition[]>[];
 }) {
-  const W = 130, H = 44, GAP_X = 90, GAP_Y = 18, MARGIN = 24;
+  const W = 148, H = 52, GAP_X = 76, GAP_Y = 22, MARGIN = 28, COLS = 4;
   const edges: { fi: number; ti: number; fkKey: string }[] = [];
   datasets.forEach((_ds, fi) => {
     const cols = colQueries[fi]?.data ?? [];
@@ -57,50 +58,57 @@ function SchemaPreview({ datasets, colQueries }: {
         edges.push({ fi, ti, fkKey: c.field_key });
     });
   });
-  const COLS = 3;
-  const svgW = MARGIN * 2 + COLS * W + (COLS - 1) * GAP_X;
   const rows = Math.ceil(datasets.length / COLS);
+  const svgW = MARGIN * 2 + COLS * W + (COLS - 1) * GAP_X;
   const svgH = MARGIN * 2 + rows * H + (rows - 1) * GAP_Y;
   const pos = datasets.map((_, i) => ({
     x: MARGIN + (i % COLS) * (W + GAP_X),
     y: MARGIN + Math.floor(i / COLS) * (H + GAP_Y),
   }));
+  const STRIPE = 4;
   return (
-    <svg viewBox={`0 0 ${svgW} ${svgH}`} style={{ width: "100%", height: "auto", display: "block" }} xmlns="http://www.w3.org/2000/svg">
-      <rect width={svgW} height={svgH} fill="#F4F6F9" />
+    <svg viewBox={`0 0 ${svgW} ${svgH}`} style={{ width: "100%", height: "auto", display: "block" }}
+      xmlns="http://www.w3.org/2000/svg">
+      <rect width={svgW} height={svgH} fill="#EFF2F7" />
       <defs>
-        <pattern id="pdots2" width={20} height={20} patternUnits="userSpaceOnUse">
-          <circle cx={10} cy={10} r={0.9} fill="#CBD5E0" opacity={0.5} />
+        <pattern id="pvdots" width={22} height={22} patternUnits="userSpaceOnUse">
+          <circle cx={11} cy={11} r={1} fill="#C4CDD6" opacity={0.5} />
         </pattern>
-        <marker id="parr2" markerWidth={7} markerHeight={7} refX={5} refY={3} orient="auto">
+        <marker id="pvarr" markerWidth={7} markerHeight={7} refX={5} refY={3} orient="auto">
           <path d="M0,0 L0,6 L7,3 z" fill="#94A3B8" />
         </marker>
       </defs>
-      <rect width={svgW} height={svgH} fill="url(#pdots2)" />
+      <rect width={svgW} height={svgH} fill="url(#pvdots)" />
       {edges.map((e, i) => {
         const fp = pos[e.fi], tp = pos[e.ti];
         if (!fp || !tp) return null;
         const x1 = fp.x + W, y1 = fp.y + H / 2;
-        const x2 = tp.x + W, y2 = tp.y + H / 2;
+        const x2 = tp.x, y2 = tp.y + H / 2;
         const mx = (x1 + x2) / 2;
         return <path key={i} d={`M ${x1} ${y1} C ${mx} ${y1} ${mx} ${y2} ${x2} ${y2}`}
-          fill="none" stroke="#94A3B8" strokeWidth={1.4} opacity={0.6} markerEnd="url(#parr2)" />;
+          fill="none" stroke="#94A3B8" strokeWidth={1.5} opacity={0.55} markerEnd="url(#pvarr)" />;
       })}
       {datasets.map((ds, i) => {
         const { x, y } = pos[i];
         const color = BOX_COLORS[i % BOX_COLORS.length];
         const colCount = colQueries[i]?.data?.length ?? 0;
+        const fkCount = (colQueries[i]?.data ?? []).filter(c => c.field_key.startsWith("id_")).length;
         return (
           <g key={ds.id}>
-            <rect x={x + 2} y={y + 2} width={W} height={H} rx={7} fill="rgba(0,0,0,0.06)" />
-            <rect x={x} y={y} width={W} height={H} rx={7} fill="white" stroke={color} strokeWidth={2} />
-            <rect x={x} y={y} width={W} height={22} rx={7} fill={color} />
-            <rect x={x} y={y + 15} width={W} height={7} fill={color} />
-            <text x={x + W / 2} y={y + 15} textAnchor="middle" fill="white" fontSize={11} fontWeight={700} fontFamily="Inter,system-ui,sans-serif">
-              {ds.name.length > 17 ? ds.name.slice(0, 16) + "…" : ds.name}
+            <rect x={x + 2} y={y + 2} width={W} height={H} rx={9} fill="rgba(0,0,0,0.06)" />
+            <rect x={x} y={y} width={W} height={H} rx={9} fill="white" stroke="#E2E8F0" strokeWidth={1} />
+            {/* left stripe */}
+            <rect x={x} y={y} width={STRIPE} height={H} rx={9} fill={color} />
+            <rect x={x} y={y + 7} width={STRIPE} height={H - 14} fill={color} />
+            <text x={x + STRIPE + 9} y={y + 20}
+              fill={color} fontSize={11} fontWeight={700} fontFamily="Inter,system-ui,sans-serif">
+              {ds.name.length > 16 ? ds.name.slice(0, 15) + "…" : ds.name}
             </text>
-            <text x={x + W / 2} y={y + 36} textAnchor="middle" fill="#6B7280" fontSize={10} fontFamily="Inter,system-ui,sans-serif">
-              {colCount} col{colCount !== 1 ? "s" : ""}
+            <line x1={x + STRIPE} y1={y + 27} x2={x + W} y2={y + 27}
+              stroke="#E2E8F0" strokeWidth={1} />
+            <text x={x + STRIPE + 9} y={y + 42}
+              fill="#64748B" fontSize={10} fontFamily="Inter,system-ui,sans-serif">
+              {colCount} col{colCount !== 1 ? "s" : ""}{fkCount > 0 ? `  ·  ${fkCount} FK` : ""}
             </text>
           </g>
         );
@@ -152,6 +160,7 @@ export default function WorkspaceView() {
   const { setCurrent } = useWorkspace();
   const [showSchema, setShowSchema] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // Resolve workspace info from the list
   const { data: allWorkspaces = [] } = useQuery({
@@ -247,7 +256,7 @@ export default function WorkspaceView() {
         {/* Nav links: admin global ve todo; owner/admin_ws ven grupos y usuarios de su ws */}
         {(isAdmin || isWsManager) && (() => {
           const navBtn = (title: string, path: string, icon: React.ReactNode) => (
-            <button key={path} title={title} onClick={() => navigate(path)}
+            <button key={title} title={title} onClick={() => navigate(path)}
               style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 10px", height:34, borderRadius:7, background:"transparent", border:"1.5px solid transparent", cursor:"pointer", color:"var(--color-text-secondary)", fontSize:12.5, fontWeight:600, transition:"all 0.14s", whiteSpace:"nowrap" }}
               onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.background="var(--color-border-light)"; el.style.borderColor="var(--color-border)"; el.style.color="var(--color-text)"; }}
               onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.background="transparent"; el.style.borderColor="transparent"; el.style.color="var(--color-text-secondary)"; }}
@@ -275,15 +284,24 @@ export default function WorkspaceView() {
               {workspace?.description ?? "Gestiona los datos de este equipo"}
             </p>
           </div>
-          <div style={{ display: "flex", gap: 10 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             {datasets.length > 0 && (
-              <button className="btn btn-secondary" onClick={() => setShowSchema(true)} style={{ fontSize: 14 }}>
-                🗺 Ver diagrama
+              <button className="btn btn-secondary" onClick={() => setShowSchema(true)}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="3" width="6" height="6" rx="1"/><rect x="3" y="15" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><path d="M9 6h6M6 9v6M18 9v6M9 18h6"/></svg>
+                Diagrama
               </button>
             )}
             {canManage && (
-              <button className="btn btn-secondary" onClick={() => navigate("/scripts")} style={{ fontSize: 14 }}>
-                ⚡ Scripts Python
+              <button className="btn btn-secondary" onClick={() => navigate("/scripts")}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                Scripts
+              </button>
+            )}
+            {canManage && (
+              <button className="btn btn-secondary" onClick={() => setShowImportModal(true)}
+                style={{ borderColor: "#16A34A", color: "#16A34A" }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                Importar Excel
               </button>
             )}
             {canManage && (
@@ -487,6 +505,17 @@ export default function WorkspaceView() {
           </div>
         )}
       </main>
+
+      <ImportExcelModal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        workspaceId={workspaceId}
+        onSuccess={(datasetId, datasetName, counts) => {
+          qc.invalidateQueries({ queryKey: ["datasets", workspaceId] });
+          toast(`"${datasetName}" importado — ${counts.cols} cols, ${counts.rows} filas`, "success");
+          navigate(`/datasets/${datasetId}`);
+        }}
+      />
     </>
   );
 }

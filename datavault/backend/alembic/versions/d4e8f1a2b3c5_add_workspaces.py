@@ -44,6 +44,19 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    from sqlalchemy import text
+    conn = op.get_bind()
+    dupes = conn.execute(text(
+        "SELECT name, COUNT(DISTINCT workspace_id) AS ws_count "
+        "FROM user_groups GROUP BY name HAVING COUNT(DISTINCT workspace_id) > 1"
+    )).fetchall()
+    if dupes:
+        names = [row[0] for row in dupes]
+        raise RuntimeError(
+            f"No se puede hacer downgrade: existen grupos con nombre duplicado "
+            f"entre workspaces: {names}. Renómbralos antes de revertir."
+        )
+
     op.drop_constraint('uq_user_group_name_workspace', 'user_groups', type_='unique')
     op.create_unique_constraint('user_groups_name_key', 'user_groups', ['name'])
 

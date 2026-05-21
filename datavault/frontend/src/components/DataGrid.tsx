@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback } from "react";
+import React, { useState, useMemo, useRef, useCallback } from "react";
 import type { ColumnDefinition, Record as DRecord, FormulaColDef } from "../types";
 import { evalFormula } from "../utils/formula";
 import CellEditor, { type NavDir } from "./CellEditor";
@@ -36,18 +36,110 @@ interface Props {
 // ── Cell validation ────────────────────────────────────────────────────────────
 function validateCell(value: unknown, col: ColumnDefinition): string | null {
   const rules = col.rules || {};
-  const empty = value == null || value === "";
+  const empty = value == null || value === "" || (Array.isArray(value) && value.length === 0);
   if (empty) return rules.required ? "Requerido" : null;
-  if (col.data_type === "number") {
+  if (col.data_type === "number" || col.data_type === "currency") {
     const n = parseFloat(String(value));
     if (isNaN(n)) return "Debe ser un número";
     if (rules.min !== undefined && n < rules.min) return `Mín: ${rules.min}`;
     if (rules.max !== undefined && n > rules.max) return `Máx: ${rules.max}`;
   }
+  if (col.data_type === "percent") {
+    const n = parseFloat(String(value));
+    if (isNaN(n)) return "Debe ser un número";
+    if (n < 0 || n > 100) return "0–100";
+  }
+  if (col.data_type === "rating") {
+    const n = Number(value);
+    const max = rules.max_rating ?? 5;
+    if (!n || n < 1 || n > max) return `1–${max}`;
+  }
   if (col.data_type === "enum") {
-    if (!(rules.options ?? []).includes(String(value))) return "Valor no válido";
+    const opts = rules.options ?? [];
+    if (opts.length > 0 && !opts.includes(String(value))) return "Valor no válido";
+  }
+  if (col.data_type === "email") {
+    if (!String(value).includes("@")) return "Email inválido";
+  }
+  if (col.data_type === "url") {
+    if (!String(value).startsWith("http")) return "URL inválida";
   }
   return null;
+}
+
+// ── Cell display renderer ─────────────────────────────────────────────────────
+function renderCellValue(col: ColumnDefinition, cellVal: unknown): React.ReactNode {
+  if (cellVal == null || cellVal === "") return "—";
+
+  switch (col.data_type) {
+    case "boolean":
+      return cellVal === true || String(cellVal).toLowerCase() === "true"
+        ? <span style={{ color: "var(--pm-green-600)", fontWeight: 600 }}>Sí</span>
+        : <span style={{ color: "var(--color-text-muted)" }}>No</span>;
+
+    case "url":
+      return (
+        <a href={String(cellVal)} target="_blank" rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          style={{ color: "var(--color-primary)", textDecoration: "underline", fontSize: "inherit" }}>
+          {String(cellVal)}
+        </a>
+      );
+
+    case "email":
+      return (
+        <a href={`mailto:${cellVal}`}
+          onClick={(e) => e.stopPropagation()}
+          style={{ color: "var(--color-primary)", textDecoration: "underline", fontSize: "inherit" }}>
+          {String(cellVal)}
+        </a>
+      );
+
+    case "rating": {
+      const max = col.rules.max_rating ?? 5;
+      const val = Number(cellVal) || 0;
+      return (
+        <span style={{ color: "#F59E0B", letterSpacing: 1, fontSize: 14 }}>
+          {"★".repeat(Math.min(val, max))}
+          <span style={{ color: "var(--color-border)" }}>{"★".repeat(Math.max(0, max - val))}</span>
+        </span>
+      );
+    }
+
+    case "currency": {
+      const sym = col.rules.currency_symbol ?? "$";
+      const n = parseFloat(String(cellVal));
+      if (isNaN(n)) return String(cellVal);
+      return `${sym}${n.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+
+    case "percent": {
+      const n = parseFloat(String(cellVal));
+      if (isNaN(n)) return String(cellVal);
+      return `${n}%`;
+    }
+
+    case "multiselect": {
+      const vals: string[] = Array.isArray(cellVal)
+        ? cellVal as string[]
+        : String(cellVal).split(",").map((s) => s.trim()).filter(Boolean);
+      if (vals.length === 0) return "—";
+      return (
+        <span style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+          {vals.map((v) => (
+            <span key={v} style={{
+              fontSize: 10, fontWeight: 600, padding: "1px 7px", borderRadius: 99,
+              background: "#E0F2FE", color: "var(--color-primary)",
+              border: "1px solid #BAE6FD",
+            }}>{v}</span>
+          ))}
+        </span>
+      );
+    }
+
+    default:
+      return String(cellVal);
+  }
 }
 
 function FormulaCell({ formula, data }: { formula: string; data: Record<string, unknown> }) {
@@ -390,11 +482,18 @@ export default function DataGrid({
                     const col = uCol.col;
                     return (
                       <td key={uCol.id}>
-                        {col.data_type === "enum" ? (
+                        {(col.data_type === "enum" || col.data_type === "multiselect") ? (
                           <select value={columnFilters[col.field_key] ?? ""}
                             onChange={(e) => onFilterChange?.(col.field_key, e.target.value)}>
                             <option value="">Todos</option>
                             {(col.rules.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                        ) : col.data_type === "boolean" ? (
+                          <select value={columnFilters[col.field_key] ?? ""}
+                            onChange={(e) => onFilterChange?.(col.field_key, e.target.value)}>
+                            <option value="">Todos</option>
+                            <option value="true">Sí</option>
+                            <option value="false">No</option>
                           </select>
                         ) : (
                           <input placeholder="Filtrar…"
@@ -465,11 +564,7 @@ export default function DataGrid({
                             onCancel={() => { setEditing(null); setFocused({ recordId: rec.id, fieldKey: col.field_key }); }} />
                         ) : (
                           <span className="cell-inner">
-                            {col.data_type === "boolean" && cellVal != null
-                              ? (cellVal === true || String(cellVal).toLowerCase() === "true"
-                                  ? <span style={{ color: "var(--pm-green-600)", fontWeight: 600 }}>Sí</span>
-                                  : <span style={{ color: "var(--color-text-muted)" }}>No</span>)
-                              : cellVal != null ? String(cellVal) : "—"}
+                            {renderCellValue(col, cellVal)}
                             {validationError && (
                               <span className="cell-warn" title={validationError}>⚠</span>
                             )}

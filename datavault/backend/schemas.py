@@ -1,19 +1,20 @@
 from __future__ import annotations
+import re
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, EmailStr
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
 class UserRegister(BaseModel):
-    email: str
+    email: EmailStr
     username: str
     password: str
 
 
 class UserLogin(BaseModel):
-    email: str
+    email: EmailStr
     password: str
 
 
@@ -72,12 +73,22 @@ class DatasetOut(BaseModel):
 
 # ── Column ────────────────────────────────────────────────────────────────────
 
+_FIELD_KEY_RE = re.compile(r'^[a-z0-9_]{1,64}$')
+
+
 class ColumnCreate(BaseModel):
     name: str
     field_key: str
     data_type: str  # text | number | date | enum | boolean
     rules: dict = {}
     position: int = 0
+
+    @field_validator("field_key")
+    @classmethod
+    def validate_field_key(cls, v: str) -> str:
+        if not _FIELD_KEY_RE.match(v):
+            raise ValueError("field_key debe contener solo letras minúsculas, números y guiones bajos (máx 64 chars)")
+        return v
 
 
 class ColumnUpdate(BaseModel):

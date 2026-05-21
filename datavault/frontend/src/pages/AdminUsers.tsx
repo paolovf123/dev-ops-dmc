@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient, useQueries } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "../api/client";
@@ -83,6 +83,8 @@ export default function AdminUsers() {
   const [sortDir,   setSortDir]   = useState<SortDir>("asc");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingRole, setPendingRole] = useState<string>("");
+  const [importResult, setImportResult] = useState<{ created: number; skipped: number; errors: { row: number; error: string }[] } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: users = [], isLoading } = useQuery<UserRow[]>({
     queryKey: ["admin-users", isAdmin ? null : initWsId],
@@ -201,6 +203,22 @@ export default function AdminUsers() {
     onError: () => toast("No se pudo activar la cuenta", "error"),
   });
 
+  const importM = useMutation({
+    mutationFn: (file: File) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      return api.post<{ created: number; skipped: number; errors: { row: number; error: string }[] }>(
+        "/auth/users/import-excel", fd, { headers: { "Content-Type": "multipart/form-data" } }
+      ).then((r) => r.data);
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["admin-users"] });
+      setImportResult(data);
+      toast(`${data.created} usuario${data.created !== 1 ? "s" : ""} importado${data.created !== 1 ? "s" : ""}`, data.created > 0 ? "success" : "warning");
+    },
+    onError: () => toast("Error al importar el archivo", "error"),
+  });
+
   async function saveRole(user: UserRow) {
     if (pendingRole === user.role) { setEditingId(null); return; }
     const ok = await confirm({
@@ -251,6 +269,7 @@ export default function AdminUsers() {
   const grpLabel = grpFilter;
 
   return (
+    <>
     <div style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
 
       {/* ── Header ── */}
@@ -448,12 +467,69 @@ export default function AdminUsers() {
           )}
         </div>
 
-        {/* ── Result count ── */}
+        {/* ── Result count + import button ── */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, padding: "0 2px" }}>
           <span style={{ fontSize: 13, color: "var(--color-text-secondary)", fontWeight: 500 }}>
             {filtered.length} {filtered.length === 1 ? "usuario" : "usuarios"}
             {hasFilters && <span style={{ color: "var(--color-text-muted)" }}> de {users.filter(u => u.is_active === !showInactive).length}</span>}
           </span>
+          {isAdmin && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xlsm"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) importM.mutate(f);
+                  e.target.value = "";
+                }}
+              />
+              <button
+                onClick={() => {
+                  const csv = "email,username,password,role\nusuario@empresa.com,usuario,Contraseña1!,viewer\n";
+                  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url; a.download = "plantilla_usuarios.csv";
+                  a.click(); URL.revokeObjectURL(url);
+                }}
+                title="Descargar plantilla de ejemplo"
+                style={{
+                  height: 34, padding: "0 10px", border: "1.5px solid var(--color-border)",
+                  borderRadius: 9, background: "var(--color-bg)", color: "var(--color-text-secondary)",
+                  fontSize: 11, fontWeight: 600, cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: 4,
+                }}>
+                <svg width="12" height="12" viewBox="0 0 20 20" fill="none">
+                  <path d="M4 14v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+                  <path d="M10 3v9M6.5 8.5 10 12l3.5-3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Plantilla
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={importM.isPending}
+                style={{
+                  height: 34, padding: "0 14px", border: "1.5px solid #22C55E",
+                  borderRadius: 9, background: "#F0FDF4", color: "#15803D",
+                  fontSize: 12, fontWeight: 700, cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: 6,
+                  opacity: importM.isPending ? 0.6 : 1,
+                }}>
+                {importM.isPending ? (
+                  <span className="csv-loading-spinner" style={{ width: 12, height: 12 }} />
+                ) : (
+                  <svg width="13" height="13" viewBox="0 0 20 20" fill="none">
+                    <path d="M4 14v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+                    <path d="M10 3v9M6.5 8.5 10 12l3.5-3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+                Importar desde Excel
+              </button>
+            </div>
+          )}
         </div>
 
         {/* ── Table ── */}
@@ -700,6 +776,75 @@ export default function AdminUsers() {
 
       </div>
     </div>
+
+    {importResult && (
+        <div className="modal-overlay" onClick={() => setImportResult(null)}>
+          <div className="modal modal-v2" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-accent" style={{ background: importResult.created > 0 ? "#22C55E" : "#F59E0B" }} />
+            <div className="modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div className="modal-header-icon"
+                  style={{ background: importResult.created > 0 ? "#F0FDF4" : "#FFFBEB",
+                    color: importResult.created > 0 ? "#15803D" : "#D97706", fontSize: 18 }}>
+                  {importResult.created > 0 ? "✓" : "⚠"}
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Resultado de importación</h3>
+                  <p style={{ margin: 0, fontSize: 11.5, color: "var(--color-text-muted)" }}>
+                    Los usuarios importados están inactivos hasta que un admin los active
+                  </p>
+                </div>
+              </div>
+              <button className="modal-close-btn" onClick={() => setImportResult(null)} title="Cerrar">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body">
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+                {[
+                  { label: "Creados",  value: importResult.created,        color: "#15803D", bg: "#F0FDF4", border: "#BBF7D0" },
+                  { label: "Omitidos", value: importResult.skipped,        color: "#D97706", bg: "#FFFBEB", border: "#FDE68A" },
+                  { label: "Errores",  value: importResult.errors.length,  color: "#DC2626", bg: "#FEF2F2", border: "#FCA5A5" },
+                ].map((s) => (
+                  <div key={s.label} style={{ background: s.bg, border: `1px solid ${s.border}`,
+                    borderRadius: 10, padding: "12px 14px", textAlign: "center" }}>
+                    <div style={{ fontSize: 26, fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.value}</div>
+                    <div style={{ fontSize: 11, color: s.color, fontWeight: 600, marginTop: 3 }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+              {importResult.errors.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--color-text-muted)",
+                    textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+                    Filas con error
+                  </div>
+                  <div style={{ maxHeight: 160, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
+                    {importResult.errors.map((e, i) => (
+                      <div key={i} style={{ display: "flex", gap: 8, padding: "6px 10px", background: "#FEF2F2",
+                        borderRadius: 6, border: "1px solid #FCA5A5", fontSize: 12 }}>
+                        <span style={{ fontWeight: 700, color: "#DC2626", minWidth: 32 }}>Fila {e.row}</span>
+                        <span style={{ color: "var(--color-text-secondary)" }}>{e.error}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {importResult.skipped > 0 && (
+                <p style={{ fontSize: 12, color: "var(--color-text-muted)", margin: "12px 0 0" }}>
+                  Las filas omitidas corresponden a emails que ya existen en el sistema.
+                </p>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={() => setImportResult(null)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

@@ -3,6 +3,7 @@ export interface Dataset {
   name: string;
   description: string | null;
   created_at: string;
+  workspace_id: string | null;
   is_computed: boolean;
   source_code: string | null;
   source_dataset_ids: string[];
@@ -14,7 +15,9 @@ export interface ColumnDefinition {
   dataset_id: string;
   name: string;
   field_key: string;
-  data_type: "text" | "number" | "date" | "enum" | "boolean" | "relation";
+  data_type:
+    | "text" | "number" | "date" | "enum" | "boolean" | "relation"
+    | "url" | "email" | "phone" | "long_text" | "multiselect" | "rating" | "currency" | "percent";
   rules: {
     required?: boolean;
     min?: number;
@@ -22,6 +25,8 @@ export interface ColumnDefinition {
     options?: string[];
     related_dataset_id?: string;
     display_field?: string;
+    currency_symbol?: string;
+    max_rating?: number;
   };
   position: number;
   created_at: string;

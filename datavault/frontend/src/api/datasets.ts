@@ -74,6 +74,59 @@ export const setDatasetGroupPermission = (datasetId: string, groupId: string, ro
 export const removeDatasetGroupPermission = (datasetId: string, groupId: string) =>
   api.delete(`/datasets/${datasetId}/permissions/groups/${groupId}`);
 
+export interface ImportDatasetResult {
+  dataset_id: string;
+  dataset_name: string;
+  columns_created: number;
+  records_created: number;
+}
+
+export const importDatasetFromExcel = (
+  file: File,
+  opts?: { workspace_id?: string; name?: string; sheet?: string },
+) => {
+  const form = new FormData();
+  form.append("file", file);
+  const params: Record<string, string> = {};
+  if (opts?.workspace_id) params.workspace_id = opts.workspace_id;
+  if (opts?.name) params.name = opts.name;
+  if (opts?.sheet) params.sheet = opts.sheet;
+  return api
+    .post<ImportDatasetResult>("/datasets/import-from-excel", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+      params,
+    })
+    .then((r) => r.data);
+};
+
+export interface ExcelPreviewColumn {
+  header: string;
+  field_key: string;
+  data_type: string;
+  options?: string[];
+}
+
+export interface ExcelPreviewSheet {
+  name: string;
+  row_count: number;
+  columns: ExcelPreviewColumn[];
+}
+
+export interface ExcelPreview {
+  filename: string;
+  sheets: ExcelPreviewSheet[];
+}
+
+export const previewExcelImport = (file: File): Promise<ExcelPreview> => {
+  const form = new FormData();
+  form.append("file", file);
+  return api
+    .post<ExcelPreview>("/datasets/import-from-excel/preview", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    })
+    .then((r) => r.data);
+};
+
 export interface ChangeHistoryEntry {
   id: string;
   field_key: string | null;

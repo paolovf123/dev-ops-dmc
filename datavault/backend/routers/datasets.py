@@ -1,11 +1,12 @@
-from __future__ import annotations
 import os
+import io
+import re
 import json
 import logging
 import uuid
 import boto3
-from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Request
+from datetime import datetime, timezone, date as date_type
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, and_, or_, not_
 from database import get_db
@@ -312,3 +313,268 @@ async def compute_dataset(
         columns_created=len(columns_data),
         last_computed_at=dataset.last_computed_at,
     )
+
+
+# ── Import dataset from Excel ─────────────────────────────────────────────────
+
+def _slugify_key(s: str) -> str:
+    s = re.sub(r"[^\w\s]", "", str(s), flags=re.UNICODE)
+    s = re.sub(r"\s+", "_", s.strip()).lower()
+    s = re.sub(r"[^a-z0-9_]", "", s)
+    return s[:40] or "col"
+
+
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$|^\d{1,2}/\d{1,2}/\d{4}$")
+
+
+def _infer_col_type(values: list) -> tuple[str, list | None]:
+    """Return (data_type, options_list_or_None) from a sample of cell values."""
+    non_empty = [v for v in values if v is not None and str(v).strip() != ""]
+    if not non_empty:
+        return "text", None
+
+    # Datetime objects (openpyxl parses date cells automatically)
+    if all(isinstance(v, (datetime, date_type)) for v in non_empty):
+        return "date", None
+
+    # String dates: "YYYY-MM-DD" or "DD/MM/YYYY"
+    if all(_DATE_RE.match(str(v).strip()) for v in non_empty):
+        return "date", None
+
+    # Boolean
+    bool_pool = {"true", "false", "yes", "no", "sí", "si", "1", "0", "verdadero", "falso"}
+    if all(str(v).lower().strip() in bool_pool for v in non_empty):
+        return "boolean", None
+
+    # Numeric detection
+    def _is_num(v: object) -> bool:
+        try:
+            float(str(v).replace(",", ".").replace(" ", "").replace("%", ""))
+            return True
+        except ValueError:
+            return False
+
+    if all(_is_num(v) for v in non_empty):
+        # Phone/DNI heuristic: integer-like 6-15 digit values with high uniqueness → store as text
+        def _as_int_str(v: object) -> str | None:
+            try:
+                f = float(str(v).replace(",", ".").replace(" ", ""))
+                if f == int(f) and 99_999 < abs(f) < 10**15:
+                    return str(int(f))
+            except (ValueError, OverflowError):
+                pass
+            return None
+
+        int_strs = [_as_int_str(v) for v in non_empty]
+        if all(s is not None for s in int_strs):
+            avg_len = sum(len(s) for s in int_strs) / len(int_strs)  # type: ignore[arg-type]
+            unique_ratio = len(set(int_strs)) / len(int_strs)
+            if 6 <= avg_len <= 15 and unique_ratio > 0.6:
+                return "text", None  # phone / DNI / identifier
+
+        return "number", None
+
+    # Enum: ≤ 10 unique values, repetitions present
+    unique = list(dict.fromkeys(str(v).strip() for v in non_empty))
+    if len(unique) <= 10 and len(non_empty) >= max(len(unique) * 2, 4):
+        return "enum", unique
+
+    return "text", None
+
+
+def _strip_rows(rows: list[tuple]) -> list[tuple]:
+    """Remove trailing all-empty rows."""
+    while rows and all(v is None or str(v).strip() == "" for v in rows[-1]):
+        rows.pop()
+    return [r for r in rows if any(v is not None and str(v).strip() != "" for v in r)]
+
+
+def _build_headers(raw_headers: list) -> tuple[list[str], list[str]]:
+    """Return (display_names, field_keys) with de-duplicated slugs."""
+    names = [str(h).strip() if h is not None else f"col_{i}" for i, h in enumerate(raw_headers)]
+    seen: dict[str, int] = {}
+    keys: list[str] = []
+    for h in names:
+        base = _slugify_key(h)
+        count = seen.get(base, 0)
+        seen[base] = count + 1
+        keys.append(base if count == 0 else f"{base}_{count}")
+    return names, keys
+
+
+def _load_workbook_safe(content: bytes, filename: str):
+    ext = (filename or "").lower().rsplit(".", 1)[-1]
+    if ext not in ("xlsx", "xlsm", "xls"):
+        raise HTTPException(status_code=400, detail="Formato no soportado. Use .xlsx")
+    try:
+        import openpyxl
+        return openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="No se pudo leer el archivo Excel")
+
+
+def _sheet_preview(wb, sheet_name: str) -> dict:
+    """Return column metadata for a single sheet without creating DB objects."""
+    ws_sheet = wb[sheet_name]
+    rows = list(ws_sheet.iter_rows(values_only=True))
+    if not rows:
+        return {"name": sheet_name, "row_count": 0, "columns": []}
+
+    raw_header_row = rows[0]
+    data_rows = _strip_rows(list(rows[1:]))
+    names, keys = _build_headers(list(raw_header_row))
+    n_cols = len(names)
+
+    def col_has_data(i: int) -> bool:
+        return any(
+            (row[i] if i < len(row) else None) is not None
+            and str(row[i] if i < len(row) else "").strip() != ""
+            for row in data_rows
+        )
+
+    columns = []
+    for i, (header, fk) in enumerate(zip(names, keys)):
+        if raw_header_row[i] is None or not col_has_data(i):
+            continue
+        sample = [row[i] if i < len(row) else None for row in data_rows]
+        dtype, opts = _infer_col_type(sample)
+        col_info: dict = {"header": header, "field_key": fk, "data_type": dtype}
+        if opts:
+            col_info["options"] = opts
+        columns.append(col_info)
+
+    return {"name": sheet_name, "row_count": len(data_rows), "columns": columns}
+
+
+@router.post("/import-from-excel/preview")
+@limiter.limit("20/minute")
+async def preview_excel_import(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Archivo muy grande (máximo 10 MB)")
+    wb = _load_workbook_safe(content, file.filename or "")
+    sheets = [_sheet_preview(wb, name) for name in wb.sheetnames]
+    return {"filename": file.filename or "file.xlsx", "sheets": sheets}
+
+
+@router.post("/import-from-excel", status_code=201)
+@limiter.limit("10/minute")
+async def import_dataset_from_excel(
+    request: Request,
+    file: UploadFile = File(...),
+    workspace_id: uuid.UUID | None = Query(None),
+    name: str | None = Query(None),
+    sheet: str | None = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _require_ws_manager(current_user, workspace_id, db)
+
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Archivo muy grande (máximo 10 MB)")
+
+    wb = _load_workbook_safe(content, file.filename or "")
+
+    # Select sheet
+    if sheet and sheet in wb.sheetnames:
+        ws_sheet = wb[sheet]
+    else:
+        ws_sheet = wb.active
+
+    rows = list(ws_sheet.iter_rows(values_only=True))
+    if not rows or len(rows) < 2:
+        raise HTTPException(status_code=400, detail="El archivo debe tener al menos una fila de cabeceras y una de datos")
+
+    raw_header_row = rows[0]
+    data_rows = _strip_rows(list(rows[1:]))
+    if not data_rows:
+        raise HTTPException(status_code=400, detail="La hoja no tiene filas con datos")
+
+    names, field_keys = _build_headers(list(raw_header_row))
+    n_cols = len(names)
+
+    # Skip columns that are entirely empty or have no header
+    def col_has_data(i: int) -> bool:
+        if raw_header_row[i] is None:
+            return False
+        return any(
+            (row[i] if i < len(row) else None) is not None
+            and str(row[i] if i < len(row) else "").strip() != ""
+            for row in data_rows
+        )
+
+    active_indices = [i for i in range(n_cols) if col_has_data(i)]
+
+    # Infer types for active columns only
+    col_specs: dict[int, tuple[str, list | None]] = {
+        i: _infer_col_type([row[i] if i < len(row) else None for row in data_rows])
+        for i in active_indices
+    }
+
+    # Create dataset
+    ds_name = (name or "").strip() or (file.filename or "dataset").rsplit(".", 1)[0]
+    dataset = Dataset(name=ds_name, workspace_id=workspace_id)
+    db.add(dataset)
+    await db.flush()
+
+    # Create columns
+    pos = 0
+    for i in active_indices:
+        dtype, opts = col_specs[i]
+        rules: dict = {}
+        if opts:
+            rules["options"] = opts
+        db.add(ColumnDefinition(
+            dataset_id=dataset.id,
+            name=names[i],
+            field_key=field_keys[i],
+            data_type=dtype,
+            rules=rules,
+            position=pos,
+        ))
+        pos += 1
+
+    # Import records
+    records_created = 0
+    for row in data_rows:
+        row_data: dict = {}
+        for i in active_indices:
+            raw = row[i] if i < len(row) else None
+            if raw is None or str(raw).strip() == "":
+                continue
+            dtype, _ = col_specs[i]
+            fk = field_keys[i]
+            if isinstance(raw, (datetime, date_type)):
+                row_data[fk] = raw.date().isoformat() if isinstance(raw, datetime) else raw.isoformat()
+            elif dtype == "number":
+                try:
+                    f = float(str(raw).replace(",", ".").replace(" ", ""))
+                    row_data[fk] = int(f) if f == int(f) else f
+                except ValueError:
+                    row_data[fk] = str(raw).strip()
+            elif dtype == "boolean":
+                row_data[fk] = str(raw).lower() in ("true", "yes", "sí", "si", "1", "verdadero")
+            else:
+                # Normalize float-as-int (phone/DNI stored as float in Excel)
+                if isinstance(raw, float) and raw.is_integer():
+                    row_data[fk] = str(int(raw))
+                else:
+                    row_data[fk] = str(raw).strip()
+        db.add(Record(dataset_id=dataset.id, data=row_data))
+        records_created += 1
+
+    await db.commit()
+    await db.refresh(dataset)
+    logger.info("Imported dataset '%s' (%d cols, %d rows) by user %s", ds_name, len(active_indices), records_created, current_user.id)
+
+    return {
+        "dataset_id": str(dataset.id),
+        "dataset_name": dataset.name,
+        "columns_created": len(active_indices),
+        "records_created": records_created,
+    }

@@ -147,6 +147,20 @@ class DatasetGroupPermission(Base):
     __table_args__ = (UniqueConstraint("dataset_id", "group_id", name="uq_dataset_group_perm"),)
 
 
+class PermissionAuditLog(Base):
+    """Registro inmutable de cambios de permisos sobre datasets."""
+    __tablename__ = "permission_audit_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    dataset_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("datasets.id", ondelete="CASCADE"), nullable=False, index=True)
+    target_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    target_group_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("user_groups.id", ondelete="SET NULL"), nullable=True)
+    old_role: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    new_role: Mapped[str] = mapped_column(String(20), nullable=False)
+    changed_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
 class ChangeHistory(Base):
     __tablename__ = "change_history"
 

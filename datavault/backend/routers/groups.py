@@ -1,4 +1,4 @@
-from __future__ import annotations
+import logging
 import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +8,7 @@ from models import UserGroup, UserGroupMember, User
 from schemas import GroupCreate, GroupUpdate, GroupOut, GroupMemberOut, AddMemberBody
 from auth import require_admin, get_current_user, effective_workspace_role
 
+logger = logging.getLogger("datavault.groups")
 router = APIRouter(prefix="/groups", tags=["groups"])
 
 
@@ -201,6 +202,7 @@ async def add_member(
 
     db.add(UserGroupMember(group_id=group_id, user_id=body.user_id))
     await db.commit()
+    logger.info("group_member_added group=%s user=%s by=%s", group_id, body.user_id, current_user.id)
 
 
 @router.delete("/{group_id}/members/{user_id}", status_code=204)
@@ -224,3 +226,4 @@ async def remove_member(
     if member:
         await db.delete(member)
         await db.commit()
+        logger.info("group_member_removed group=%s user=%s by=%s", group_id, user_id, current_user.id)

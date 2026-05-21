@@ -7,6 +7,7 @@ interface Props {
   currentDatasetId: string;
   currentDatasetName: string;
   currentColumns: ColumnDefinition[];
+  workspaceId?: string;
 }
 
 function normalize(name: string) { return name.toLowerCase().replace(/\s+/g, "_"); }
@@ -45,11 +46,14 @@ function RelCard({
   );
 }
 
-export default function RelatedDatasets({ currentDatasetId, currentDatasetName, currentColumns }: Props) {
+export default function RelatedDatasets({ currentDatasetId, currentDatasetName, currentColumns, workspaceId }: Props) {
   const navigate = useNavigate();
   const curKw = keyword(currentDatasetName);
 
-  const { data: allDatasets = [] } = useQuery({ queryKey: ["datasets"], queryFn: () => getDatasets() });
+  const { data: allDatasets = [] } = useQuery({
+    queryKey: ["datasets", workspaceId ?? "all"],
+    queryFn: () => getDatasets(workspaceId ? { workspace_id: workspaceId } : undefined),
+  });
   const otherDatasets = allDatasets.filter((d) => d.id !== currentDatasetId);
 
   // Fetch columns of all other datasets (to find who references us)

@@ -1,4 +1,6 @@
+import asyncio
 import os
+import uuid
 print("DataVault backend starting... [deploy us-east-1]")
 import logging
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
@@ -11,6 +13,9 @@ from routers.permissions import router as permissions_router
 from routers.groups import router as groups_router
 from routers.workspaces import router as workspaces_router
 from auth import decode_token
+from database import SessionLocal
+from models import User
+from sqlalchemy import select
 import json
 
 logger = logging.getLogger("datavault")
@@ -58,7 +63,13 @@ app = FastAPI(title="DataVault API")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-allowed_origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")]
+allowed_origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+if IS_PRODUCTION and not allowed_origins:
+    raise RuntimeError("ALLOWED_ORIGINS debe estar configurado en producción")
+if "*" in allowed_origins:
+    raise RuntimeError("ALLOWED_ORIGINS=* no es compatible con allow_credentials=True")
+if not allowed_origins:
+    allowed_origins = ["http://localhost:5173"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -98,6 +109,22 @@ async def health():
 
 # ── WebSocket endpoint ────────────────────────────────────────────────────────
 
+async def _ws_permission_check(websocket: WebSocket, user_id: str, dataset_id: str, interval: int = 60) -> None:
+    """Cierra la conexión WS si el usuario pierde acceso o es desactivado."""
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            async with SessionLocal() as db:
+                result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+                user = result.scalar_one_or_none()
+                if not user or not user.is_active:
+                    logger.warning("WS: user %s desactivado, cerrando dataset %s", user_id, dataset_id)
+                    await websocket.close(code=4003)
+                    return
+        except Exception:
+            return
+
+
 @app.websocket("/ws/{dataset_id}")
 async def ws_endpoint(websocket: WebSocket, dataset_id: str):
     await websocket.accept()
@@ -114,7 +141,9 @@ async def ws_endpoint(websocket: WebSocket, dataset_id: str):
         await websocket.close(code=4001)
         return
 
+    user_id = payload.get("sub", "")
     manager._conns.setdefault(dataset_id, set()).add(websocket)
+    check_task = asyncio.create_task(_ws_permission_check(websocket, user_id, dataset_id))
     try:
         while True:
             await websocket.receive_text()
@@ -123,3 +152,5 @@ async def ws_endpoint(websocket: WebSocket, dataset_id: str):
     except Exception as e:
         logger.error("WebSocket error on dataset %s: %s", dataset_id, e, exc_info=True)
         manager.disconnect(dataset_id, websocket)
+    finally:
+        check_task.cancel()

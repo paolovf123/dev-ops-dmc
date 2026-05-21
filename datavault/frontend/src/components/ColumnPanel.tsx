@@ -7,6 +7,7 @@ import { evalFormula, FORMULA_HELP } from "../utils/formula";
 interface Props {
   currentDatasetId: string;
   currentDatasetName: string;
+  workspaceId?: string;
   columns: ColumnDefinition[];
   hiddenCols: Set<string>;
   joinedCols: JoinedColDef[];
@@ -29,7 +30,7 @@ function keyword(dsName: string) {
 }
 
 export default function ColumnPanel({
-  currentDatasetId, currentDatasetName, columns, hiddenCols,
+  currentDatasetId, currentDatasetName, workspaceId, columns, hiddenCols,
   joinedCols, formulaCols, onToggleCol, onAddJoin, onRemoveJoin,
   onAddFormula, onRemoveFormula, sampleRecord, onClose,
 }: Props) {
@@ -48,7 +49,10 @@ export default function ColumnPanel({
   const [showHelp, setShowHelp] = useState(false);
   const [editingUid, setEditingUid] = useState<string | null>(null);
 
-  const { data: datasets = [] } = useQuery({ queryKey: ["datasets"], queryFn: () => getDatasets() });
+  const { data: datasets = [] } = useQuery({
+    queryKey: ["datasets", workspaceId ?? "all"],
+    queryFn: () => getDatasets(workspaceId ? { workspace_id: workspaceId } : undefined),
+  });
   const { data: srcColumns = [] } = useQuery({
     queryKey: ["columns", selectedDsId],
     queryFn: () => getColumns(selectedDsId),

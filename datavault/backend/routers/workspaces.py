@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -11,6 +12,7 @@ from database import get_db
 from models import Workspace, WorkspaceMember, User
 from auth import get_current_user, require_admin, effective_workspace_role, ws_require_owner
 
+logger = logging.getLogger("datavault.workspaces")
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 
 
@@ -222,6 +224,7 @@ async def add_member(
     )
     db.add(member)
     await db.commit()
+    logger.info("ws_member_added ws=%s user=%s role=%s by=%s", workspace_id, body.user_id, body.role, current_user.id)
 
     return MemberOut(
         user_id=member.user_id,
@@ -259,6 +262,7 @@ async def update_member_role(
 
     member.role = body.role
     await db.commit()
+    logger.info("ws_member_role_changed ws=%s user=%s new_role=%s by=%s", workspace_id, user_id, body.role, current_user.id)
 
     return MemberOut(
         user_id=member.user_id,
@@ -292,6 +296,7 @@ async def remove_member(
 
     await db.delete(member)
     await db.commit()
+    logger.info("ws_member_removed ws=%s user=%s by=%s", workspace_id, user_id, current_user.id)
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────

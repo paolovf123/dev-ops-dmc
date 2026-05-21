@@ -1,14 +1,15 @@
-from __future__ import annotations
+import logging
 import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from database import get_db
-from models import DatasetPermission, DatasetGroupPermission, User, Dataset, UserGroup
+from models import DatasetPermission, DatasetGroupPermission, User, Dataset, UserGroup, PermissionAuditLog
 from auth import get_current_user, effective_role
 from pydantic import BaseModel
 from schemas import GroupPermissionBody, GroupPermissionOut
 
+logger = logging.getLogger("datavault.permissions")
 router = APIRouter(prefix="/datasets/{dataset_id}/permissions", tags=["permissions"])
 
 VALID_ROLES = {"admin", "editor", "viewer", "none"}
@@ -89,14 +90,24 @@ async def set_permission(
         )
     )
     perm = result.scalar_one_or_none()
+    old_role = perm.role if perm else None
     if perm:
         perm.role = body.role
     else:
         perm = DatasetPermission(dataset_id=dataset_id, user_id=body.user_id, role=body.role)
         db.add(perm)
 
+    db.add(PermissionAuditLog(
+        dataset_id=dataset_id,
+        target_user_id=body.user_id,
+        old_role=old_role,
+        new_role=body.role,
+        changed_by=current_user.id,
+    ))
     await db.commit()
     await db.refresh(perm)
+    logger.info("permission_set dataset=%s user=%s old=%s new=%s by=%s",
+                dataset_id, body.user_id, old_role, body.role, current_user.id)
     return PermissionOut(
         id=perm.id, dataset_id=perm.dataset_id, user_id=perm.user_id,
         role=perm.role, user_email=target.email, user_name=target.username,
@@ -119,8 +130,17 @@ async def remove_permission(
     )
     perm = result.scalar_one_or_none()
     if perm:
+        db.add(PermissionAuditLog(
+            dataset_id=dataset_id,
+            target_user_id=user_id,
+            old_role=perm.role,
+            new_role="none",
+            changed_by=current_user.id,
+        ))
         await db.delete(perm)
         await db.commit()
+        logger.info("permission_removed dataset=%s user=%s old=%s by=%s",
+                    dataset_id, user_id, perm.role, current_user.id)
 
 
 # ── Group permissions ─────────────────────────────────────────────────────────
@@ -175,14 +195,24 @@ async def set_group_permission(
         )
     )
     perm = result.scalar_one_or_none()
+    old_role = perm.role if perm else None
     if perm:
         perm.role = body.role
     else:
         perm = DatasetGroupPermission(dataset_id=dataset_id, group_id=body.group_id, role=body.role)
         db.add(perm)
 
+    db.add(PermissionAuditLog(
+        dataset_id=dataset_id,
+        target_group_id=body.group_id,
+        old_role=old_role,
+        new_role=body.role,
+        changed_by=current_user.id,
+    ))
     await db.commit()
     await db.refresh(perm)
+    logger.info("group_permission_set dataset=%s group=%s old=%s new=%s by=%s",
+                dataset_id, body.group_id, old_role, body.role, current_user.id)
     return GroupPermissionOut(
         id=perm.id, dataset_id=perm.dataset_id, group_id=perm.group_id,
         role=perm.role, group_name=group.name,
@@ -205,5 +235,14 @@ async def remove_group_permission(
     )
     perm = result.scalar_one_or_none()
     if perm:
+        db.add(PermissionAuditLog(
+            dataset_id=dataset_id,
+            target_group_id=group_id,
+            old_role=perm.role,
+            new_role="none",
+            changed_by=current_user.id,
+        ))
         await db.delete(perm)
         await db.commit()
+        logger.info("group_permission_removed dataset=%s group=%s old=%s by=%s",
+                    dataset_id, group_id, perm.role, current_user.id)

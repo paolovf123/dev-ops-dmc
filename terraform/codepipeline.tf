@@ -360,14 +360,13 @@ resource "aws_codepipeline" "main" {
     }
 
     action {
-      name             = "BuildFrontend"
-      category         = "Build"
-      owner            = "AWS"
-      provider         = "CodeBuild"
-      version          = "1"
-      run_order        = 1
-      input_artifacts  = ["test_output"]
-      output_artifacts = ["frontend_output"]
+      name            = "BuildFrontend"
+      category        = "Build"
+      owner           = "AWS"
+      provider        = "CodeBuild"
+      version         = "1"
+      run_order       = 1
+      input_artifacts = ["test_output"]
       configuration = {
         ProjectName = aws_codebuild_project.build_frontend.name
       }
