@@ -4,7 +4,7 @@ from sqlalchemy import select
 from database import get_db
 from models import Dataset, ColumnDefinition, User
 from schemas import ColumnCreate, ColumnUpdate, ColumnOut
-from auth import require_admin, require_viewer
+from auth import require_admin, ds_require_viewer
 from pagination import MAX_COLUMNS_PER_DATASET, DEFAULT_PAGE_SIZE
 import uuid
 
@@ -25,7 +25,7 @@ async def list_columns(
     response: Response,
     skip: int = Query(0, ge=0),
     limit: int = Query(DEFAULT_PAGE_SIZE, le=MAX_COLUMNS_PER_DATASET),
-    _: User = Depends(require_viewer),
+    _: User = Depends(ds_require_viewer),
     db: AsyncSession = Depends(get_db),
 ):
     await _get_dataset(dataset_id, db)

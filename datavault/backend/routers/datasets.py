@@ -94,14 +94,14 @@ async def list_datasets(
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 async def _require_ws_manager(user: User, workspace_id: uuid.UUID | None, db: AsyncSession):
-    """Permite admin global, o owner/manager del workspace."""
+    """Permite admin global, o owner/admin_ws del workspace."""
     if user.role == "admin":
         return
     if not workspace_id:
         raise HTTPException(status_code=403, detail="Se requiere workspace para esta operación")
     ws_role = await effective_workspace_role(user, workspace_id, db)
-    if ws_role not in ("owner", "manager"):
-        raise HTTPException(status_code=403, detail="Requiere rol owner o manager en el workspace")
+    if ws_role not in ("owner", "admin_ws"):
+        raise HTTPException(status_code=403, detail="Requiere rol owner o admin_ws en el workspace")
 
 
 async def _validate_source_datasets(

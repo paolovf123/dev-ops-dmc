@@ -205,6 +205,10 @@ async def effective_role(user: User, dataset_id: uuid.UUID | None, db: AsyncSess
         ws_role = await effective_workspace_role(user, ds.workspace_id, db)
         if ws_role:
             return WS_ROLE_TO_DS_ROLE.get(ws_role, "viewer")
+        # Dataset pertenece a un workspace y el usuario NO es miembro:
+        # sin permisos directos ni de grupo, no debe poder acceder
+        # (alineado con la doc de list_datasets que oculta esos datasets).
+        return "none"
 
     return user.role
 
