@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
+import * as XLSX from "xlsx";
 import { createDataset, createColumn } from "../api/datasets";
+import client from "../api/client";
 import type { ColumnDefinition } from "../types";
 
 interface ColDraft {
@@ -47,10 +49,178 @@ function keyword(name: string) {
   const parts = name.toLowerCase().replace(/\s+/g, "_").split("_");
   return parts[parts.length - 1];
 }
-function newCol(): ColDraft {
-  return { uid: crypto.randomUUID(), name: "", field_key: "", data_type: "text", required: false, options: "", currency_symbol: "$", max_rating: 5 };
+function newCol(overrides: Partial<ColDraft> = {}): ColDraft {
+  return {
+    uid: crypto.randomUUID(),
+    name: "", field_key: "", data_type: "text", required: false,
+    options: "", currency_symbol: "$", max_rating: 5,
+    ...overrides,
+  };
 }
 
+// ── Templates ────────────────────────────────────────────────────────────────
+interface Template {
+  id: string;
+  emoji: string;
+  name: string;
+  description: string;
+  columns: Array<Partial<ColDraft> & Pick<ColDraft, "name" | "data_type">>;
+}
+
+const TEMPLATES: Template[] = [
+  {
+    id: "clientes", emoji: "👤", name: "Clientes",
+    description: "CRM básico: contacto, empresa, estado",
+    columns: [
+      { name: "Nombre", data_type: "text", required: true },
+      { name: "Email", data_type: "email" },
+      { name: "Teléfono", data_type: "phone" },
+      { name: "Empresa", data_type: "text" },
+      { name: "Estado", data_type: "enum", options: "Lead, Activo, Inactivo, Perdido" },
+      { name: "Fecha de alta", data_type: "date" },
+      { name: "Notas", data_type: "long_text" },
+    ],
+  },
+  {
+    id: "productos", emoji: "📦", name: "Productos",
+    description: "Catálogo con precio, stock y categoría",
+    columns: [
+      { name: "Nombre", data_type: "text", required: true },
+      { name: "SKU", data_type: "text" },
+      { name: "Categoría", data_type: "enum", options: "Electrónica, Ropa, Hogar, Comida, Otro" },
+      { name: "Precio", data_type: "currency", currency_symbol: "S/" },
+      { name: "Stock", data_type: "number" },
+      { name: "Activo", data_type: "boolean" },
+      { name: "Foto", data_type: "url" },
+    ],
+  },
+  {
+    id: "tareas", emoji: "✅", name: "Tareas",
+    description: "Lista de pendientes con estado y prioridad",
+    columns: [
+      { name: "Tarea", data_type: "text", required: true },
+      { name: "Asignado a", data_type: "text" },
+      { name: "Estado", data_type: "enum", options: "Pendiente, En progreso, En revisión, Completada" },
+      { name: "Prioridad", data_type: "enum", options: "Baja, Media, Alta, Urgente" },
+      { name: "Fecha límite", data_type: "date" },
+      { name: "Completada", data_type: "boolean" },
+    ],
+  },
+  {
+    id: "inventario", emoji: "🏷️", name: "Inventario",
+    description: "Stock por ubicación con última revisión",
+    columns: [
+      { name: "Producto", data_type: "text", required: true },
+      { name: "Cantidad", data_type: "number" },
+      { name: "Ubicación", data_type: "text" },
+      { name: "Mínimo", data_type: "number" },
+      { name: "Última revisión", data_type: "date" },
+      { name: "Necesita reposición", data_type: "boolean" },
+    ],
+  },
+  {
+    id: "presupuesto", emoji: "💰", name: "Presupuesto mensual",
+    description: "Ingresos y gastos categorizados",
+    columns: [
+      { name: "Fecha", data_type: "date", required: true },
+      { name: "Concepto", data_type: "text", required: true },
+      { name: "Categoría", data_type: "enum", options: "Vivienda, Comida, Transporte, Ocio, Salud, Servicios, Ingreso, Otro" },
+      { name: "Tipo", data_type: "enum", options: "Ingreso, Gasto" },
+      { name: "Monto", data_type: "currency", currency_symbol: "S/" },
+      { name: "Pagado", data_type: "boolean" },
+      { name: "Notas", data_type: "long_text" },
+    ],
+  },
+  {
+    id: "contactos", emoji: "📇", name: "Contactos",
+    description: "Agenda con tags y cumpleaños",
+    columns: [
+      { name: "Nombre", data_type: "text", required: true },
+      { name: "Email", data_type: "email" },
+      { name: "Teléfono", data_type: "phone" },
+      { name: "Cumpleaños", data_type: "date" },
+      { name: "Tags", data_type: "multiselect", options: "Familia, Amigo, Trabajo, Universidad, Cliente" },
+      { name: "Notas", data_type: "long_text" },
+    ],
+  },
+];
+
+function templateToCols(t: Template): ColDraft[] {
+  return t.columns.map((c) => newCol({
+    name: c.name,
+    field_key: slugify(c.name),
+    data_type: c.data_type,
+    required: c.required ?? false,
+    options: c.options ?? "",
+    currency_symbol: c.currency_symbol ?? "$",
+    max_rating: c.max_rating ?? 5,
+  }));
+}
+
+// ── Type inference from a column of sample values ────────────────────────────
+function inferDataType(values: unknown[]): ColumnDefinition["data_type"] {
+  const samples = values
+    .filter((v) => v !== null && v !== undefined && v !== "")
+    .slice(0, 20)
+    .map((v) => String(v).trim());
+  if (samples.length === 0) return "text";
+
+  const allBool = samples.every((s) => /^(true|false|sí|si|no|yes|y|n|1|0)$/i.test(s));
+  if (allBool && samples.length > 1) return "boolean";
+
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (samples.every((s) => emailRe.test(s))) return "email";
+
+  if (samples.every((s) => /^https?:\/\//i.test(s))) return "url";
+
+  if (samples.every((s) => /^[+\d\s\-()]{7,}$/.test(s) && /\d{6,}/.test(s.replace(/\D/g, "")))) return "phone";
+
+  const pctRe = /^-?\d+(\.\d+)?\s*%$/;
+  if (samples.every((s) => pctRe.test(s))) return "percent";
+
+  const currencyRe = /^[$€£¥S/]\s*-?\d{1,3}(,\d{3})*(\.\d+)?$|^-?\d+(\.\d+)?\s*(USD|PEN|EUR|GBP)$/i;
+  if (samples.every((s) => currencyRe.test(s))) return "currency";
+
+  if (samples.every((s) => !isNaN(parseFloat(s)) && isFinite(Number(s)) && /^-?\d+(\.\d+)?$/.test(s))) return "number";
+
+  if (samples.every((s) => !isNaN(Date.parse(s)) && /\d{4}|\d{1,2}[\/\-]\d{1,2}/.test(s))) return "date";
+
+  if (samples.every((s) => s.length > 80)) return "long_text";
+
+  return "text";
+}
+
+interface ParsedFile {
+  fileName: string;
+  headers: string[];
+  rows: Record<string, unknown>[];
+  inferredCols: ColDraft[];
+}
+
+async function parseFile(file: File): Promise<ParsedFile> {
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: "array" });
+  const firstSheetName = wb.SheetNames[0];
+  if (!firstSheetName) throw new Error("Archivo vacío");
+  const sheet = wb.Sheets[firstSheetName];
+  const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", raw: false });
+  if (json.length === 0) throw new Error("La primera hoja no tiene datos");
+  const headers = Object.keys(json[0]);
+
+  const inferredCols: ColDraft[] = headers.map((h) => {
+    const col_values = json.map((r) => r[h]);
+    const data_type = inferDataType(col_values);
+    return newCol({
+      name: h,
+      field_key: slugify(h),
+      data_type,
+    });
+  });
+
+  return { fileName: file.name, headers, rows: json, inferredCols };
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
 export default function CreateDataset() {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -61,11 +231,20 @@ export default function CreateDataset() {
     ? { uid: crypto.randomUUID(), name: `ID ${linkedName}`, field_key: `id_${keyword(linkedName)}`, data_type: "text", required: true, options: "", currency_symbol: "$", max_rating: 5, locked: true }
     : null;
 
+  // step: 'choose' shows the picker; 'form' shows the column editor.
+  // If linkedName is set we skip the picker (legacy flow).
+  const [step, setStep] = useState<"choose" | "form">(linkedName ? "form" : "choose");
+  const [appliedTemplate, setAppliedTemplate] = useState<string | null>(null);
+  const [importedRows, setImportedRows] = useState<Record<string, unknown>[]>([]);
+  const [importStatus, setImportStatus] = useState<string>("");
+  const [dragOver, setDragOver] = useState(false);
+
   const [dsName, setDsName] = useState("");
   const [dsDesc, setDsDesc] = useState("");
   const [cols, setCols] = useState<ColDraft[]>(fkPreset ? [fkPreset, newCol()] : [newCol()]);
   const [saving, setSaving] = useState(false);
   const [nameError, setNameError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const updateCol = (uid: string, patch: Partial<ColDraft>) =>
     setCols((prev) =>
@@ -77,28 +256,195 @@ export default function CreateDataset() {
       })
     );
 
+  // ── Apply a template ────────────────────────────────────────────────────
+  const applyTemplate = (t: Template) => {
+    setAppliedTemplate(t.id);
+    setCols(templateToCols(t));
+    if (!dsName.trim()) setDsName(t.name);
+    setStep("form");
+  };
+
+  // ── Import file (XLSX / CSV) ────────────────────────────────────────────
+  const handleFile = async (file: File) => {
+    setImportStatus(`Leyendo ${file.name}…`);
+    try {
+      const parsed = await parseFile(file);
+      setCols(parsed.inferredCols);
+      setImportedRows(parsed.rows);
+      if (!dsName.trim()) {
+        const baseName = file.name.replace(/\.(xlsx|xls|csv)$/i, "");
+        setDsName(baseName);
+      }
+      setImportStatus(`${parsed.rows.length} filas detectadas · ${parsed.inferredCols.length} columnas inferidas`);
+      setAppliedTemplate(null);
+      setStep("form");
+    } catch (err) {
+      setImportStatus(`Error: ${err instanceof Error ? err.message : "no se pudo leer el archivo"}`);
+    }
+  };
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFile(file);
+  };
+
+  // ── Submit: create dataset + columns + (optional) rows ──────────────────
   const handleSubmit = async () => {
     if (!dsName.trim()) { setNameError("El nombre es requerido"); return; }
     const validCols = cols.filter((c) => c.name.trim() && c.field_key.trim());
     setSaving(true);
     try {
       const ds = await createDataset(dsName.trim(), dsDesc.trim() || undefined);
-      await Promise.all(
-        validCols.map((c, i) => {
-          const rules: ColumnDefinition["rules"] = {};
-          if (c.required) rules.required = true;
-          if ((c.data_type === "enum" || c.data_type === "multiselect") && c.options)
-            rules.options = c.options.split(",").map((o) => o.trim()).filter(Boolean);
-          if (c.data_type === "currency") rules.currency_symbol = c.currency_symbol || "$";
-          if (c.data_type === "rating") rules.max_rating = c.max_rating;
-          return createColumn(ds.id, { name: c.name.trim(), field_key: c.field_key.trim(), data_type: c.data_type, rules, position: i });
-        })
-      );
+      // Create columns sequentially so the resulting field_keys are predictable for imports
+      const createdCols: ColumnDefinition[] = [];
+      for (let i = 0; i < validCols.length; i++) {
+        const c = validCols[i];
+        const rules: ColumnDefinition["rules"] = {};
+        if (c.required) rules.required = true;
+        if ((c.data_type === "enum" || c.data_type === "multiselect") && c.options)
+          rules.options = c.options.split(",").map((o) => o.trim()).filter(Boolean);
+        if (c.data_type === "currency") rules.currency_symbol = c.currency_symbol || "$";
+        if (c.data_type === "rating") rules.max_rating = c.max_rating;
+        const created = await createColumn(ds.id, {
+          name: c.name.trim(), field_key: c.field_key.trim(),
+          data_type: c.data_type, rules, position: i,
+        });
+        createdCols.push(created);
+      }
+
+      // If we have imported rows, post them. We map header -> field_key by name match.
+      if (importedRows.length > 0) {
+        const headerToKey = new Map<string, string>();
+        for (let i = 0; i < validCols.length; i++) {
+          const draft = validCols[i];
+          const created = createdCols[i];
+          if (created) headerToKey.set(draft.name, created.field_key);
+        }
+        // POST one record at a time to keep error handling simple. For huge files this could batch.
+        const limit = Math.min(importedRows.length, 1000); // safety cap
+        for (let i = 0; i < limit; i++) {
+          const r = importedRows[i];
+          const data: Record<string, unknown> = {};
+          for (const [header, val] of Object.entries(r)) {
+            const key = headerToKey.get(header);
+            if (key) data[key] = val;
+          }
+          try {
+            await client.post(`/datasets/${ds.id}/records`, { data });
+          } catch {
+            // silently skip rows that fail validation; user can fix later
+          }
+        }
+      }
+
       qc.invalidateQueries({ queryKey: ["datasets"] });
       navigate(`/datasets/${ds.id}`);
     } catch { setSaving(false); }
   };
 
+  // ── Render: choose step ────────────────────────────────────────────────
+  if (step === "choose") {
+    return (
+      <>
+        <header className="app-header">
+          <button className="btn btn-ghost" onClick={() => navigate("/")} style={{ padding: "5px 8px", fontSize: 18 }}>←</button>
+          <button className="app-brand-btn" onClick={() => navigate("/")}>
+            <div className="app-header-logo" style={{ width: 28, height: 28, fontSize: 13, borderRadius: "var(--radius-xs)" }}>T</div>
+            <span className="app-header-name">Trans<em>Excel</em></span>
+          </button>
+          <div style={{ width: 1, height: 20, background: "var(--color-border)", margin: "0 6px" }} />
+          <span style={{ fontWeight: 600, fontSize: 15 }}>Nuevo dataset</span>
+        </header>
+
+        <main className="page" style={{ maxWidth: 920 }}>
+          {/* Import zone */}
+          <div className="card"
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={onDrop}
+            style={{
+              padding: "28px 32px",
+              marginBottom: 20,
+              border: dragOver ? "2px dashed var(--color-primary)" : "2px dashed var(--color-border)",
+              background: dragOver ? "var(--color-primary-bg)" : undefined,
+              textAlign: "center",
+              transition: "background 0.12s",
+            }}>
+            <div style={{ fontSize: 32, lineHeight: 1, marginBottom: 8 }}>📤</div>
+            <h3 style={{ margin: "0 0 6px" }}>Importa desde Excel o CSV</h3>
+            <p style={{ color: "var(--color-text-muted)", fontSize: 13, margin: "0 0 14px" }}>
+              Arrastrá un archivo <strong>.xlsx</strong>, <strong>.xls</strong> o <strong>.csv</strong> acá,
+              o usá el botón. Detectamos columnas y tipos de datos automáticamente.
+            </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleFile(f);
+              }}
+            />
+            <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()}>
+              Elegir archivo
+            </button>
+            {importStatus && (
+              <p style={{ marginTop: 10, fontSize: 12, color: "var(--color-text-secondary)" }}>{importStatus}</p>
+            )}
+          </div>
+
+          {/* Templates */}
+          <div className="card" style={{ padding: "20px 24px", marginBottom: 20 }}>
+            <h3 style={{ margin: "0 0 6px" }}>O empezá desde una plantilla</h3>
+            <p style={{ color: "var(--color-text-muted)", fontSize: 13, margin: "0 0 14px" }}>
+              Cada plantilla viene con columnas y tipos pre-configurados. Las podés ajustar después.
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
+              {TEMPLATES.map((t) => (
+                <button key={t.id}
+                  onClick={() => applyTemplate(t)}
+                  style={{
+                    textAlign: "left",
+                    padding: "12px 14px",
+                    border: "1.5px solid var(--color-border)",
+                    borderRadius: 8,
+                    background: "var(--color-surface)",
+                    cursor: "pointer",
+                    display: "flex",
+                    gap: 10,
+                    alignItems: "flex-start",
+                    transition: "border-color 0.12s, background 0.12s",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--color-primary)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }}>
+                  <span style={{ fontSize: 22, lineHeight: 1 }}>{t.emoji}</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <strong style={{ display: "block", fontSize: 14 }}>{t.name}</strong>
+                    <span style={{ fontSize: 11.5, color: "var(--color-text-muted)", display: "block", marginTop: 2 }}>{t.description}</span>
+                    <span style={{ fontSize: 10, color: "var(--color-text-muted)", display: "block", marginTop: 4 }}>
+                      {t.columns.length} columnas
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* From scratch */}
+          <div style={{ textAlign: "center" }}>
+            <button className="btn btn-ghost" onClick={() => setStep("form")}>
+              o empezá desde cero →
+            </button>
+          </div>
+        </main>
+      </>
+    );
+  }
+
+  // ── Render: form step (original UI) ────────────────────────────────────
   return (
     <>
       <header className="app-header">
@@ -113,6 +459,21 @@ export default function CreateDataset() {
           <span style={{ fontSize: 12, padding: "3px 10px", borderRadius: 20, background: "var(--color-primary-bg)", color: "var(--pm-green-600)", fontWeight: 600, border: "1px solid var(--color-primary-border)", marginLeft: 6 }}>
             🔗 Relacionado con {linkedName}
           </span>
+        )}
+        {appliedTemplate && (
+          <span style={{ fontSize: 12, padding: "3px 10px", borderRadius: 20, background: "var(--color-primary-bg)", color: "var(--color-primary)", fontWeight: 600, border: "1px solid var(--color-primary-border)", marginLeft: 6 }}>
+            📋 Plantilla: {TEMPLATES.find((t) => t.id === appliedTemplate)?.name}
+          </span>
+        )}
+        {importedRows.length > 0 && (
+          <span style={{ fontSize: 12, padding: "3px 10px", borderRadius: 20, background: "#FEF3C7", color: "#92400E", fontWeight: 600, border: "1px solid #FDE68A", marginLeft: 6 }}>
+            📤 {importedRows.length} filas listas para importar
+          </span>
+        )}
+        {!linkedName && (
+          <button className="btn btn-ghost" onClick={() => setStep("choose")} style={{ marginLeft: "auto", fontSize: 12 }}>
+            ← Cambiar plantilla
+          </button>
         )}
       </header>
 
@@ -160,7 +521,12 @@ export default function CreateDataset() {
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 28, paddingTop: 20, borderTop: "1px solid var(--color-border-light)" }}>
             <button className="btn btn-secondary" onClick={() => navigate("/")}>Cancelar</button>
             <button className="btn btn-primary" onClick={handleSubmit} disabled={saving || !dsName.trim()}>
-              {saving ? "Creando..." : `Crear dataset${cols.filter(c => c.name).length > 0 ? ` con ${cols.filter(c => c.name).length} columna${cols.filter(c => c.name).length !== 1 ? "s" : ""}` : ""}`}
+              {saving ? "Creando..." : (() => {
+                const n = cols.filter(c => c.name).length;
+                const colsPart = n > 0 ? ` con ${n} columna${n !== 1 ? "s" : ""}` : "";
+                const rowsPart = importedRows.length > 0 ? ` + ${importedRows.length} fila${importedRows.length !== 1 ? "s" : ""}` : "";
+                return `Crear dataset${colsPart}${rowsPart}`;
+              })()}
             </button>
           </div>
         </div>

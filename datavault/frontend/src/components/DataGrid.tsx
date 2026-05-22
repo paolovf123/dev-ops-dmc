@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useCallback } from "react";
+import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import type { ColumnDefinition, Record as DRecord, FormulaColDef } from "../types";
 import { evalFormula } from "../utils/formula";
 import CellEditor, { type NavDir } from "./CellEditor";
@@ -160,6 +160,166 @@ type UnifiedColumn =
   | { type: 'extra'; id: string; ec: ExtraColumn }
   | { type: 'formula'; id: string; fc: FormulaColDef };
 
+// ── Range selection ───────────────────────────────────────────────────────────
+type CellPos = { row: number; col: number };
+type SelRange = { from: CellPos; to: CellPos };
+
+function normRange(r: SelRange) {
+  return {
+    minRow: Math.min(r.from.row, r.to.row),
+    maxRow: Math.max(r.from.row, r.to.row),
+    minCol: Math.min(r.from.col, r.to.col),
+    maxCol: Math.max(r.from.col, r.to.col),
+  };
+}
+
+function isInRange(rowIdx: number, colIdx: number, range: SelRange | null): boolean {
+  if (!range) return false;
+  const { minRow, maxRow, minCol, maxCol } = normRange(range);
+  return rowIdx >= minRow && rowIdx <= maxRow && colIdx >= minCol && colIdx <= maxCol;
+}
+
+function rangeArea(range: SelRange | null): number {
+  if (!range) return 0;
+  const { minRow, maxRow, minCol, maxCol } = normRange(range);
+  return (maxRow - minRow + 1) * (maxCol - minCol + 1);
+}
+
+// Returns numeric stats over cells in range (only numeric/currency/percent/rating cells)
+function computeStats(
+  range: SelRange,
+  records: DRecord[],
+  cols: ColumnDefinition[],
+): { count: number; numericCount: number; sum: number; avg: number; min: number; max: number } {
+  const { minRow, maxRow, minCol, maxCol } = normRange(range);
+  let count = 0;
+  const nums: number[] = [];
+  for (let r = minRow; r <= maxRow; r++) {
+    for (let c = minCol; c <= maxCol; c++) {
+      const rec = records[r];
+      const col = cols[c];
+      if (!rec || !col) continue;
+      const raw = rec.data[col.field_key];
+      if (raw === null || raw === undefined || raw === "") continue;
+      count++;
+      const isNumeric = col.data_type === "number" || col.data_type === "currency"
+        || col.data_type === "percent" || col.data_type === "rating";
+      if (isNumeric) {
+        const n = parseFloat(String(raw));
+        if (!isNaN(n)) nums.push(n);
+      } else {
+        const n = parseFloat(String(raw));
+        if (!isNaN(n) && isFinite(n) && String(n) === String(raw).trim()) nums.push(n);
+      }
+    }
+  }
+  const numericCount = nums.length;
+  const sum = nums.reduce((a, b) => a + b, 0);
+  const avg = numericCount > 0 ? sum / numericCount : 0;
+  const min = numericCount > 0 ? Math.min(...nums) : 0;
+  const max = numericCount > 0 ? Math.max(...nums) : 0;
+  return { count, numericCount, sum, avg, min, max };
+}
+
+function fmtNum(n: number): string {
+  return n.toLocaleString("es-PE", { maximumFractionDigits: 4 });
+}
+
+// ── Column filter popover ─────────────────────────────────────────────────────
+function ColumnFilterPopover({
+  column, allValues, selected, onChange, onClose,
+}: {
+  column: ColumnDefinition;
+  allValues: string[];
+  selected: Set<string>;
+  onChange: (next: Set<string>) => void;
+  onClose: () => void;
+}) {
+  const [search, setSearch] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [onClose]);
+
+  const filteredValues = useMemo(() => {
+    if (!search.trim()) return allValues;
+    const q = search.toLowerCase();
+    return allValues.filter((v) => v.toLowerCase().includes(q));
+  }, [allValues, search]);
+
+  const allSelected = selected.size === 0 || selected.size === allValues.length;
+
+  const toggleAll = () => {
+    if (allSelected) onChange(new Set([])); // clear == none (we treat empty as "all", so use sentinel below)
+    else onChange(new Set());
+  };
+
+  const toggleOne = (v: string) => {
+    const n = new Set(selected.size === 0 ? allValues : selected);
+    if (n.has(v)) n.delete(v);
+    else n.add(v);
+    onChange(n);
+  };
+
+  return (
+    <div ref={ref} className="col-filter-popover" style={{
+      position: "absolute", top: "100%", right: 0, marginTop: 4, zIndex: 50,
+      background: "var(--color-surface)", border: "1px solid var(--color-border)",
+      borderRadius: 6, boxShadow: "0 4px 14px rgba(0,0,0,0.12)",
+      width: 240, maxHeight: 320, display: "flex", flexDirection: "column",
+      padding: 8, fontSize: 12,
+    }}
+    onClick={(e) => e.stopPropagation()}>
+      <div style={{ fontWeight: 600, marginBottom: 6, color: "var(--color-text)" }}>
+        Filtrar: {column.name}
+      </div>
+      <input
+        autoFocus
+        placeholder="Buscar valor…"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        style={{ marginBottom: 6, fontSize: 12, padding: "4px 6px" }}
+      />
+      <label style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 2px",
+        borderBottom: "1px solid var(--color-border-light)", marginBottom: 4, fontWeight: 500 }}>
+        <input type="checkbox" checked={allSelected} onChange={toggleAll} />
+        (Seleccionar todo)
+      </label>
+      <div style={{ overflowY: "auto", flex: 1 }}>
+        {filteredValues.length === 0 && (
+          <div style={{ color: "var(--color-text-muted)", padding: "8px 4px", textAlign: "center" }}>
+            Sin coincidencias
+          </div>
+        )}
+        {filteredValues.map((v) => {
+          const isOn = selected.size === 0 || selected.has(v);
+          return (
+            <label key={v} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 2px", cursor: "pointer" }}>
+              <input type="checkbox" checked={isOn} onChange={() => toggleOne(v)} />
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v || "(vacío)"}</span>
+            </label>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", gap: 6, marginTop: 8, paddingTop: 6, borderTop: "1px solid var(--color-border-light)" }}>
+        <button className="btn btn-secondary" style={{ fontSize: 11, padding: "3px 8px", flex: 1 }}
+          onClick={() => { onChange(new Set()); onClose(); }}>
+          Limpiar
+        </button>
+        <button className="btn btn-primary" style={{ fontSize: 11, padding: "3px 8px", flex: 1 }}
+          onClick={onClose}>
+          Cerrar
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function DataGrid({
   columns, records, extraColumns = [], formulaCols = [],
   showFilterRow, columnFilters = {}, onFilterChange,
@@ -176,6 +336,15 @@ export default function DataGrid({
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const dragColKey = useRef<string | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
+
+  // Range selection (mouse drag / Shift+click)
+  const [selRange, setSelRange] = useState<SelRange | null>(null);
+  const isMouseSelecting = useRef(false);
+
+  // Visual column filter (Excel AutoFiltro): map field_key -> selected values
+  // Empty Set or undefined means "all values pass"
+  const [visualFilters, setVisualFilters] = useState<Record<string, Set<string>>>({});
+  const [openFilterKey, setOpenFilterKey] = useState<string | null>(null);
 
   const unifiedCols = useMemo(() => {
     const list: UnifiedColumn[] = [
@@ -206,15 +375,48 @@ export default function DataGrid({
     else { setSortKey(key); setSortDir("asc"); }
   };
 
+  // Apply visual filters first, then sort
+  const filteredRecords = useMemo(() => {
+    const activeKeys = Object.keys(visualFilters).filter((k) => visualFilters[k] && visualFilters[k].size > 0);
+    if (activeKeys.length === 0) return records;
+    return records.filter((rec) => {
+      for (const k of activeKeys) {
+        const allowed = visualFilters[k];
+        const val = String(rec.data[k] ?? "");
+        if (!allowed.has(val)) return false;
+      }
+      return true;
+    });
+  }, [records, visualFilters]);
+
   const sortedRecords = useMemo(() => {
-    if (!sortKey) return records;
-    return [...records].sort((a, b) => {
+    if (!sortKey) return filteredRecords;
+    return [...filteredRecords].sort((a, b) => {
       const av = String(a.data[sortKey] ?? "");
       const bv = String(b.data[sortKey] ?? "");
       const cmp = av.localeCompare(bv, "es", { numeric: true, sensitivity: "base" });
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [records, sortKey, sortDir]);
+  }, [filteredRecords, sortKey, sortDir]);
+
+  // Build sets of unique values per regular column (for filter popover)
+  const uniqueValuesByCol = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const c of columns) {
+      const vals = new Set<string>();
+      for (const r of records) {
+        const v = r.data[c.field_key];
+        if (v === null || v === undefined) continue;
+        if (Array.isArray(v)) {
+          v.forEach((x) => vals.add(String(x)));
+        } else {
+          vals.add(String(v));
+        }
+      }
+      map[c.field_key] = Array.from(vals).sort((a, b) => a.localeCompare(b, "es", { numeric: true }));
+    }
+    return map;
+  }, [columns, records]);
 
   // ── Keyboard navigation ────────────────────────────────────────────────────
   const navigateTo = useCallback((recordId: string, fieldKey: string, startEditing = false) => {
@@ -268,12 +470,29 @@ export default function DataGrid({
       Tab: e.shiftKey ? "prev-col" : "next-col",
     };
 
-    if (dirMap[e.key]) { e.preventDefault(); navigate(anchor, dirMap[e.key], false); return; }
+    if (dirMap[e.key]) {
+      e.preventDefault();
+      navigate(anchor, dirMap[e.key], false);
+      setSelRange(null);
+      return;
+    }
     if (e.key === "Enter" || e.key === "F2") { e.preventDefault(); setEditing(anchor); return; }
-    if (e.key === "Escape") { setFocused(null); return; }
+    if (e.key === "Escape") { setFocused(null); setSelRange(null); return; }
     if (e.key === "Delete" || e.key === "Backspace") {
       e.preventDefault();
-      onCellChange(anchor.recordId, anchor.fieldKey, "");
+      // If there's a range, clear all numeric/text cells in it; otherwise just the focused cell
+      if (selRange && rangeArea(selRange) > 1) {
+        const { minRow, maxRow, minCol, maxCol } = normRange(selRange);
+        for (let r = minRow; r <= maxRow; r++) {
+          for (let c = minCol; c <= maxCol; c++) {
+            const rec = sortedRecords[r];
+            const col = editableCols[c];
+            if (rec && col && !rec.deleted_at) onCellChange(rec.id, col.field_key, "");
+          }
+        }
+      } else {
+        onCellChange(anchor.recordId, anchor.fieldKey, "");
+      }
       return;
     }
     // Start typing → open editor
@@ -282,9 +501,34 @@ export default function DataGrid({
     }
   };
 
+  // ── Range selection: mouse handlers ────────────────────────────────────────
+  // Click on a cell → set focused + start a 1x1 range (no editor yet — Excel style).
+  // Drag → extend range. Double-click or Enter → editor.
+  const startRange = useCallback((rowIdx: number, colIdx: number, e: React.MouseEvent) => {
+    if (e.shiftKey && selRange) {
+      // Shift+click extends range from existing "from"
+      setSelRange({ from: selRange.from, to: { row: rowIdx, col: colIdx } });
+    } else {
+      const pos = { row: rowIdx, col: colIdx };
+      setSelRange({ from: pos, to: pos });
+      isMouseSelecting.current = true;
+    }
+  }, [selRange]);
+
+  const extendRange = useCallback((rowIdx: number, colIdx: number) => {
+    if (!isMouseSelecting.current) return;
+    setSelRange((prev) => prev ? { from: prev.from, to: { row: rowIdx, col: colIdx } } : null);
+  }, []);
+
+  useEffect(() => {
+    const onUp = () => { isMouseSelecting.current = false; };
+    window.addEventListener("mouseup", onUp);
+    return () => window.removeEventListener("mouseup", onUp);
+  }, []);
+
   // ── Paste from Excel (TSV) ─────────────────────────────────────────────────
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    if (editing) return; // let CellEditor handle paste in cell
+    if (editing) return;
     const text = e.clipboardData.getData("text/plain");
     if (!text) return;
 
@@ -315,14 +559,34 @@ export default function DataGrid({
   }, [editing, focused, sortedRecords, editableCols, onCellChange]);
 
   // ── Copy selected cells as TSV ─────────────────────────────────────────────
+  // Priority: range > selected rows > nothing
   const handleCopy = useCallback((e: React.ClipboardEvent) => {
     if (editing) return;
-    if (!selectedIds || selectedIds.size === 0) return;
-    const rows = sortedRecords.filter((r) => selectedIds.has(r.id));
-    const tsv = rows.map((r) => editableCols.map((c) => String(r.data[c.field_key] ?? "")).join("\t")).join("\n");
-    e.preventDefault();
-    e.clipboardData.setData("text/plain", tsv);
-  }, [editing, selectedIds, sortedRecords, editableCols]);
+
+    if (selRange && rangeArea(selRange) > 1) {
+      const { minRow, maxRow, minCol, maxCol } = normRange(selRange);
+      const rows: string[] = [];
+      for (let r = minRow; r <= maxRow; r++) {
+        const cells: string[] = [];
+        for (let c = minCol; c <= maxCol; c++) {
+          const rec = sortedRecords[r];
+          const col = editableCols[c];
+          cells.push(rec && col ? String(rec.data[col.field_key] ?? "") : "");
+        }
+        rows.push(cells.join("\t"));
+      }
+      e.preventDefault();
+      e.clipboardData.setData("text/plain", rows.join("\n"));
+      return;
+    }
+
+    if (selectedIds && selectedIds.size > 0) {
+      const rows = sortedRecords.filter((r) => selectedIds.has(r.id));
+      const tsv = rows.map((r) => editableCols.map((c) => String(r.data[c.field_key] ?? "")).join("\t")).join("\n");
+      e.preventDefault();
+      e.clipboardData.setData("text/plain", tsv);
+    }
+  }, [editing, selRange, selectedIds, sortedRecords, editableCols]);
 
   // ── Selection ──────────────────────────────────────────────────────────────
   const hasSelection = !!onSelectionChange;
@@ -338,26 +602,34 @@ export default function DataGrid({
     onSelectionChange(n);
   };
 
+  // ── Stats for status bar ───────────────────────────────────────────────────
+  const stats = useMemo(() => {
+    if (!selRange || rangeArea(selRange) < 2) return null;
+    return computeStats(selRange, sortedRecords, editableCols);
+  }, [selRange, sortedRecords, editableCols]);
+
   return (
     <div>
       <div
-        className="table-wrap"
+        className="table-wrap data-grid-wrap"
         ref={tableRef}
         tabIndex={0}
         onKeyDown={handleTableKeyDown}
         onPaste={handlePaste}
         onCopy={handleCopy}
-        style={{ outline: "none" }}
+        style={{ outline: "none", position: "relative", overflow: "auto", maxHeight: "calc(100vh - 280px)" }}
       >
         <table className="data-table">
-          <thead>
+          <thead style={{ position: "sticky", top: 0, zIndex: 3, background: "var(--color-surface)" }}>
             <tr>
               {hasSelection && (
-                <th style={{ width: 36, textAlign: "center" }} className="col-frozen">
+                <th style={{ width: 36, textAlign: "center",
+                  position: "sticky", left: 0, zIndex: 4, background: "var(--color-surface)" }} className="col-frozen">
                   <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
                 </th>
               )}
-              <th className="col-rownum col-frozen">#</th>
+              <th className="col-rownum col-frozen"
+                style={{ position: "sticky", left: hasSelection ? 36 : 0, zIndex: 4, background: "var(--color-surface)" }}>#</th>
 
               {unifiedCols.map((uCol) => {
                 const isOver = dragOverKey === uCol.id;
@@ -382,11 +654,13 @@ export default function DataGrid({
 
                 if (uCol.type === 'regular') {
                   const col = uCol.col;
+                  const filterActive = (visualFilters[col.field_key]?.size ?? 0) > 0;
                   return (
                     <th key={uCol.id}
                       className={`th-sortable${isOver ? " th-drag-over" : ""}`}
                       onClick={() => handleSortClick(col.field_key)}
                       title={`Ordenar por ${col.name}`}
+                      style={{ position: "relative" }}
                       {...dndProps}>
                       <span className="th-inner">
                         {onReorderAny && (
@@ -396,6 +670,26 @@ export default function DataGrid({
                         <span className="th-col-right">
                           <span className={`col-type col-type-${col.data_type}`}>{col.data_type}</span>
                           <SortIcon active={sortKey === col.field_key} dir={sortDir} />
+                          <button
+                            className="col-filter-btn"
+                            title={filterActive ? `Filtro activo (${visualFilters[col.field_key].size})` : "Filtrar valores"}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenFilterKey(openFilterKey === col.field_key ? null : col.field_key);
+                            }}
+                            style={{
+                              padding: "1px 4px",
+                              background: filterActive ? "var(--color-primary-bg)" : "transparent",
+                              border: "1px solid",
+                              borderColor: filterActive ? "var(--color-primary)" : "transparent",
+                              borderRadius: 3,
+                              cursor: "pointer",
+                              color: filterActive ? "var(--color-primary)" : "var(--color-text-muted)",
+                              fontSize: 10,
+                              lineHeight: 1,
+                            }}>
+                            ▼
+                          </button>
                           {onEditColumn && (
                             <button className="col-edit-btn" title={`Editar "${col.name}"`}
                               onClick={(e) => { e.stopPropagation(); onEditColumn(col); }}>
@@ -425,6 +719,22 @@ export default function DataGrid({
                           )}
                         </span>
                       </span>
+                      {openFilterKey === col.field_key && (
+                        <ColumnFilterPopover
+                          column={col}
+                          allValues={uniqueValuesByCol[col.field_key] ?? []}
+                          selected={visualFilters[col.field_key] ?? new Set()}
+                          onChange={(next) => {
+                            setVisualFilters((prev) => {
+                              const n = { ...prev };
+                              if (next.size === 0) delete n[col.field_key];
+                              else n[col.field_key] = next;
+                              return n;
+                            });
+                          }}
+                          onClose={() => setOpenFilterKey(null)}
+                        />
+                      )}
                     </th>
                   );
                 }
@@ -528,20 +838,25 @@ export default function DataGrid({
                 ].filter(Boolean).join(" ") || undefined}>
 
                 {hasSelection && (
-                  <td style={{ textAlign: "center" }} className="col-frozen">
+                  <td style={{ textAlign: "center",
+                    position: "sticky", left: 0, zIndex: 1, background: "var(--color-surface)" }}
+                    className="col-frozen">
                     <input type="checkbox"
                       checked={selectedIds?.has(rec.id) ?? false}
                       onChange={() => toggleSelectOne(rec.id)} />
                   </td>
                 )}
 
-                <td className="col-rownum-cell col-frozen">{rowIdx + 1}</td>
+                <td className="col-rownum-cell col-frozen"
+                  style={{ position: "sticky", left: hasSelection ? 36 : 0, zIndex: 1, background: "var(--color-surface)" }}>{rowIdx + 1}</td>
 
                 {unifiedCols.map((uCol) => {
                   if (uCol.type === 'regular') {
                     const col = uCol.col;
+                    const colIdx = editableCols.findIndex((c) => c.field_key === col.field_key);
                     const isEditing = editing?.recordId === rec.id && editing.fieldKey === col.field_key;
                     const isFocused = !isEditing && focused?.recordId === rec.id && focused.fieldKey === col.field_key;
+                    const inRange = colIdx >= 0 && isInRange(rowIdx, colIdx, selRange) && rangeArea(selRange) > 1;
                     const cellVal = rec.data[col.field_key];
                     const validationError = !rec.deleted_at ? validateCell(cellVal, col) : null;
                     return (
@@ -549,14 +864,31 @@ export default function DataGrid({
                         className={[
                           isEditing ? "cell-editing" : undefined,
                           isFocused ? "cell-focused" : undefined,
+                          inRange ? "cell-in-range" : undefined,
                           cellVal == null ? "cell-null" : undefined,
                           validationError ? "cell-invalid" : undefined,
                         ].filter(Boolean).join(" ") || undefined}
+                        style={inRange ? { background: "rgba(37, 99, 235, 0.08)" } : undefined}
                         title={validationError ?? undefined}
-                        onClick={() => {
+                        onMouseDown={(e) => {
+                          if (rec.deleted_at) return;
+                          if (isEditing) return; // don't restart range inside the editor
+                          // primary mouse button only
+                          if (e.button !== 0) return;
+                          // Single click = focus + start range. Avoid stealing focus from inputs (e.g. checkboxes)
+                          const target = e.target as HTMLElement;
+                          if (target.tagName === "INPUT" || target.tagName === "SELECT" || target.tagName === "A" || target.tagName === "BUTTON") return;
+                          setFocused({ recordId: rec.id, fieldKey: col.field_key });
+                          if (colIdx >= 0) startRange(rowIdx, colIdx, e);
+                        }}
+                        onMouseEnter={() => {
+                          if (colIdx >= 0) extendRange(rowIdx, colIdx);
+                        }}
+                        onDoubleClick={() => {
                           if (rec.deleted_at) return;
                           setEditing({ recordId: rec.id, fieldKey: col.field_key });
                           setFocused({ recordId: rec.id, fieldKey: col.field_key });
+                          setSelRange(null);
                         }}>
                         {isEditing ? (
                           <CellEditor column={col} value={cellVal}
@@ -625,6 +957,14 @@ export default function DataGrid({
         {sortedRecords.length > 0 && (
           <span className="grid-count">
             {sortedRecords.length} registro{sortedRecords.length !== 1 ? "s" : ""}
+            {Object.keys(visualFilters).length > 0 && (
+              <span style={{ marginLeft: 6, color: "var(--color-primary)", fontWeight: 600 }}>
+                · {Object.keys(visualFilters).length} filtro{Object.keys(visualFilters).length !== 1 ? "s" : ""}
+                <button onClick={() => setVisualFilters({})}
+                  style={{ background: "none", border: "none", cursor: "pointer", marginLeft: 4,
+                    color: "var(--color-text-muted)", fontSize: 12 }}>✕</button>
+              </span>
+            )}
             {sortKey && (
               <span style={{ marginLeft: 6, color: "var(--color-primary)", fontWeight: 600 }}>
                 · ordenado por {columns.find((c) => c.field_key === sortKey)?.name ?? sortKey} {sortDir === "asc" ? "↑" : "↓"}
@@ -635,9 +975,32 @@ export default function DataGrid({
             )}
           </span>
         )}
+
+        {/* Status bar (Excel-style): visible when a multi-cell range is selected */}
+        {stats && (
+          <span style={{
+            marginLeft: 12, display: "inline-flex", gap: 14, alignItems: "center",
+            padding: "3px 10px",
+            background: "var(--color-primary-bg)",
+            border: "1px solid var(--color-primary-border)",
+            borderRadius: 4, fontSize: 12, fontWeight: 500,
+            color: "var(--color-text)",
+          }}>
+            <span><strong>Cuenta:</strong> {stats.count}</span>
+            {stats.numericCount > 0 && (
+              <>
+                <span><strong>Suma:</strong> {fmtNum(stats.sum)}</span>
+                <span><strong>Promedio:</strong> {fmtNum(stats.avg)}</span>
+                <span><strong>Mín:</strong> {fmtNum(stats.min)}</span>
+                <span><strong>Máx:</strong> {fmtNum(stats.max)}</span>
+              </>
+            )}
+          </span>
+        )}
+
         {focused && !editing && (
           <span style={{ fontSize: 11, color: "var(--color-text-muted)", marginLeft: "auto" }}>
-            ↑↓←→ navegar · Enter editar · Supr borrar · Ctrl+V pegar · Ctrl+Z deshacer
+            ↑↓←→ navegar · Enter/F2 editar · doble-clic editar · arrastrar para seleccionar · Supr borrar · Ctrl+V pegar · Ctrl+Z deshacer
           </span>
         )}
       </div>
