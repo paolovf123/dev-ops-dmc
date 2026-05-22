@@ -21,6 +21,8 @@ import EditColumnModal from "../components/EditColumnModal";
 import RelatedRecordsPanel from "../components/RelatedRecordsPanel";
 import LinkTableModal from "../components/LinkTableModal";
 import CsvMappingModal from "../components/CsvMappingModal";
+import SearchReplaceModal from "../components/SearchReplaceModal";
+import ConditionalFormattingModal, { type CondRule } from "../components/ConditionalFormattingModal";
 import { useConfirm } from "../components/ConfirmDialog";
 import type { ColumnDefinition, JoinedColDef, FormulaColDef } from "../types";
 import { exportCsv, exportExcel } from "../utils/export";
@@ -62,6 +64,21 @@ export default function DatasetView() {
   const [csvResult, setCsvResult] = useState<{ created: number; errors: { row: number; errors: string[] }[] } | null>(null);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const [showSearchReplace, setShowSearchReplace] = useState(false);
+  const [showCondFormat, setShowCondFormat] = useState(false);
+  const [conditionalRules, setConditionalRules] = useState<CondRule[]>(() => {
+    try {
+      const s = localStorage.getItem(`dv_cond_rules_${datasetId}`);
+      return s ? JSON.parse(s) : [];
+    } catch { return []; }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`dv_cond_rules_${datasetId}`, JSON.stringify(conditionalRules));
+    } catch { /* ignore quota */ }
+  }, [conditionalRules, datasetId]);
 
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(() => {
     try {
@@ -651,6 +668,24 @@ export default function DatasetView() {
                         </div>
                       </button>
                     )}
+                    <button className="export-menu-item" onClick={() => { setShowSearchReplace(true); setShowMoreMenu(false); }}>
+                      <span className="export-menu-icon" style={{ background: "#FEF3C7", color: "#92400E" }}>🔍</span>
+                      <div>
+                        <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>Buscar y reemplazar</p>
+                        <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>Ctrl+H · sustituir en lote por columna o tabla</p>
+                      </div>
+                    </button>
+                    {effectiveIsEditor && (
+                      <button className="export-menu-item" onClick={() => { setShowCondFormat(true); setShowMoreMenu(false); }}>
+                        <span className="export-menu-icon" style={{ background: "#F3E8FF", color: "#6B21A8" }}>🎨</span>
+                        <div>
+                          <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>Formato condicional</p>
+                          <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>
+                            Pintar celdas por regla{conditionalRules.length > 0 ? ` · ${conditionalRules.length} activa${conditionalRules.length !== 1 ? "s" : ""}` : ""}
+                          </p>
+                        </div>
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -763,6 +798,8 @@ export default function DatasetView() {
               onShowHistory={setHistoryRecordId}
               selectedIds={selectedIds}
               onSelectionChange={setSelectedIds}
+              conditionalRules={conditionalRules}
+              onOpenSearchReplace={() => setShowSearchReplace(true)}
             />
           )
         )}
@@ -870,6 +907,24 @@ export default function DatasetView() {
           columns={columns}
           onConfirm={handleCsvMappingConfirm}
           onClose={() => setCsvMappingFile(null)}
+        />
+      )}
+
+      {showSearchReplace && (
+        <SearchReplaceModal
+          columns={columns}
+          records={records}
+          onApply={(recordId, fieldKey, newValue) => handleCellChange(recordId, fieldKey, newValue)}
+          onClose={() => setShowSearchReplace(false)}
+        />
+      )}
+
+      {showCondFormat && (
+        <ConditionalFormattingModal
+          columns={columns}
+          rules={conditionalRules}
+          onChange={setConditionalRules}
+          onClose={() => setShowCondFormat(false)}
         />
       )}
 

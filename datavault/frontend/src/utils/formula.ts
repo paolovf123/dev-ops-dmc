@@ -234,6 +234,70 @@ class Parser {
       case 'esblanco': case 'isblank': return (n0 == null || n0 === '') ? 1 : 0;
       case 'esnum': case 'isnumber':   return (!isNaN(+n0!) && n0 !== '') ? 1 : 0;
       case 'estexto': case 'istext':   return isNaN(+n0!) || n0 === '' ? 1 : 0;
+      case 'sierror': case 'iferror': {
+        // SI.ERROR(expr, fallback) — devuelve n0 si no es error/null/empty; sino n1
+        const isErr = n0 == null || n0 === '' || (typeof n0 === 'string' && n0.startsWith('#'));
+        return isErr ? n1 : n0;
+      }
+      case 'coalesce': case 'sino': {
+        // Devuelve el primer argumento no-nulo / no-vacío
+        for (const v of a) if (v != null && v !== '') return v;
+        return null;
+      }
+      // ── Fechas ───────────────────────────────────────────────────────────────
+      case 'hoy': case 'today': {
+        const d = new Date(); d.setHours(0,0,0,0);
+        return d.toISOString().slice(0, 10);
+      }
+      case 'ahora': case 'now': return new Date().toISOString();
+      case 'anio': case 'año': case 'year': {
+        const d = new Date(s0); return isNaN(d.getTime()) ? null : d.getFullYear();
+      }
+      case 'mes': case 'month': {
+        const d = new Date(s0); return isNaN(d.getTime()) ? null : d.getMonth() + 1;
+      }
+      case 'dia': case 'día': case 'day': {
+        const d = new Date(s0); return isNaN(d.getTime()) ? null : d.getDate();
+      }
+      case 'dias': case 'días': case 'days': {
+        // DIAS(fecha_fin, fecha_inicio) — diferencia en días
+        const d1 = new Date(s0).getTime(), d2 = new Date(s1).getTime();
+        if (isNaN(d1) || isNaN(d2)) return null;
+        return Math.round((d1 - d2) / 86400000);
+      }
+      // ── Texto extra ──────────────────────────────────────────────────────────
+      case 'sustituir': case 'substitute': {
+        // SUSTITUIR(texto, viejo, nuevo[, ocurrencia])
+        const old = s1, neu = String(n2 ?? '');
+        if (!old) return s0;
+        if (a[3] != null) {
+          // Solo reemplazar la N-ésima ocurrencia
+          const occ = +(a[3] as number);
+          let idx = -1, count = 0, out = s0;
+          while ((idx = out.indexOf(old, idx + 1)) !== -1) {
+            count++;
+            if (count === occ) return out.slice(0, idx) + neu + out.slice(idx + old.length);
+          }
+          return out;
+        }
+        return s0.split(old).join(neu);
+      }
+      case 'limpiar': case 'clean': return s0.replace(/[\x00-\x1F\x7F]/g, '');
+      case 'extrae': case 'extract': return s0.slice(+n1! - 1, +n1! - 1 + +n2!); // alias de MEDIO
+      case 'nompropio': case 'proper': {
+        return s0.toLowerCase().replace(/(?:^|\s)\p{L}/gu, (c) => c.toUpperCase());
+      }
+      // ── Matemática extra ─────────────────────────────────────────────────────
+      case 'modulo': case 'mod': return +n0! % +n1!;
+      case 'signo':  case 'sign': return Math.sign(+n0!);
+      case 'sumaproducto': case 'sumproduct': {
+        // SUMAPRODUCTO(a, b) — suma de pares a[i]*b[i] (usado con multi-args como par único de listas)
+        // Pero como no tenemos rangos, asumimos pares planos: SUMAPRODUCTO(2,3,4,5) = 2*3 + 4*5
+        if (a.length % 2 !== 0) return null;
+        let s = 0;
+        for (let i = 0; i < a.length; i += 2) s += +(a[i] ?? 0) * +(a[i + 1] ?? 0);
+        return s;
+      }
       // ── Fallback ─────────────────────────────────────────────────────────────
       default: return `#${name.toUpperCase()}?`;
     }
@@ -259,8 +323,9 @@ export function evalFormula(expr: string, ctx: Record<string, unknown>): Val {
 
 // Human-readable description of supported functions shown in the UI
 export const FORMULA_HELP = [
-  { cat: 'Lógica',    fns: ['SI(cond, sí, no)', 'Y(a,b)', 'O(a,b)', 'NO(a)', 'ESBLANCO(v)'] },
-  { cat: 'Matemática', fns: ['ABS(n)', 'REDONDEAR(n, dec)', 'ENTERO(n)', 'MAX(a,b,…)', 'MIN(a,b,…)', 'SUMA(a,b,…)', 'PROMEDIO(a,b,…)', 'RAIZ(n)', 'POTENCIA(base,exp)'] },
-  { cat: 'Texto',     fns: ['CONCAT(a,b,…)', 'LARGO(txt)', 'MAYUS(txt)', 'MINUS(txt)', 'IZQUIERDA(txt,n)', 'DERECHA(txt,n)', 'MEDIO(txt,inicio,n)', 'RECORTAR(txt)', 'REEMPLAZAR(txt,buscar,reemplazar)'] },
+  { cat: 'Lógica',    fns: ['SI(cond, sí, no)', 'Y(a,b)', 'O(a,b)', 'NO(a)', 'ESBLANCO(v)', 'SI.ERROR(expr, fallback)', 'COALESCE(a,b,…)'] },
+  { cat: 'Matemática', fns: ['ABS(n)', 'REDONDEAR(n, dec)', 'ENTERO(n)', 'TECHO(n)', 'PISO(n)', 'MAX(a,b,…)', 'MIN(a,b,…)', 'SUMA(a,b,…)', 'PROMEDIO(a,b,…)', 'RAIZ(n)', 'POTENCIA(base,exp)', 'MODULO(a,b)', 'SIGNO(n)', 'SUMAPRODUCTO(a,b,…)'] },
+  { cat: 'Texto',     fns: ['CONCAT(a,b,…)', 'LARGO(txt)', 'MAYUS(txt)', 'MINUS(txt)', 'NOMPROPIO(txt)', 'IZQUIERDA(txt,n)', 'DERECHA(txt,n)', 'MEDIO(txt,inicio,n)', 'RECORTAR(txt)', 'REEMPLAZAR(txt,buscar,reemplazar)', 'SUSTITUIR(txt,viejo,nuevo[,n])', 'LIMPIAR(txt)', 'ENCONTRAR(buscar, en)'] },
+  { cat: 'Fechas',    fns: ['HOY()', 'AHORA()', 'AÑO(fecha)', 'MES(fecha)', 'DIA(fecha)', 'DIAS(fin, inicio)'] },
   { cat: 'Conversión', fns: ['TEXTO(n)', 'NUMERO(txt)'] },
 ];

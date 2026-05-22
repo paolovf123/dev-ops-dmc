@@ -3,6 +3,7 @@ import type { ColumnDefinition, Record as DRecord, FormulaColDef } from "../type
 import { evalFormula } from "../utils/formula";
 import CellEditor, { type NavDir } from "./CellEditor";
 import { useConfirm } from "./ConfirmDialog";
+import { styleForCell, type CondRule } from "./ConditionalFormattingModal";
 
 export interface ExtraColumn {
   uid: string;
@@ -31,6 +32,8 @@ interface Props {
   onShowHistory?: (recordId: string) => void;
   selectedIds?: Set<string>;
   onSelectionChange?: (ids: Set<string>) => void;
+  conditionalRules?: CondRule[];
+  onOpenSearchReplace?: () => void;
 }
 
 // ── Cell validation ────────────────────────────────────────────────────────────
@@ -327,6 +330,7 @@ export default function DataGrid({
   columnOrder, onReorderAny, onRemoveFormula,
   onShowHistory,
   selectedIds, onSelectionChange,
+  conditionalRules = [], onOpenSearchReplace,
 }: Props) {
   const confirm = useConfirm();
   const [editing, setEditing] = useState<{ recordId: string; fieldKey: string } | null>(null);
@@ -460,6 +464,12 @@ export default function DataGrid({
 
   // ── Table-level keyboard handler (when focused but not editing) ────────────
   const handleTableKeyDown = (e: React.KeyboardEvent) => {
+    // Ctrl+H opens Search & Replace at any time (even while editing)
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "h" && onOpenSearchReplace) {
+      e.preventDefault();
+      onOpenSearchReplace();
+      return;
+    }
     if (editing) return; // CellEditor handles its own keys
     const anchor = focused;
     if (!anchor) return;
@@ -859,6 +869,13 @@ export default function DataGrid({
                     const inRange = colIdx >= 0 && isInRange(rowIdx, colIdx, selRange) && rangeArea(selRange) > 1;
                     const cellVal = rec.data[col.field_key];
                     const validationError = !rec.deleted_at ? validateCell(cellVal, col) : null;
+                    // Conditional formatting style (only when not in range / not editing — so user feedback wins)
+                    const condStyle = conditionalRules.length > 0 && !inRange && !isEditing
+                      ? styleForCell(conditionalRules, col.field_key, cellVal)
+                      : undefined;
+                    const cellStyle: React.CSSProperties | undefined = inRange
+                      ? { background: "rgba(37, 99, 235, 0.08)" }
+                      : condStyle;
                     return (
                       <td key={uCol.id}
                         className={[
@@ -868,7 +885,7 @@ export default function DataGrid({
                           cellVal == null ? "cell-null" : undefined,
                           validationError ? "cell-invalid" : undefined,
                         ].filter(Boolean).join(" ") || undefined}
-                        style={inRange ? { background: "rgba(37, 99, 235, 0.08)" } : undefined}
+                        style={cellStyle}
                         title={validationError ?? undefined}
                         onMouseDown={(e) => {
                           if (rec.deleted_at) return;
@@ -1000,7 +1017,7 @@ export default function DataGrid({
 
         {focused && !editing && (
           <span style={{ fontSize: 11, color: "var(--color-text-muted)", marginLeft: "auto" }}>
-            ↑↓←→ navegar · Enter/F2 editar · doble-clic editar · arrastrar para seleccionar · Supr borrar · Ctrl+V pegar · Ctrl+Z deshacer
+            ↑↓←→ navegar · Enter/F2 editar · doble-clic editar · arrastrar para seleccionar · Supr borrar · Ctrl+V pegar · Ctrl+Z deshacer · Ctrl+H buscar/reemplazar
           </span>
         )}
       </div>

@@ -70,10 +70,68 @@ export function exportCsv(opts: ExportOptions) {
   triggerDownload(blob, `${opts.datasetName}.csv`);
 }
 
+// Excel number-format strings per column type
+function numFmtFor(col: ColumnDefinition | undefined): string | undefined {
+  if (!col) return undefined;
+  switch (col.data_type) {
+    case 'currency': {
+      const sym = (col.rules.currency_symbol ?? '$').replace(/"/g, '');
+      return `"${sym}"#,##0.00`;
+    }
+    case 'percent':  return '0.00"%"';
+    case 'number':   return '#,##0.###############';
+    case 'date':     return 'yyyy-mm-dd';
+    default:         return undefined;
+  }
+}
+
 export function exportExcel(opts: ExportOptions) {
+  const { columns, extraColumns = [], formulaCols = [] } = opts;
   const { headers, rows } = buildRows(opts);
-  const wsData: (string | number | null)[][] = [headers, ...rows];
+  const wsData: (string | number | null | boolean | Date)[][] = [headers, ...rows];
+
+  // Build aligned column metadata for header positions
+  const colMeta: (ColumnDefinition | undefined)[] = [
+    ...columns,
+    ...extraColumns.map(() => undefined),
+    ...formulaCols.map(() => undefined),
+  ];
+
   const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+  // Apply per-cell types and number formats so Excel renders currency, dates, %, etc.
+  for (let c = 0; c < colMeta.length; c++) {
+    const col = colMeta[c];
+    if (!col) continue;
+    const fmt = numFmtFor(col);
+
+    for (let r = 1; r < wsData.length; r++) {
+      const ref = XLSX.utils.encode_cell({ r, c });
+      const cell = ws[ref];
+      if (!cell) continue;
+      const raw = wsData[r][c];
+
+      if (col.data_type === 'date' && raw) {
+        const d = new Date(String(raw));
+        if (!isNaN(d.getTime())) {
+          cell.t = 'd';
+          cell.v = d;
+          if (fmt) cell.z = fmt;
+        }
+      } else if ((col.data_type === 'number' || col.data_type === 'currency' || col.data_type === 'percent' || col.data_type === 'rating') && raw != null && raw !== '') {
+        const n = parseFloat(String(raw));
+        if (!isNaN(n)) {
+          cell.t = 'n';
+          cell.v = n;
+          if (fmt) cell.z = fmt;
+        }
+      } else if (col.data_type === 'boolean') {
+        const truthy = raw === true || String(raw).toLowerCase() === 'true' || raw === 1 || String(raw).toLowerCase() === 'sí' || String(raw).toLowerCase() === 'si';
+        cell.t = 's';
+        cell.v = truthy ? 'Sí' : 'No';
+      }
+    }
+  }
 
   // Auto column widths
   const colWidths = headers.map((h, i) => {
@@ -85,12 +143,8 @@ export function exportExcel(opts: ExportOptions) {
   });
   ws['!cols'] = colWidths;
 
-  // Bold header row
-  const range = XLSX.utils.decode_range(ws['!ref'] ?? 'A1');
-  for (let c = range.s.c; c <= range.e.c; c++) {
-    const cell = ws[XLSX.utils.encode_cell({ r: 0, c })];
-    if (cell) cell.s = { font: { bold: true } };
-  }
+  // Freeze header row so user can scroll keeping it visible
+  ws['!freeze'] = { xSplit: 0, ySplit: 1 } as unknown as XLSX.WorkSheet['!freeze'];
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Datos');
