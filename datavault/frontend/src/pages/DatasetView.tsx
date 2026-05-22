@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient, useQueries } from "@tanstack/react-query";
 import { useAuth } from "../auth/AuthContext";
 import { useWorkspace } from "../workspace/WorkspaceContext";
@@ -54,8 +54,14 @@ export default function DatasetView() {
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [editingColumn, setEditingColumn] = useState<ColumnDefinition | null>(null);
   const [csvMappingFile, setCsvMappingFile] = useState<File | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>("table");
-  const [search, setSearch] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Initialize view-affecting state from URL params so shared links restore the same view.
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const v = searchParams.get("view");
+    return (v === "kanban" || v === "chart" || v === "trash") ? v : "table";
+  });
+  const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
+  const [linkCopied, setLinkCopied] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
@@ -92,7 +98,29 @@ export default function DatasetView() {
       return s ? new Set<string>(JSON.parse(s)) : new Set();
     } catch { return new Set(); }
   });
-  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>(() => {
+    // URL format: ?filter[col_key]=value&filter[other]=value2
+    const out: Record<string, string> = {};
+    for (const [k, v] of searchParams.entries()) {
+      const m = k.match(/^filter\[(.+)\]$/);
+      if (m && v) out[m[1]] = v;
+    }
+    return out;
+  });
+
+  // ── Sync view state (filters, view mode, search) into the URL ───────────
+  // Lets users share/bookmark a specific filtered view. We strip empties so
+  // the URL stays clean while no filters are active.
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (viewMode !== "table") params.set("view", viewMode);
+    if (search.trim()) params.set("q", search.trim());
+    for (const [k, v] of Object.entries(columnFilters)) {
+      if (v) params.set(`filter[${k}]`, v);
+    }
+    setSearchParams(params, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode, search, columnFilters]);
   const [joinedCols, setJoinedCols] = useState<JoinedColDef[]>(() => {
     try {
       const s = localStorage.getItem(`dv_joins_${datasetId}`);
@@ -695,6 +723,22 @@ export default function DatasetView() {
                         <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>Vista hoja (A, B, C…)</p>
                         <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>
                           {sheetMode ? "Activa — mostrando letras estilo Excel" : "Mostrar letras de columna sobre los nombres"}
+                        </p>
+                      </div>
+                    </button>
+                    <button className="export-menu-item" onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(window.location.href);
+                        setLinkCopied(true);
+                        setTimeout(() => setLinkCopied(false), 2500);
+                      } catch { /* clipboard blocked */ }
+                      setShowMoreMenu(false);
+                    }}>
+                      <span className="export-menu-icon" style={{ background: "#ECFEFF", color: "#0E7490" }}>🔗</span>
+                      <div>
+                        <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>Copiar enlace de esta vista</p>
+                        <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>
+                          {linkCopied ? "✓ Enlace copiado al portapapeles" : "Filtros, búsqueda y vista incluidos en la URL"}
                         </p>
                       </div>
                     </button>

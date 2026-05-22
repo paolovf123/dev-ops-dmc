@@ -4,6 +4,7 @@ import { evalFormula } from "../utils/formula";
 import CellEditor, { type NavDir } from "./CellEditor";
 import { useConfirm } from "./ConfirmDialog";
 import { styleForCell, type CondRule } from "./ConditionalFormattingModal";
+import { validateCell } from "../utils/validation";
 
 export interface ExtraColumn {
   uid: string;
@@ -35,40 +36,6 @@ interface Props {
   conditionalRules?: CondRule[];
   onOpenSearchReplace?: () => void;
   sheetMode?: boolean; // Excel-style A/B/C column letters above the column name
-}
-
-// ── Cell validation ────────────────────────────────────────────────────────────
-function validateCell(value: unknown, col: ColumnDefinition): string | null {
-  const rules = col.rules || {};
-  const empty = value == null || value === "" || (Array.isArray(value) && value.length === 0);
-  if (empty) return rules.required ? "Requerido" : null;
-  if (col.data_type === "number" || col.data_type === "currency") {
-    const n = parseFloat(String(value));
-    if (isNaN(n)) return "Debe ser un número";
-    if (rules.min !== undefined && n < rules.min) return `Mín: ${rules.min}`;
-    if (rules.max !== undefined && n > rules.max) return `Máx: ${rules.max}`;
-  }
-  if (col.data_type === "percent") {
-    const n = parseFloat(String(value));
-    if (isNaN(n)) return "Debe ser un número";
-    if (n < 0 || n > 100) return "0–100";
-  }
-  if (col.data_type === "rating") {
-    const n = Number(value);
-    const max = rules.max_rating ?? 5;
-    if (!n || n < 1 || n > max) return `1–${max}`;
-  }
-  if (col.data_type === "enum") {
-    const opts = rules.options ?? [];
-    if (opts.length > 0 && !opts.includes(String(value))) return "Valor no válido";
-  }
-  if (col.data_type === "email") {
-    if (!String(value).includes("@")) return "Email inválido";
-  }
-  if (col.data_type === "url") {
-    if (!String(value).startsWith("http")) return "URL inválida";
-  }
-  return null;
 }
 
 // ── Cell display renderer ─────────────────────────────────────────────────────
@@ -377,6 +344,13 @@ export default function DataGrid({
   const [selRange, setSelRange] = useState<SelRange | null>(null);
   const isMouseSelecting = useRef(false);
 
+  // Right-click context menu
+  const [contextMenu, setContextMenu] = useState<{
+    x: number; y: number;
+    rowIdx: number; colIdx: number;
+    recordId: string; fieldKey: string;
+  } | null>(null);
+
   // Visual column filter (Excel AutoFiltro): map field_key -> selected values
   // Empty Set or undefined means "all values pass"
   const [visualFilters, setVisualFilters] = useState<Record<string, Set<string>>>({});
@@ -624,6 +598,19 @@ export default function DataGrid({
     window.addEventListener("mouseup", onUp);
     return () => window.removeEventListener("mouseup", onUp);
   }, []);
+
+  // Close context menu on click-anywhere or ESC
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setContextMenu(null); };
+    window.addEventListener("mousedown", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [contextMenu]);
 
   // ── Paste from Excel (TSV) ─────────────────────────────────────────────────
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
@@ -1005,6 +992,22 @@ export default function DataGrid({
                           setEditing({ recordId: rec.id, fieldKey: col.field_key });
                           setFocused({ recordId: rec.id, fieldKey: col.field_key });
                           setSelRange(null);
+                        }}
+                        onContextMenu={(e) => {
+                          if (rec.deleted_at) return;
+                          e.preventDefault();
+                          // Ensure the right-clicked cell is at least focused
+                          setFocused({ recordId: rec.id, fieldKey: col.field_key });
+                          // If outside the existing range, replace it with a single-cell range
+                          if (colIdx >= 0) {
+                            const inside = isInRange(rowIdx, colIdx, selRange);
+                            if (!inside) setSelRange({ from: { row: rowIdx, col: colIdx }, to: { row: rowIdx, col: colIdx } });
+                          }
+                          setContextMenu({
+                            x: e.clientX, y: e.clientY,
+                            rowIdx, colIdx,
+                            recordId: rec.id, fieldKey: col.field_key,
+                          });
                         }}>
                         {isEditing ? (
                           <CellEditor column={col} value={cellVal}
@@ -1116,10 +1119,111 @@ export default function DataGrid({
 
         {focused && !editing && (
           <span style={{ fontSize: 11, color: "var(--color-text-muted)", marginLeft: "auto" }}>
-            ↑↓←→ navegar · Enter/F2 editar · arrastrar para seleccionar · Supr borrar · Ctrl+V pegar · Ctrl+Z deshacer · Ctrl+H buscar · Ctrl+D rellenar abajo · Ctrl+R rellenar derecha
+            ↑↓←→ navegar · Enter/F2 editar · clic derecho menú · arrastrar para seleccionar · Supr borrar · Ctrl+V pegar · Ctrl+Z deshacer · Ctrl+H buscar · Ctrl+D rellenar abajo · Ctrl+R rellenar derecha
           </span>
         )}
       </div>
+
+      {/* Context menu (click derecho) */}
+      {contextMenu && (() => {
+        const hasRange = selRange !== null && rangeArea(selRange) > 1;
+        const recordHere = sortedRecords[contextMenu.rowIdx];
+        const colHere = editableCols[contextMenu.colIdx];
+
+        const copyCell = async () => {
+          if (hasRange && selRange) {
+            const { minRow, maxRow, minCol, maxCol } = normRange(selRange);
+            const tsvRows: string[] = [];
+            for (let r = minRow; r <= maxRow; r++) {
+              const cells: string[] = [];
+              for (let c = minCol; c <= maxCol; c++) {
+                const rec = sortedRecords[r];
+                const cl = editableCols[c];
+                cells.push(rec && cl ? String(rec.data[cl.field_key] ?? "") : "");
+              }
+              tsvRows.push(cells.join("\t"));
+            }
+            await navigator.clipboard?.writeText(tsvRows.join("\n")).catch(() => {});
+          } else if (recordHere && colHere) {
+            await navigator.clipboard?.writeText(String(recordHere.data[colHere.field_key] ?? "")).catch(() => {});
+          }
+        };
+
+        const clearContent = () => {
+          if (hasRange && selRange) {
+            const { minRow, maxRow, minCol, maxCol } = normRange(selRange);
+            for (let r = minRow; r <= maxRow; r++) {
+              for (let c = minCol; c <= maxCol; c++) {
+                const rec = sortedRecords[r];
+                const cl = editableCols[c];
+                if (rec && cl && !rec.deleted_at) onCellChange(rec.id, cl.field_key, "");
+              }
+            }
+          } else if (recordHere && colHere) {
+            onCellChange(recordHere.id, colHere.field_key, "");
+          }
+        };
+
+        type Item = { label: string; shortcut?: string; danger?: boolean; disabled?: boolean; onClick: () => void };
+        const items: Array<Item | "separator"> = [
+          { label: "Copiar", shortcut: "Ctrl+C", onClick: copyCell },
+          { label: "Borrar contenido", shortcut: "Supr", onClick: clearContent },
+          "separator",
+          { label: "Rellenar abajo", shortcut: "Ctrl+D", disabled: !hasRange, onClick: () => fillRange("down") },
+          { label: "Rellenar derecha", shortcut: "Ctrl+R", disabled: !hasRange, onClick: () => fillRange("right") },
+          "separator",
+          ...(onOpenSearchReplace ? [{ label: "Buscar y reemplazar…", shortcut: "Ctrl+H", onClick: onOpenSearchReplace }] : []),
+          ...(onShowHistory && recordHere ? [{ label: "Ver historial de la fila", onClick: () => onShowHistory(recordHere.id) }] : []),
+          "separator",
+          { label: "Eliminar fila", danger: true, disabled: !recordHere, onClick: () => recordHere && onDeleteRow(recordHere.id) },
+        ];
+
+        // Clamp menu inside viewport
+        const menuW = 240, menuH = items.length * 28 + 12;
+        const left = Math.min(contextMenu.x, window.innerWidth - menuW - 8);
+        const top  = Math.min(contextMenu.y, window.innerHeight - menuH - 8);
+
+        return (
+          <div
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              position: "fixed", left, top, zIndex: 1100,
+              minWidth: menuW, padding: "4px 0",
+              background: "var(--color-surface)",
+              border: "1px solid var(--color-border)",
+              borderRadius: 6,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+              fontSize: 13,
+            }}>
+            {items.map((it, i) => {
+              if (it === "separator") {
+                return <div key={i} style={{ height: 1, margin: "4px 0", background: "var(--color-border-light)" }} />;
+              }
+              return (
+                <button key={i}
+                  disabled={it.disabled}
+                  onClick={() => { if (it.disabled) return; it.onClick(); setContextMenu(null); }}
+                  style={{
+                    display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16,
+                    width: "100%", padding: "5px 12px", background: "none", border: "none",
+                    textAlign: "left", cursor: it.disabled ? "not-allowed" : "pointer",
+                    color: it.disabled ? "var(--color-text-muted)" : it.danger ? "var(--pm-red-500)" : "var(--color-text)",
+                    fontSize: 13, opacity: it.disabled ? 0.55 : 1,
+                  }}
+                  onMouseEnter={(e) => { if (!it.disabled) e.currentTarget.style.background = "var(--color-bg)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}>
+                  <span>{it.label}</span>
+                  {it.shortcut && (
+                    <span style={{ fontSize: 11, color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
+                      {it.shortcut}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
     </div>
   );
 }

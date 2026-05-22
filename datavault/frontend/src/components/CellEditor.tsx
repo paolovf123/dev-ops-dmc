@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import type { ColumnDefinition } from "../types";
+import { validateCell } from "../utils/validation";
 
 export type NavDir = "next-col" | "prev-col" | "next-row" | "prev-row";
 
@@ -15,6 +16,9 @@ export default function CellEditor({ column, value, onCommit, onCancel }: Props)
   const inputRef = useRef<HTMLInputElement>(null);
   const selectRef = useRef<HTMLSelectElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Live validation — runs as the user types
+  const error = useMemo(() => validateCell(draft, column), [draft, column]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -40,17 +44,38 @@ export default function CellEditor({ column, value, onCommit, onCancel }: Props)
     padding: "5px 8px",
     boxSizing: "border-box",
     fontSize: "inherit",
-    border: "1.5px solid var(--color-primary)",
+    border: `1.5px solid ${error ? "var(--pm-red-500)" : "var(--color-primary)"}`,
     borderRadius: "var(--radius-xs)",
     outline: "none",
-    boxShadow: "0 0 0 3px rgba(0,154,68,0.12)",
+    boxShadow: error ? "0 0 0 3px rgba(220, 38, 38, 0.16)" : "0 0 0 3px rgba(0,154,68,0.12)",
     background: "var(--color-surface)",
   };
+
+  // Floating error message (positioned absolutely under the input)
+  const errorBubble = error ? (
+    <div style={{
+      position: "absolute", top: "100%", left: 0, marginTop: 2,
+      padding: "3px 8px", fontSize: 11, fontWeight: 600, lineHeight: 1.2,
+      background: "var(--pm-red-500)", color: "#fff",
+      borderRadius: 4, whiteSpace: "nowrap", zIndex: 20,
+      boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+      pointerEvents: "none",
+    }}>
+      ⚠ {error}
+    </div>
+  ) : null;
+
+  const wrap = (input: React.ReactNode) => (
+    <div style={{ position: "relative", width: "100%" }} title={error ?? undefined}>
+      {input}
+      {errorBubble}
+    </div>
+  );
 
   // ── Boolean ──────────────────────────────────────────────────────────────────
   if (column.data_type === "boolean") {
     const boolVal = draft === true || String(draft).toLowerCase() === "true";
-    return (
+    return wrap(
       <select ref={selectRef} value={boolVal ? "true" : "false"}
         onChange={(e) => { const v = e.target.value === "true"; setDraft(v); onCommit(v); }}
         onBlur={() => onCommit(draft)}
@@ -64,7 +89,7 @@ export default function CellEditor({ column, value, onCommit, onCancel }: Props)
 
   // ── Enum (single select) ──────────────────────────────────────────────────────
   if (column.data_type === "enum") {
-    return (
+    return wrap(
       <select ref={selectRef} value={String(draft)}
         onChange={(e) => { setDraft(e.target.value); onCommit(e.target.value); }}
         onBlur={() => onCommit(draft)}
@@ -93,9 +118,11 @@ export default function CellEditor({ column, value, onCommit, onCancel }: Props)
     };
 
     return (
-      <div style={{ padding: "6px 8px", background: "var(--color-surface)",
-        border: "1.5px solid var(--color-primary)", borderRadius: "var(--radius-xs)",
-        boxShadow: "0 0 0 3px rgba(0,154,68,0.12)", minWidth: 160 }}>
+      <div style={{ position: "relative", padding: "6px 8px", background: "var(--color-surface)",
+        border: `1.5px solid ${error ? "var(--pm-red-500)" : "var(--color-primary)"}`,
+        borderRadius: "var(--radius-xs)",
+        boxShadow: error ? "0 0 0 3px rgba(220, 38, 38, 0.16)" : "0 0 0 3px rgba(0,154,68,0.12)",
+        minWidth: 160 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
           {opts.map((opt) => {
             const sel = current.includes(opt);
@@ -118,6 +145,7 @@ export default function CellEditor({ column, value, onCommit, onCancel }: Props)
           onClick={() => onCommit(draft)}>
           OK
         </button>
+        {errorBubble}
       </div>
     );
   }
@@ -127,7 +155,7 @@ export default function CellEditor({ column, value, onCommit, onCancel }: Props)
     const maxRating = column.rules.max_rating ?? 5;
     const current = Number(draft) || 0;
     return (
-      <div style={{ display: "flex", gap: 2, padding: "4px 8px", alignItems: "center" }}>
+      <div style={{ position: "relative", display: "flex", gap: 2, padding: "4px 8px", alignItems: "center" }}>
         {Array.from({ length: maxRating }, (_, i) => i + 1).map((star) => (
           <button key={star} type="button"
             onClick={() => { setDraft(star); onCommit(star); }}
@@ -145,13 +173,14 @@ export default function CellEditor({ column, value, onCommit, onCancel }: Props)
             ✕
           </button>
         )}
+        {errorBubble}
       </div>
     );
   }
 
   // ── Long text (textarea) ──────────────────────────────────────────────────────
   if (column.data_type === "long_text") {
-    return (
+    return wrap(
       <textarea ref={textareaRef}
         value={String(draft)}
         onChange={(e) => setDraft(e.target.value)}
@@ -167,7 +196,7 @@ export default function CellEditor({ column, value, onCommit, onCancel }: Props)
 
   // ── Currency / Percent / Number ───────────────────────────────────────────────
   if (column.data_type === "currency" || column.data_type === "percent" || column.data_type === "number") {
-    return (
+    return wrap(
       <input ref={inputRef} type="number"
         value={String(draft)}
         onChange={(e) => setDraft(e.target.value)}
@@ -179,7 +208,7 @@ export default function CellEditor({ column, value, onCommit, onCancel }: Props)
 
   // ── URL ───────────────────────────────────────────────────────────────────────
   if (column.data_type === "url") {
-    return (
+    return wrap(
       <input ref={inputRef} type="url"
         value={String(draft)}
         placeholder="https://"
@@ -192,7 +221,7 @@ export default function CellEditor({ column, value, onCommit, onCancel }: Props)
 
   // ── Email ─────────────────────────────────────────────────────────────────────
   if (column.data_type === "email") {
-    return (
+    return wrap(
       <input ref={inputRef} type="email"
         value={String(draft)}
         onChange={(e) => setDraft(e.target.value)}
@@ -204,7 +233,7 @@ export default function CellEditor({ column, value, onCommit, onCancel }: Props)
 
   // ── Phone ─────────────────────────────────────────────────────────────────────
   if (column.data_type === "phone") {
-    return (
+    return wrap(
       <input ref={inputRef} type="tel"
         value={String(draft)}
         onChange={(e) => setDraft(e.target.value)}
@@ -216,7 +245,7 @@ export default function CellEditor({ column, value, onCommit, onCancel }: Props)
 
   // ── Date ──────────────────────────────────────────────────────────────────────
   if (column.data_type === "date") {
-    return (
+    return wrap(
       <input ref={inputRef} type="date"
         value={String(draft)}
         onChange={(e) => setDraft(e.target.value)}
@@ -227,7 +256,7 @@ export default function CellEditor({ column, value, onCommit, onCancel }: Props)
   }
 
   // ── Default (text, relation, long_text fallback) ──────────────────────────────
-  return (
+  return wrap(
     <input ref={inputRef} type="text"
       value={String(draft)}
       onChange={(e) => setDraft(e.target.value)}
