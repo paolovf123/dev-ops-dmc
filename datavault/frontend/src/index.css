@@ -829,6 +829,7 @@ tr:hover .row-del-btn { opacity: 1; }
   align-items: center;
   justify-content: center;
   z-index: 200;
+  padding: 16px;
   padding: 24px;
   animation: fadein 0.15s ease;
 }
@@ -838,12 +839,28 @@ tr:hover .row-del-btn { opacity: 1; }
   background: var(--color-surface);
   border-radius: var(--radius-lg);
   padding: 28px;
-  min-width: 380px;
-  max-width: 480px;
+  /* Responsive: nunca exceder el viewport, pero respetar maxWidth inline si cabe */
+  min-width: 0;
+  max-width: min(480px, 100%);
   width: 100%;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
   box-shadow: var(--shadow-lg);
   border: 1px solid var(--color-border);
   animation: modalin 0.18s cubic-bezier(0.34,1.26,0.64,1);
+}
+@media (max-width: 640px) {
+  .modal { padding: 16px; border-radius: var(--radius-md); }
+  .modal-v2 { padding: 0; }
+  .modal-v2 .modal-header { padding: 14px 16px 12px; }
+  .modal-body { padding: 16px; }
+  .modal-v2 .modal-footer { padding: 12px 16px; }
+  /* Modal header: stack the icon+text on very narrow screens if needed */
+  .modal-header h3 { font-size: 14px; }
+  /* Tighten the type-option grid further on phones */
+  .type-option { padding: 8px 6px; }
+  .type-option-label { font-size: 11px; }
+  .type-option-desc { display: none; }
 }
 @keyframes modalin {
   from { opacity: 0; transform: scale(0.94) translateY(-6px); }

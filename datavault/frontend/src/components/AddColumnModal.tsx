@@ -113,7 +113,7 @@ export default function AddColumnModal({ onSave, onClose }: Props) {
 
   return (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal modal-v2" style={{ maxWidth: 560 }}>
+      <div className="modal modal-v2" style={{ maxWidth: "min(560px, 100%)" }}>
         <div className="modal-accent" style={{ background: selectedType.color }} />
 
         <div className="modal-header">
@@ -166,7 +166,7 @@ export default function AddColumnModal({ onSave, onClose }: Props) {
                       textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
                       {group}
                     </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: 6 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))", gap: 6 }}>
                       {groupTypes.map((t) => (
                         <button key={t.value} type="button"
                           className={`type-option${dataType === t.value ? " active" : ""}`}
@@ -236,7 +236,7 @@ export default function AddColumnModal({ onSave, onClose }: Props) {
 
           {/* Number range */}
           {dataType === "number" && (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
               <div className="form-group">
                 <label className="form-label">Mínimo</label>
                 <input type="number" placeholder="Sin límite" value={min} onChange={(e) => setMin(e.target.value)} />
@@ -250,7 +250,7 @@ export default function AddColumnModal({ onSave, onClose }: Props) {
 
           {/* Currency */}
           {dataType === "currency" && (
-            <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr", gap: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12 }}>
               <div className="form-group">
                 <label className="form-label">Símbolo</label>
                 <input value={currencySymbol} onChange={(e) => setCurrencySymbol(e.target.value)} placeholder="$" maxLength={5} />

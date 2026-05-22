@@ -93,7 +93,7 @@ export default function EditColumnModal({ column, onSave, onClose }: Props) {
 
   return (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal modal-v2" style={{ maxWidth: 560 }}>
+      <div className="modal modal-v2" style={{ maxWidth: "min(560px, 100%)" }}>
         <div className="modal-accent" style={{ background: selectedType.color }} />
 
         <div className="modal-header">
@@ -188,7 +188,7 @@ export default function EditColumnModal({ column, onSave, onClose }: Props) {
           )}
 
           {dataType === "number" && (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
               <div className="form-group">
                 <label className="form-label">Mínimo</label>
                 <input type="number" placeholder="Sin límite" value={min} onChange={(e) => setMin(e.target.value)} />
@@ -201,7 +201,7 @@ export default function EditColumnModal({ column, onSave, onClose }: Props) {
           )}
 
           {dataType === "currency" && (
-            <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr", gap: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12 }}>
               <div className="form-group">
                 <label className="form-label">Símbolo</label>
                 <input value={currencySymbol} onChange={(e) => setCurrencySymbol(e.target.value)} placeholder="$" maxLength={5} />
