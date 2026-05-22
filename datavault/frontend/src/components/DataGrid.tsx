@@ -34,6 +34,7 @@ interface Props {
   onSelectionChange?: (ids: Set<string>) => void;
   conditionalRules?: CondRule[];
   onOpenSearchReplace?: () => void;
+  sheetMode?: boolean; // Excel-style A/B/C column letters above the column name
 }
 
 // ── Cell validation ────────────────────────────────────────────────────────────
@@ -188,6 +189,37 @@ function rangeArea(range: SelRange | null): number {
   return (maxRow - minRow + 1) * (maxCol - minCol + 1);
 }
 
+// Excel-style column letter: 0 -> A, 25 -> Z, 26 -> AA, ...
+function colLetter(n: number): string {
+  let s = "";
+  let i = n;
+  while (i >= 0) { s = String.fromCharCode(65 + (i % 26)) + s; i = Math.floor(i / 26) - 1; }
+  return s;
+}
+
+// Extend a 1D series. Given samples (length >= 1), produce the next `count` values.
+// If all numeric with constant diff -> arithmetic progression. Else repeat last value.
+function extendSeries(samples: unknown[], count: number): unknown[] {
+  if (count <= 0 || samples.length === 0) return [];
+  const last = samples[samples.length - 1];
+  // Try numeric progression with >= 2 samples
+  if (samples.length >= 2) {
+    const nums = samples.map((v) => parseFloat(String(v)));
+    if (nums.every((n) => !isNaN(n) && isFinite(n))) {
+      const diffs = nums.slice(1).map((n, i) => n - nums[i]);
+      const step = diffs[0];
+      if (diffs.every((d) => Math.abs(d - step) < 1e-9)) {
+        const out: unknown[] = [];
+        let cur = nums[nums.length - 1];
+        for (let i = 0; i < count; i++) { cur += step; out.push(cur); }
+        return out;
+      }
+    }
+  }
+  // Fallback: repeat last
+  return Array(count).fill(last);
+}
+
 // Returns numeric stats over cells in range (only numeric/currency/percent/rating cells)
 function computeStats(
   range: SelRange,
@@ -330,7 +362,7 @@ export default function DataGrid({
   columnOrder, onReorderAny, onRemoveFormula,
   onShowHistory,
   selectedIds, onSelectionChange,
-  conditionalRules = [], onOpenSearchReplace,
+  conditionalRules = [], onOpenSearchReplace, sheetMode = false,
 }: Props) {
   const confirm = useConfirm();
   const [editing, setEditing] = useState<{ recordId: string; fieldKey: string } | null>(null);
@@ -462,6 +494,55 @@ export default function DataGrid({
     else { setEditing(null); setFocused({ recordId, fieldKey }); }
   }, [onCellChange, navigate]);
 
+  // ── Fill Down / Fill Right (Excel: Ctrl+D / Ctrl+R) ────────────────────────
+  const fillRange = useCallback((direction: "down" | "right") => {
+    if (!selRange) return;
+    const { minRow, maxRow, minCol, maxCol } = normRange(selRange);
+    if (direction === "down") {
+      if (maxRow <= minRow) return;
+      // For each column in the range, take the top row(s) as the source
+      // (>1 row source = arithmetic series, 1 row source = repeat)
+      for (let c = minCol; c <= maxCol; c++) {
+        const col = editableCols[c];
+        if (!col) continue;
+        // Source = all cells already filled at the top of the column inside the range
+        const sourceLen = Math.min(maxRow - minRow, 5);
+        const samples: unknown[] = [];
+        for (let r = minRow; r < minRow + sourceLen; r++) {
+          const rec = sortedRecords[r];
+          if (rec) samples.push(rec.data[col.field_key]);
+        }
+        // Number of cells to write
+        const sourceUsed = samples.length;
+        const toFill = maxRow - minRow + 1 - sourceUsed;
+        const values = extendSeries(samples, toFill);
+        for (let i = 0; i < values.length; i++) {
+          const rec = sortedRecords[minRow + sourceUsed + i];
+          if (rec && !rec.deleted_at) onCellChange(rec.id, col.field_key, values[i]);
+        }
+      }
+    } else {
+      if (maxCol <= minCol) return;
+      for (let r = minRow; r <= maxRow; r++) {
+        const rec = sortedRecords[r];
+        if (!rec || rec.deleted_at) continue;
+        const sourceLen = Math.min(maxCol - minCol, 5);
+        const samples: unknown[] = [];
+        for (let c = minCol; c < minCol + sourceLen; c++) {
+          const col = editableCols[c];
+          if (col) samples.push(rec.data[col.field_key]);
+        }
+        const sourceUsed = samples.length;
+        const toFill = maxCol - minCol + 1 - sourceUsed;
+        const values = extendSeries(samples, toFill);
+        for (let i = 0; i < values.length; i++) {
+          const col = editableCols[minCol + sourceUsed + i];
+          if (col) onCellChange(rec.id, col.field_key, values[i]);
+        }
+      }
+    }
+  }, [selRange, sortedRecords, editableCols, onCellChange]);
+
   // ── Table-level keyboard handler (when focused but not editing) ────────────
   const handleTableKeyDown = (e: React.KeyboardEvent) => {
     // Ctrl+H opens Search & Replace at any time (even while editing)
@@ -469,6 +550,14 @@ export default function DataGrid({
       e.preventDefault();
       onOpenSearchReplace();
       return;
+    }
+    // Ctrl+D / Ctrl+R = fill down / right inside the selected range
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key.toLowerCase() === "d" || e.key.toLowerCase() === "r")) {
+      if (selRange && rangeArea(selRange) > 1) {
+        e.preventDefault();
+        fillRange(e.key.toLowerCase() === "d" ? "down" : "right");
+        return;
+      }
     }
     if (editing) return; // CellEditor handles its own keys
     const anchor = focused;
@@ -641,7 +730,7 @@ export default function DataGrid({
               <th className="col-rownum col-frozen"
                 style={{ position: "sticky", left: hasSelection ? 36 : 0, zIndex: 4, background: "var(--color-surface)" }}>#</th>
 
-              {unifiedCols.map((uCol) => {
+              {unifiedCols.map((uCol, colDisplayIdx) => {
                 const isOver = dragOverKey === uCol.id;
                 const dndProps = {
                   draggable: !!onReorderAny,
@@ -669,9 +758,19 @@ export default function DataGrid({
                     <th key={uCol.id}
                       className={`th-sortable${isOver ? " th-drag-over" : ""}`}
                       onClick={() => handleSortClick(col.field_key)}
-                      title={`Ordenar por ${col.name}`}
+                      title={sheetMode ? `Columna ${colLetter(colDisplayIdx)} · Ordenar por ${col.name}` : `Ordenar por ${col.name}`}
                       style={{ position: "relative" }}
                       {...dndProps}>
+                      {sheetMode && (
+                        <div style={{
+                          textAlign: "center", fontFamily: "var(--font-mono)", fontWeight: 700,
+                          fontSize: 11, color: "var(--color-text-muted)", letterSpacing: 1,
+                          padding: "2px 0", borderBottom: "1px solid var(--color-border-light)",
+                          marginBottom: 4,
+                        }}>
+                          {colLetter(colDisplayIdx)}
+                        </div>
+                      )}
                       <span className="th-inner">
                         {onReorderAny && (
                           <span className="col-drag-handle" title="Arrastrar para reordenar" onClick={(e) => e.stopPropagation()}>⠿</span>
@@ -1017,7 +1116,7 @@ export default function DataGrid({
 
         {focused && !editing && (
           <span style={{ fontSize: 11, color: "var(--color-text-muted)", marginLeft: "auto" }}>
-            ↑↓←→ navegar · Enter/F2 editar · doble-clic editar · arrastrar para seleccionar · Supr borrar · Ctrl+V pegar · Ctrl+Z deshacer · Ctrl+H buscar/reemplazar
+            ↑↓←→ navegar · Enter/F2 editar · arrastrar para seleccionar · Supr borrar · Ctrl+V pegar · Ctrl+Z deshacer · Ctrl+H buscar · Ctrl+D rellenar abajo · Ctrl+R rellenar derecha
           </span>
         )}
       </div>

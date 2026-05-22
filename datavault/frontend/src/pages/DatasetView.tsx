@@ -25,7 +25,7 @@ import SearchReplaceModal from "../components/SearchReplaceModal";
 import ConditionalFormattingModal, { type CondRule } from "../components/ConditionalFormattingModal";
 import { useConfirm } from "../components/ConfirmDialog";
 import type { ColumnDefinition, JoinedColDef, FormulaColDef } from "../types";
-import { exportCsv, exportExcel } from "../utils/export";
+import { exportCsv, exportExcel, printDataset } from "../utils/export";
 import { useUndoRedo } from "../utils/useUndoRedo";
 
 type ViewMode = "table" | "kanban" | "chart" | "trash";
@@ -67,6 +67,12 @@ export default function DatasetView() {
 
   const [showSearchReplace, setShowSearchReplace] = useState(false);
   const [showCondFormat, setShowCondFormat] = useState(false);
+  const [sheetMode, setSheetMode] = useState<boolean>(() => {
+    try { return localStorage.getItem(`dv_sheet_mode_${datasetId}`) === "1"; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(`dv_sheet_mode_${datasetId}`, sheetMode ? "1" : "0"); } catch { /* noop */ }
+  }, [sheetMode, datasetId]);
   const [conditionalRules, setConditionalRules] = useState<CondRule[]>(() => {
     try {
       const s = localStorage.getItem(`dv_cond_rules_${datasetId}`);
@@ -300,7 +306,7 @@ export default function DatasetView() {
     setFormulaCols((prev) => [...prev, { ...def, uid: crypto.randomUUID() }]);
   const toggleFilters = () => { setShowFilterRow((v) => { if (v) setColumnFilters({}); return !v; }); };
 
-  const handleExport = (format: "csv" | "xlsx") => {
+  const handleExport = (format: "csv" | "xlsx" | "print") => {
     const opts = {
       datasetName: currentDataset?.name ?? "export",
       columns: visibleColumns,
@@ -309,7 +315,8 @@ export default function DatasetView() {
       formulaCols,
     };
     if (format === "csv") exportCsv(opts);
-    else exportExcel(opts);
+    else if (format === "xlsx") exportExcel(opts);
+    else printDataset(opts);
     setShowExportMenu(false);
   };
 
@@ -610,7 +617,14 @@ export default function DatasetView() {
                       <span className="export-menu-icon" style={{ background: "#E8F7EE", color: "#007A36" }}>XLS</span>
                       <div>
                         <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>Exportar como Excel</p>
-                        <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>.xlsx con anchos automáticos</p>
+                        <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>.xlsx con anchos y formato por tipo</p>
+                      </div>
+                    </button>
+                    <button className="export-menu-item" onClick={() => { handleExport("print"); setShowExportMenu(false); }}>
+                      <span className="export-menu-icon" style={{ background: "#FEF3C7", color: "#92400E" }}>PDF</span>
+                      <div>
+                        <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>Imprimir / Guardar PDF</p>
+                        <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>Abre diálogo del navegador (elegí "Guardar como PDF")</p>
                       </div>
                     </button>
                     <div style={{ padding: "6px 12px 8px", borderTop: "1px solid var(--color-border-light)" }}>
@@ -673,6 +687,15 @@ export default function DatasetView() {
                       <div>
                         <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>Buscar y reemplazar</p>
                         <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>Ctrl+H · sustituir en lote por columna o tabla</p>
+                      </div>
+                    </button>
+                    <button className="export-menu-item" onClick={() => { setSheetMode((v) => !v); setShowMoreMenu(false); }}>
+                      <span className="export-menu-icon" style={{ background: "#E0F2FE", color: "#0369A1" }}>{sheetMode ? "✓" : "A"}</span>
+                      <div>
+                        <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>Vista hoja (A, B, C…)</p>
+                        <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>
+                          {sheetMode ? "Activa — mostrando letras estilo Excel" : "Mostrar letras de columna sobre los nombres"}
+                        </p>
                       </div>
                     </button>
                     {effectiveIsEditor && (
@@ -800,6 +823,7 @@ export default function DatasetView() {
               onSelectionChange={setSelectedIds}
               conditionalRules={conditionalRules}
               onOpenSearchReplace={() => setShowSearchReplace(true)}
+              sheetMode={sheetMode}
             />
           )
         )}
