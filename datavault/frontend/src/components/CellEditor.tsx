@@ -43,7 +43,7 @@ export default function CellEditor({ column, value, onCommit, onCancel }: Props)
     border: "1.5px solid var(--color-primary)",
     borderRadius: "var(--radius-xs)",
     outline: "none",
-    boxShadow: "0 0 0 3px rgba(0,154,68,0.12)",
+    boxShadow: "0 0 0 3px rgba(14,165,233,0.12)",
     background: "var(--color-surface)",
   };
 
@@ -95,7 +95,7 @@ export default function CellEditor({ column, value, onCommit, onCancel }: Props)
     return (
       <div style={{ padding: "6px 8px", background: "var(--color-surface)",
         border: "1.5px solid var(--color-primary)", borderRadius: "var(--radius-xs)",
-        boxShadow: "0 0 0 3px rgba(0,154,68,0.12)", minWidth: 160 }}>
+        boxShadow: "0 0 0 3px rgba(14,165,233,0.12)", minWidth: 160 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
           {opts.map((opt) => {
             const sel = current.includes(opt);

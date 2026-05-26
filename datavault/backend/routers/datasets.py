@@ -6,7 +6,7 @@ import logging
 import uuid
 import boto3
 from datetime import datetime, timezone, date as date_type
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, and_, or_, not_
 from database import get_db
@@ -14,6 +14,7 @@ from models import Dataset, User, Record, ColumnDefinition, DatasetPermission, D
 from schemas import DatasetCreate, DatasetUpdate, DatasetOut, ComputeResult, ColumnOut
 from auth import get_current_user, require_admin, ds_require_editor, ds_require_viewer, effective_workspace_role, effective_role
 from limiter import limiter
+from templates import TEMPLATES, find_template
 
 logger = logging.getLogger("datavault.datasets")
 
@@ -461,44 +462,41 @@ async def preview_excel_import(
     return {"filename": file.filename or "file.xlsx", "sheets": sheets}
 
 
-@router.post("/import-from-excel", status_code=201)
-@limiter.limit("10/minute")
-async def import_dataset_from_excel(
-    request: Request,
-    file: UploadFile = File(...),
-    workspace_id: uuid.UUID | None = Query(None),
-    name: str | None = Query(None),
-    sheet: str | None = Query(None),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    await _require_ws_manager(current_user, workspace_id, db)
+async def _import_sheet_into_db(
+    wb,
+    sheet_name: str | None,
+    ds_name: str,
+    workspace_id: uuid.UUID | None,
+    db: AsyncSession,
+) -> dict:
+    """Crea un Dataset (+columnas +registros) leyendo una hoja del workbook.
 
-    content = await file.read()
-    if len(content) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="Archivo muy grande (máximo 10 MB)")
-
-    wb = _load_workbook_safe(content, file.filename or "")
-
-    # Select sheet
-    if sheet and sheet in wb.sheetnames:
-        ws_sheet = wb[sheet]
+    No hace commit: el llamador decide cuándo confirmar para agrupar varias hojas
+    en una sola transacción. Devuelve la metadata del dataset creado.
+    """
+    if sheet_name and sheet_name in wb.sheetnames:
+        ws_sheet = wb[sheet_name]
     else:
         ws_sheet = wb.active
 
     rows = list(ws_sheet.iter_rows(values_only=True))
     if not rows or len(rows) < 2:
-        raise HTTPException(status_code=400, detail="El archivo debe tener al menos una fila de cabeceras y una de datos")
+        raise HTTPException(
+            status_code=400,
+            detail=f"La hoja '{ws_sheet.title}' debe tener cabeceras y al menos una fila de datos",
+        )
 
     raw_header_row = rows[0]
     data_rows = _strip_rows(list(rows[1:]))
     if not data_rows:
-        raise HTTPException(status_code=400, detail="La hoja no tiene filas con datos")
+        raise HTTPException(
+            status_code=400,
+            detail=f"La hoja '{ws_sheet.title}' no tiene filas con datos",
+        )
 
     names, field_keys = _build_headers(list(raw_header_row))
     n_cols = len(names)
 
-    # Skip columns that are entirely empty or have no header
     def col_has_data(i: int) -> bool:
         if raw_header_row[i] is None:
             return False
@@ -509,20 +507,15 @@ async def import_dataset_from_excel(
         )
 
     active_indices = [i for i in range(n_cols) if col_has_data(i)]
-
-    # Infer types for active columns only
     col_specs: dict[int, tuple[str, list | None]] = {
         i: _infer_col_type([row[i] if i < len(row) else None for row in data_rows])
         for i in active_indices
     }
 
-    # Create dataset
-    ds_name = (name or "").strip() or (file.filename or "dataset").rsplit(".", 1)[0]
     dataset = Dataset(name=ds_name, workspace_id=workspace_id)
     db.add(dataset)
     await db.flush()
 
-    # Create columns
     pos = 0
     for i in active_indices:
         dtype, opts = col_specs[i]
@@ -539,7 +532,6 @@ async def import_dataset_from_excel(
         ))
         pos += 1
 
-    # Import records
     records_created = 0
     for row in data_rows:
         row_data: dict = {}
@@ -560,7 +552,6 @@ async def import_dataset_from_excel(
             elif dtype == "boolean":
                 row_data[fk] = str(raw).lower() in ("true", "yes", "sí", "si", "1", "verdadero")
             else:
-                # Normalize float-as-int (phone/DNI stored as float in Excel)
                 if isinstance(raw, float) and raw.is_integer():
                     row_data[fk] = str(int(raw))
                 else:
@@ -568,13 +559,392 @@ async def import_dataset_from_excel(
         db.add(Record(dataset_id=dataset.id, data=row_data))
         records_created += 1
 
-    await db.commit()
-    await db.refresh(dataset)
-    logger.info("Imported dataset '%s' (%d cols, %d rows) by user %s", ds_name, len(active_indices), records_created, current_user.id)
-
     return {
+        "sheet": ws_sheet.title,
         "dataset_id": str(dataset.id),
-        "dataset_name": dataset.name,
+        "dataset_name": ds_name,
         "columns_created": len(active_indices),
         "records_created": records_created,
     }
+
+
+@router.post("/import-from-excel", status_code=201)
+@limiter.limit("10/minute")
+async def import_dataset_from_excel(
+    request: Request,
+    file: UploadFile = File(...),
+    workspace_id: uuid.UUID | None = Query(None),
+    name: str | None = Query(None),
+    sheet: str | None = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _require_ws_manager(current_user, workspace_id, db)
+
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Archivo muy grande (máximo 10 MB)")
+
+    wb = _load_workbook_safe(content, file.filename or "")
+    sheet_title = sheet if (sheet and sheet in wb.sheetnames) else wb.active.title
+    ds_name = (name or "").strip() or (file.filename or "dataset").rsplit(".", 1)[0]
+    result = await _import_sheet_into_db(wb, sheet_title, ds_name, workspace_id, db)
+    await db.commit()
+    logger.info(
+        "Imported dataset '%s' (%d cols, %d rows) by user %s",
+        result["dataset_name"], result["columns_created"], result["records_created"], current_user.id,
+    )
+    return {
+        "dataset_id": result["dataset_id"],
+        "dataset_name": result["dataset_name"],
+        "columns_created": result["columns_created"],
+        "records_created": result["records_created"],
+    }
+
+
+@router.post("/import-from-excel/multi", status_code=201)
+@limiter.limit("5/minute")
+async def import_datasets_from_excel_multi(
+    request: Request,
+    file: UploadFile = File(...),
+    payload: str = Form(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Importa varias hojas en una sola pasada, cada una como dataset propio.
+
+    payload: JSON con {"workspace_id": "uuid|null", "sheets": [{"sheet": "...", "name": "..."}, ...]}.
+    Todo se commitea junto: si falla una hoja, no se crea ninguna.
+    """
+    try:
+        spec = json.loads(payload)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="payload no es JSON válido")
+
+    ws_id_raw = spec.get("workspace_id")
+    workspace_id = uuid.UUID(ws_id_raw) if ws_id_raw else None
+    sheets_spec = spec.get("sheets") or []
+    if not isinstance(sheets_spec, list) or not sheets_spec:
+        raise HTTPException(status_code=400, detail="Debe enviar al menos una hoja en sheets[]")
+
+    await _require_ws_manager(current_user, workspace_id, db)
+
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Archivo muy grande (máximo 10 MB)")
+
+    wb = _load_workbook_safe(content, file.filename or "")
+
+    imported: list[dict] = []
+    for item in sheets_spec:
+        sheet_name = (item.get("sheet") or "").strip()
+        if not sheet_name or sheet_name not in wb.sheetnames:
+            raise HTTPException(status_code=400, detail=f"Hoja '{sheet_name}' no existe en el archivo")
+        ds_name = (item.get("name") or "").strip() or sheet_name
+        result = await _import_sheet_into_db(wb, sheet_name, ds_name, workspace_id, db)
+        imported.append(result)
+
+    await db.commit()
+    logger.info(
+        "Imported %d datasets from Excel (%s) by user %s",
+        len(imported), file.filename, current_user.id,
+    )
+    return {"imported": imported}
+
+
+# ── Templates ─────────────────────────────────────────────────────────────────
+
+@router.get("/templates/catalog")
+async def list_templates(current_user: User = Depends(get_current_user)):
+    """Lista de plantillas disponibles (sin sample data, solo metadatos para el selector)."""
+    return [
+        {
+            "id": t["id"],
+            "name": t["name"],
+            "description": t["description"],
+            "icon": t["icon"],
+            "color": t["color"],
+            "columns_count": len(t["columns"]),
+            "sample_rows_count": len(t["sample_rows"]),
+        }
+        for t in TEMPLATES
+    ]
+
+
+@router.post("/templates/{template_id}", response_model=DatasetOut, status_code=201)
+@limiter.limit("20/minute")
+async def create_from_template(
+    request: Request,
+    template_id: str,
+    workspace_id: uuid.UUID | None = Query(None),
+    name: str | None = Query(None, description="Nombre custom; por defecto usa el de la plantilla"),
+    include_sample: bool = Query(True, description="Incluir filas de ejemplo"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tpl = find_template(template_id)
+    if not tpl:
+        raise HTTPException(status_code=404, detail=f"Plantilla '{template_id}' no encontrada")
+
+    await _require_ws_manager(current_user, workspace_id, db)
+
+    ds_name = (name or "").strip() or tpl["name"]
+    dataset = Dataset(name=ds_name, description=tpl["description"], workspace_id=workspace_id)
+    db.add(dataset)
+    await db.flush()
+
+    for col_spec in tpl["columns"]:
+        db.add(ColumnDefinition(
+            dataset_id=dataset.id,
+            name=col_spec["name"],
+            field_key=col_spec["field_key"],
+            data_type=col_spec["data_type"],
+            rules=col_spec.get("rules", {}),
+            position=col_spec.get("position", 0),
+        ))
+
+    if include_sample:
+        for row in tpl["sample_rows"]:
+            db.add(Record(dataset_id=dataset.id, data=row))
+
+    await db.commit()
+    await db.refresh(dataset)
+    logger.info(
+        "Created dataset '%s' from template '%s' by user %s",
+        ds_name, template_id, current_user.id,
+    )
+    return dataset
+
+
+# ── Relationship scanner ──────────────────────────────────────────────────────
+
+_FK_PREFIXES = ("id_", "cod_", "codigo_", "ref_", "fk_")
+_FK_SUFFIXES = ("_id", "_cod", "_codigo", "_ref", "_fk")
+
+
+def _extract_target_keyword(field_key: str) -> str | None:
+    """Devuelve el 'keyword' candidato (lo que quedaría después de quitar el prefijo/sufijo de FK)."""
+    k = field_key.lower().strip()
+    for p in _FK_PREFIXES:
+        if k.startswith(p) and len(k) > len(p):
+            return k[len(p):].strip("_") or None
+    for s in _FK_SUFFIXES:
+        if k.endswith(s) and len(k) > len(s):
+            return k[:-len(s)].strip("_") or None
+    return None
+
+
+def _normalize_name(s: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
+def _name_matches(keyword: str, dataset_name: str) -> bool:
+    kw = _normalize_name(keyword)
+    name = _normalize_name(dataset_name)
+    if not kw or not name:
+        return False
+    # singular/plural lenient match
+    kws = {kw, kw[:-1] if kw.endswith("s") else kw + "s"}
+    names = {name, name[:-1] if name.endswith("s") else name + "s"}
+    for k in kws:
+        for n in names:
+            if k == n or k in n or n in k:
+                return True
+    return False
+
+
+@router.get("/relationships/scan")
+@limiter.limit("10/minute")
+async def scan_relationships(
+    request: Request,
+    workspace_id: uuid.UUID | None = Query(None),
+    sample_size: int = Query(200, ge=10, le=1000),
+    min_content_ratio: float = Query(0.3, ge=0.0, le=1.0),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Escanea datasets accesibles del workspace en busca de relaciones candidatas.
+
+    Escanea TODAS las columnas (no solo las que se llaman id_*) y verifica
+    matching por contenido contra:
+      - `__id__` (id de fila) de cada otra tabla
+      - columnas "tipo clave" (alta cardinalidad, sin repetidos) de cada otra tabla
+
+    Si una columna tiene mucho match de contenido pero no su nombre no sugiere FK,
+    igual se reporta. El score combina coincidencia por nombre + por contenido.
+    """
+    # Datasets accesibles (misma lógica que list_datasets)
+    ws_filter = Dataset.workspace_id == workspace_id if workspace_id else True
+    if current_user.role == "admin":
+        ds_q = select(Dataset).where(ws_filter)
+    else:
+        direct_perm_any = select(DatasetPermission.dataset_id).where(
+            DatasetPermission.user_id == current_user.id,
+        )
+        direct_perm_granted = select(DatasetPermission.dataset_id).where(
+            DatasetPermission.user_id == current_user.id,
+            DatasetPermission.role != "none",
+        )
+        user_group_ids = select(UserGroupMember.group_id).where(
+            UserGroupMember.user_id == current_user.id,
+        )
+        group_perm_any = select(DatasetGroupPermission.dataset_id).where(
+            DatasetGroupPermission.group_id.in_(user_group_ids),
+        )
+        group_perm_granted = select(DatasetGroupPermission.dataset_id).where(
+            DatasetGroupPermission.group_id.in_(user_group_ids),
+            DatasetGroupPermission.role != "none",
+        )
+        user_workspace_ids = select(WorkspaceMember.workspace_id).where(
+            WorkspaceMember.user_id == current_user.id,
+        )
+        visible = or_(
+            Dataset.id.in_(direct_perm_granted),
+            and_(not_(Dataset.id.in_(direct_perm_any)), Dataset.id.in_(group_perm_granted)),
+            and_(
+                not_(Dataset.id.in_(direct_perm_any)),
+                not_(Dataset.id.in_(group_perm_any)),
+                Dataset.workspace_id.in_(user_workspace_ids),
+            ),
+        )
+        ds_q = select(Dataset).where(and_(visible, ws_filter))
+
+    datasets = (await db.execute(ds_q)).scalars().all()
+    if len(datasets) < 2:
+        return {"scanned": len(datasets), "candidates": []}
+
+    # ── Pre-cargar columnas y muestras por dataset ───────────────────────────
+    cols_by_ds: dict[uuid.UUID, list[ColumnDefinition]] = {}
+    ids_by_ds: dict[uuid.UUID, set[str]] = {}
+    col_values_by_ds: dict[uuid.UUID, dict[str, set[str]]] = {}
+    # Columnas "tipo clave" por dataset: aquellas que en el sample son únicas o casi únicas
+    key_cols_by_ds: dict[uuid.UUID, list[str]] = {}
+
+    for ds in datasets:
+        cols_res = await db.execute(
+            select(ColumnDefinition).where(ColumnDefinition.dataset_id == ds.id)
+        )
+        cols_by_ds[ds.id] = list(cols_res.scalars().all())
+
+        # Traer ids + data en una sola query
+        rec_res = await db.execute(
+            select(Record.id, Record.data)
+            .where(Record.dataset_id == ds.id)
+            .limit(sample_size)
+        )
+        rec_rows = rec_res.all()
+        ids_by_ds[ds.id] = {str(r[0]) for r in rec_rows}
+
+        # Construir el sample por columna leyendo Record.data en Python
+        per_col_raw: dict[str, list[str]] = {fk: [] for fk in (c.field_key for c in cols_by_ds[ds.id])}
+        for _rec_id, data in rec_rows:
+            if not isinstance(data, dict):
+                continue
+            for fk in per_col_raw:
+                v = data.get(fk)
+                if v is None:
+                    continue
+                s = str(v).strip()
+                if s == "":
+                    continue
+                per_col_raw[fk].append(s)
+
+        per_col: dict[str, set[str]] = {}
+        key_cols: list[str] = []
+        for fk, raw_vals in per_col_raw.items():
+            uniq = set(raw_vals)
+            per_col[fk] = uniq
+            # "Tipo clave" = al menos 5 valores y la unicidad ≥ 95% del sample
+            if len(raw_vals) >= 5 and uniq and len(uniq) / len(raw_vals) >= 0.95:
+                key_cols.append(fk)
+
+        col_values_by_ds[ds.id] = per_col
+        key_cols_by_ds[ds.id] = key_cols
+
+    # ── Construcción de candidatos ───────────────────────────────────────────
+    candidates: list[dict] = []
+
+    for src in datasets:
+        for col in cols_by_ds[src.id]:
+            src_vals = col_values_by_ds[src.id].get(col.field_key, set())
+            if not src_vals:
+                continue
+            keyword = _extract_target_keyword(col.field_key)
+
+            for tgt in datasets:
+                if tgt.id == src.id:
+                    continue
+
+                # name match: si la columna tenía keyword extraíble y matchea con el nombre
+                # de la tabla destino, o si el nombre de la columna matchea con el nombre
+                # de la tabla (ej. columna "cliente" → tabla "clientes")
+                name_match = False
+                if keyword and _name_matches(keyword, tgt.name):
+                    name_match = True
+                elif _name_matches(col.field_key, tgt.name):
+                    name_match = True
+
+                # Intentar matching contra __id__ y contra cada columna clave de la tabla destino
+                best_ratio = 0.0
+                best_matched = 0
+                best_field = "__id__"
+
+                target_ids = ids_by_ds[tgt.id]
+                if target_ids:
+                    matched_id = sum(1 for v in src_vals if v in target_ids)
+                    ratio_id = matched_id / len(src_vals)
+                    if ratio_id > best_ratio:
+                        best_ratio = ratio_id
+                        best_matched = matched_id
+                        best_field = "__id__"
+
+                for tgt_col in key_cols_by_ds[tgt.id]:
+                    tgt_vals = col_values_by_ds[tgt.id].get(tgt_col, set())
+                    if not tgt_vals:
+                        continue
+                    matched = sum(1 for v in src_vals if v in tgt_vals)
+                    ratio = matched / len(src_vals)
+                    if ratio > best_ratio:
+                        best_ratio = ratio
+                        best_matched = matched
+                        best_field = tgt_col
+
+                # Filtro de emisión: hay match de nombre fuerte, o el contenido coincide bien
+                if not name_match and best_ratio < min_content_ratio:
+                    continue
+                # Si solo el nombre matchea pero no hay datos en común, exigir al menos algún signo
+                if name_match and best_ratio == 0.0 and len(target_ids) > 0:
+                    # nombre indica relación pero sin overlap real → score bajo, lo dejamos pasar
+                    pass
+
+                score = round(
+                    0.5 * (1.0 if name_match else 0.0) + 0.5 * best_ratio,
+                    3,
+                )
+                candidates.append({
+                    "from_dataset_id": str(src.id),
+                    "from_dataset_name": src.name,
+                    "from_column_id": str(col.id),
+                    "from_column": col.field_key,
+                    "from_column_label": col.name,
+                    "from_column_type": col.data_type,
+                    "to_dataset_id": str(tgt.id),
+                    "to_dataset_name": tgt.name,
+                    "to_field": best_field,
+                    "name_match": name_match,
+                    "content_match_ratio": round(best_ratio, 3),
+                    "content_matched": best_matched,
+                    "values_sampled": len(src_vals),
+                    "score": score,
+                    "sample_values": list(src_vals)[:3],
+                })
+
+    # Quédate con el mejor candidato por (src_dataset, src_column)
+    best: dict[tuple[str, str], dict] = {}
+    for c in candidates:
+        key = (c["from_dataset_id"], c["from_column"])
+        if key not in best or c["score"] > best[key]["score"]:
+            best[key] = c
+
+    result = sorted(best.values(), key=lambda x: x["score"], reverse=True)
+    return {"scanned": len(datasets), "candidates": result}

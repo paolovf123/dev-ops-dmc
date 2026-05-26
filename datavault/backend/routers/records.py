@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Response, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, cast, Text, func
+from sqlalchemy import select, cast, Text, func, and_, or_
 from datetime import datetime, timezone
 from database import get_db
 from models import Dataset, ColumnDefinition, Record, ChangeHistory, User
@@ -8,6 +8,8 @@ from schemas import RecordCreate, RecordUpdate, RecordOut, BulkDeleteBody
 from auth import get_current_user, require_editor, require_viewer, ds_require_editor, ds_require_viewer
 from pagination import MAX_RECORDS_PER_REQUEST, DEFAULT_PAGE_SIZE
 from limiter import limiter
+import base64
+import json
 import logging
 import uuid
 import io
@@ -31,7 +33,30 @@ async def _get_columns(dataset_id: uuid.UUID, db: AsyncSession) -> list[ColumnDe
     return result.scalars().all()
 
 
-def _validate(data: dict, columns: list[ColumnDefinition], skip_required: bool = False) -> list[str]:
+import re as _re
+
+_REGEX_CACHE: dict[str, "_re.Pattern[str]"] = {}
+
+
+def _compile_regex(pat: str) -> "_re.Pattern[str] | None":
+    if pat in _REGEX_CACHE:
+        return _REGEX_CACHE[pat]
+    try:
+        compiled = _re.compile(pat)
+    except _re.error:
+        return None
+    _REGEX_CACHE[pat] = compiled
+    return compiled
+
+
+async def _validate(
+    data: dict,
+    columns: list[ColumnDefinition],
+    db: AsyncSession,
+    dataset_id: uuid.UUID,
+    skip_required: bool = False,
+    exclude_record_id: uuid.UUID | None = None,
+) -> list[str]:
     errors = []
     for col in columns:
         value = data.get(col.field_key)
@@ -43,6 +68,39 @@ def _validate(data: dict, columns: list[ColumnDefinition], skip_required: bool =
 
         if value is None or value == "" or value == []:
             continue
+
+        # ── Regex (cualquier tipo de string) ─────────────────────────────────
+        regex_pat = rules.get("regex")
+        if regex_pat:
+            compiled = _compile_regex(str(regex_pat))
+            if compiled is None:
+                errors.append(f"'{col.name}' tiene una regex inválida en su configuración")
+            elif not compiled.search(str(value)):
+                msg = rules.get("regex_message") or f"'{col.name}' no cumple el patrón requerido"
+                errors.append(msg)
+
+        # ── Único (no puede repetirse en este dataset) ──────────────────────
+        if rules.get("unique"):
+            # Traer ids + data para comparar en Python (evita problemas
+            # de cast en JSON/JSONB que aparecen en algunos drivers)
+            stmt = select(Record.id, Record.data).where(
+                Record.dataset_id == dataset_id,
+                Record.deleted_at.is_(None),
+            )
+            if exclude_record_id:
+                stmt = stmt.where(Record.id != exclude_record_id)
+            target = str(value).strip().lower()
+            for rid, rdata in (await db.execute(stmt)).all():
+                if not isinstance(rdata, dict):
+                    continue
+                other = rdata.get(col.field_key)
+                if other is None:
+                    continue
+                if str(other).strip().lower() == target:
+                    errors.append(
+                        f"'{col.name}' ya existe con el valor '{value}' (debe ser único)"
+                    )
+                    break
 
         if col.data_type in ("number", "currency"):
             try:
@@ -103,6 +161,18 @@ def _validate(data: dict, columns: list[ColumnDefinition], skip_required: bool =
     return errors
 
 
+def _encode_cursor(created_at: datetime, rec_id: uuid.UUID) -> str:
+    """Codifica created_at + id como cursor opaco (URL-safe base64)."""
+    payload = {"c": created_at.isoformat(), "i": str(rec_id)}
+    return base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+
+
+def _decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
+    pad = "=" * (-len(cursor) % 4)
+    payload = json.loads(base64.urlsafe_b64decode(cursor + pad))
+    return datetime.fromisoformat(payload["c"]), uuid.UUID(payload["i"])
+
+
 @router.get("", response_model=list[RecordOut])
 async def list_records(
     dataset_id: uuid.UUID,
@@ -111,6 +181,7 @@ async def list_records(
     include_deleted: bool = Query(False),
     skip: int = Query(0, ge=0),
     limit: int = Query(DEFAULT_PAGE_SIZE, le=MAX_RECORDS_PER_REQUEST),
+    cursor: str | None = Query(None, description="Paginación basada en cursor (estable y rápida con muchas filas). Si se pasa, ignora skip."),
     _: User = Depends(ds_require_viewer),
     db: AsyncSession = Depends(get_db),
 ):
@@ -120,14 +191,43 @@ async def list_records(
     if search:
         base = base.where(cast(Record.data, Text).ilike(f"%{search}%"))
 
-    # Total count for pagination
+    # Total count para mostrar X de Y (cuesta más; lo dejamos por compat)
     count_result = await db.execute(select(func.count()).select_from(base.subquery()))
     total = count_result.scalar_one()
     response.headers["X-Total-Count"] = str(total)
-    response.headers["Access-Control-Expose-Headers"] = "X-Total-Count"
 
-    result = await db.execute(base.offset(skip).limit(limit).order_by(Record.created_at.desc()))
-    return result.scalars().all()
+    # Modo cursor: estable bajo inserts, O(log n) en lugar de O(n) del offset
+    if cursor:
+        try:
+            c_created, c_id = _decode_cursor(cursor)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Cursor inválido")
+        # Ordenamos DESC por (created_at, id) para tener un cursor único
+        base = base.where(
+            or_(
+                Record.created_at < c_created,
+                and_(Record.created_at == c_created, Record.id < c_id),
+            )
+        )
+        result = await db.execute(
+            base.order_by(Record.created_at.desc(), Record.id.desc()).limit(limit)
+        )
+    else:
+        result = await db.execute(
+            base.order_by(Record.created_at.desc(), Record.id.desc()).offset(skip).limit(limit)
+        )
+
+    items = result.scalars().all()
+
+    # Si llenamos el page size, emitimos cursor para la siguiente página
+    if len(items) == limit and items:
+        last = items[-1]
+        response.headers["X-Next-Cursor"] = _encode_cursor(last.created_at, last.id)
+        response.headers["Access-Control-Expose-Headers"] = "X-Total-Count, X-Next-Cursor"
+    else:
+        response.headers["Access-Control-Expose-Headers"] = "X-Total-Count"
+
+    return items
 
 
 @router.post("", response_model=RecordOut, status_code=201)
@@ -141,7 +241,7 @@ async def create_record(
 ):
     from main import manager  # import here to avoid circular
     columns = await _get_columns(dataset_id, db)
-    errors = _validate(body.data, columns, skip_required=True)
+    errors = await _validate(body.data, columns, db, dataset_id, skip_required=True)
     if errors:
         raise HTTPException(status_code=422, detail=errors)
 
@@ -156,6 +256,14 @@ async def create_record(
     await db.refresh(record)
     await manager.broadcast(str(dataset_id), {
         "type": "record_create", "dataset_id": str(dataset_id), "record_id": str(record.id),
+    })
+    # Fire-and-forget webhooks
+    from routers.webhooks import dispatch_event
+    ds_res = await db.execute(select(Dataset.workspace_id).where(Dataset.id == dataset_id))
+    ws_id = ds_res.scalar_one_or_none()
+    await dispatch_event(db, "record.create", ws_id, dataset_id, {
+        "dataset_id": str(dataset_id), "record_id": str(record.id), "data": record.data,
+        "by_user_id": str(current_user.id), "by_user_name": current_user.username,
     })
     return record
 
@@ -180,7 +288,7 @@ async def update_record(
 
     columns = await _get_columns(dataset_id, db)
     merged = {**record.data, **body.data}
-    errors = _validate(merged, columns)
+    errors = await _validate(merged, columns, db, dataset_id, exclude_record_id=record_id)
     if errors:
         raise HTTPException(status_code=422, detail=errors)
 
@@ -199,6 +307,13 @@ async def update_record(
     await db.refresh(record)
     await manager.broadcast(str(dataset_id), {
         "type": "record_update", "dataset_id": str(dataset_id), "record_id": str(record_id),
+    })
+    from routers.webhooks import dispatch_event
+    ds_res = await db.execute(select(Dataset.workspace_id).where(Dataset.id == dataset_id))
+    ws_id = ds_res.scalar_one_or_none()
+    await dispatch_event(db, "record.update", ws_id, dataset_id, {
+        "dataset_id": str(dataset_id), "record_id": str(record_id), "data": record.data,
+        "by_user_id": str(current_user.id), "by_user_name": current_user.username,
     })
     return record
 
@@ -223,6 +338,13 @@ async def delete_record(
         user_id=current_user.id, user_name=current_user.username,
     ))
     await db.commit()
+    from routers.webhooks import dispatch_event
+    ds_res = await db.execute(select(Dataset.workspace_id).where(Dataset.id == dataset_id))
+    ws_id = ds_res.scalar_one_or_none()
+    await dispatch_event(db, "record.delete", ws_id, dataset_id, {
+        "dataset_id": str(dataset_id), "record_id": str(record_id),
+        "by_user_id": str(current_user.id), "by_user_name": current_user.username,
+    })
     await manager.broadcast(str(dataset_id), {
         "type": "record_delete", "dataset_id": str(dataset_id), "record_id": str(record_id),
     })
@@ -332,6 +454,14 @@ async def import_excel(
     request: Request,
     dataset_id: uuid.UUID,
     file: UploadFile = File(...),
+    dedupe_on: str | None = Query(
+        None,
+        description=(
+            "Lista comma-separated de field_keys a usar como clave de duplicación. "
+            "Las filas cuya combinación de valores ya exista en el dataset (o "
+            "previamente dentro del mismo import) se omitirán silenciosamente."
+        ),
+    ),
     _: User = Depends(ds_require_editor),
     db: AsyncSession = Depends(get_db),
 ):
@@ -378,6 +508,35 @@ async def import_excel(
     errors: list[dict] = []
     new_records: list[Record] = []
 
+    # ── Dedupe setup ──────────────────────────────────────────────────────────
+    dedupe_keys: list[str] = [k.strip() for k in (dedupe_on or "").split(",") if k.strip()]
+    seen_keys: set[tuple] = set()
+    skipped_duplicates = 0
+    if dedupe_keys:
+        # Validar que las columnas existen
+        valid_keys = {col.field_key for col in columns}
+        invalid = [k for k in dedupe_keys if k not in valid_keys]
+        if invalid:
+            raise HTTPException(
+                status_code=400,
+                detail=f"dedupe_on contiene columnas inexistentes: {invalid}",
+            )
+        # Cargar registros existentes y poblar el set inicial
+        existing_res = await db.execute(
+            select(Record.data).where(
+                Record.dataset_id == dataset_id,
+                Record.deleted_at.is_(None),
+            )
+        )
+        for (rdata,) in existing_res.all():
+            if not isinstance(rdata, dict):
+                continue
+            key = tuple(str(rdata.get(k, "")).strip().lower() for k in dedupe_keys)
+            seen_keys.add(key)
+
+    def _row_key(d: dict) -> tuple:
+        return tuple(str(d.get(k, "")).strip().lower() for k in dedupe_keys)
+
     for i, row in enumerate(rows[1:], start=2):
         data = {}
         for j, cell in enumerate(row):
@@ -392,7 +551,15 @@ async def import_excel(
                     cell = str(cell)
             data[field_key] = cell
 
-        row_errors = _validate(data, columns)
+        # Dedupe check (silencioso, antes de validar para que no se cuente como error)
+        if dedupe_keys:
+            key = _row_key(data)
+            if key in seen_keys:
+                skipped_duplicates += 1
+                continue
+            seen_keys.add(key)
+
+        row_errors = await _validate(data, columns, db, dataset_id)
         if row_errors:
             errors.append({"row": i, "errors": row_errors})
             continue
@@ -401,7 +568,7 @@ async def import_excel(
 
     # ── Atomic: import all-or-nothing if any row had validation errors ────────
     if errors:
-        return {"created": 0, "errors": errors}
+        return {"created": 0, "skipped_duplicates": skipped_duplicates, "errors": errors}
 
     for record in new_records:
         db.add(record)
@@ -412,4 +579,4 @@ async def import_excel(
         logger.error("import_excel commit failed for dataset %s: %s", dataset_id, e, exc_info=True)
         raise HTTPException(status_code=500, detail="Error al insertar registros importados")
 
-    return {"created": len(new_records), "errors": []}
+    return {"created": len(new_records), "skipped_duplicates": skipped_duplicates, "errors": []}

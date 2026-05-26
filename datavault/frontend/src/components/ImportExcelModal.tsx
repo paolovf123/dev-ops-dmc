@@ -1,6 +1,10 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { previewExcelImport, importDatasetFromExcel } from "../api/datasets";
+import {
+  previewExcelImport,
+  importDatasetFromExcel,
+  importDatasetsFromExcelMulti,
+} from "../api/datasets";
 import type { ExcelPreview } from "../api/datasets";
 
 const TYPE_COLORS: Record<string, string> = {
@@ -16,18 +20,32 @@ const TYPE_LABELS: Record<string, string> = {
   enum: "Lista", multiselect: "Multi-lista", boolean: "Sí/No", date: "Fecha", relation: "Relación",
 };
 
+interface SheetState {
+  selected: boolean;
+  name: string;
+}
+
+interface ImportedSummary {
+  count: number;
+  totalRows: number;
+  totalCols: number;
+  firstId: string;
+  firstName: string;
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
   workspaceId?: string;
   onSuccess: (datasetId: string, datasetName: string, counts: { cols: number; rows: number }) => void;
+  onMultiSuccess?: (summary: ImportedSummary) => void;
 }
 
-export default function ImportExcelModal({ open, onClose, workspaceId, onSuccess }: Props) {
+export default function ImportExcelModal({ open, onClose, workspaceId, onSuccess, onMultiSuccess }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<ExcelPreview | null>(null);
-  const [selectedSheet, setSelectedSheet] = useState("");
-  const [dsName, setDsName] = useState("");
+  const [sheetState, setSheetState] = useState<Record<string, SheetState>>({});
+  const [focusedSheet, setFocusedSheet] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [previewErr, setPreviewErr] = useState("");
 
@@ -36,33 +54,79 @@ export default function ImportExcelModal({ open, onClose, workspaceId, onSuccess
     onSuccess: (data) => {
       setPreview(data);
       setPreviewErr("");
-      const firstSheet = data.sheets[0]?.name ?? "";
-      setSelectedSheet(firstSheet);
       const baseName = data.filename.replace(/\.(xlsx?|xlsm)$/i, "");
-      setDsName(data.sheets.length > 1 ? `${baseName} - ${firstSheet}` : baseName);
+      const initial: Record<string, SheetState> = {};
+      data.sheets.forEach((s, idx) => {
+        initial[s.name] = {
+          selected: idx === 0, // primera hoja preseleccionada
+          name: data.sheets.length > 1 ? `${baseName} - ${s.name}` : baseName,
+        };
+      });
+      setSheetState(initial);
+      setFocusedSheet(data.sheets[0]?.name ?? "");
     },
     onError: (e: Error) => setPreviewErr(e.message ?? "Error al leer el archivo"),
   });
 
+  const selectedSheets = preview
+    ? preview.sheets.filter((s) => sheetState[s.name]?.selected)
+    : [];
+
   const importMut = useMutation({
-    mutationFn: () => {
-      if (!previewMut.variables) throw new Error("no file");
-      return importDatasetFromExcel(previewMut.variables, {
-        workspace_id: workspaceId,
-        name: dsName.trim() || undefined,
-        sheet: selectedSheet || undefined,
-      });
+    mutationFn: async () => {
+      const file = previewMut.variables;
+      if (!file) throw new Error("no file");
+      if (selectedSheets.length === 0) throw new Error("Selecciona al menos una hoja");
+
+      if (selectedSheets.length === 1) {
+        const s = selectedSheets[0];
+        const r = await importDatasetFromExcel(file, {
+          workspace_id: workspaceId,
+          name: sheetState[s.name].name.trim() || undefined,
+          sheet: s.name,
+        });
+        return { kind: "single" as const, data: r };
+      }
+
+      const r = await importDatasetsFromExcelMulti(
+        file,
+        selectedSheets.map((s) => ({ sheet: s.name, name: sheetState[s.name].name.trim() || s.name })),
+        workspaceId,
+      );
+      return { kind: "multi" as const, data: r };
     },
-    onSuccess: (data) => {
-      onSuccess(data.dataset_id, data.dataset_name, { cols: data.columns_created, rows: data.records_created });
+    onSuccess: (res) => {
+      if (res.kind === "single") {
+        onSuccess(res.data.dataset_id, res.data.dataset_name, {
+          cols: res.data.columns_created,
+          rows: res.data.records_created,
+        });
+      } else {
+        const imp = res.data.imported;
+        const summary: ImportedSummary = {
+          count: imp.length,
+          totalRows: imp.reduce((a, b) => a + b.records_created, 0),
+          totalCols: imp.reduce((a, b) => a + b.columns_created, 0),
+          firstId: imp[0]?.dataset_id ?? "",
+          firstName: imp[0]?.dataset_name ?? "",
+        };
+        if (onMultiSuccess) {
+          onMultiSuccess(summary);
+        } else {
+          onSuccess(summary.firstId, `${summary.count} datasets importados`, {
+            cols: summary.totalCols,
+            rows: summary.totalRows,
+          });
+        }
+      }
       handleClose();
     },
   });
 
   const handleClose = () => {
     setPreview(null);
-    setSelectedSheet("");
-    setDsName("");
+    setSheetState({});
+    setFocusedSheet("");
     setPreviewErr("");
     previewMut.reset();
     importMut.reset();
@@ -75,15 +139,37 @@ export default function ImportExcelModal({ open, onClose, workspaceId, onSuccess
     previewMut.mutate(f);
   };
 
-  const handleSheetChange = (name: string) => {
-    setSelectedSheet(name);
-    if (preview) {
-      const baseName = preview.filename.replace(/\.(xlsx?|xlsm)$/i, "");
-      setDsName(preview.sheets.length > 1 ? `${baseName} - ${name}` : baseName);
-    }
+  const toggleSheet = (name: string) => {
+    setSheetState((s) => ({ ...s, [name]: { ...s[name], selected: !s[name].selected } }));
+    setFocusedSheet(name);
   };
 
-  const currentSheet = preview?.sheets.find((s) => s.name === selectedSheet);
+  const renameSheet = (name: string, newName: string) => {
+    setSheetState((s) => ({ ...s, [name]: { ...s[name], name: newName } }));
+  };
+
+  const selectAll = () => {
+    if (!preview) return;
+    const all = preview.sheets.every((s) => sheetState[s.name]?.selected);
+    setSheetState((prev) => {
+      const next = { ...prev };
+      preview.sheets.forEach((s) => { next[s.name] = { ...next[s.name], selected: !all }; });
+      return next;
+    });
+  };
+
+  // Reset rename for renamed sheets if user changes focus? Not needed; sheetState persists.
+  useEffect(() => {
+    // No-op; placeholder for future side-effects when focus changes.
+  }, [focusedSheet]);
+
+  const currentSheet = preview?.sheets.find((s) => s.name === focusedSheet);
+  const selectedCount = selectedSheets.length;
+  const totalSelectedRows = selectedSheets.reduce((a, s) => a + s.row_count, 0);
+  const hasDupName =
+    selectedCount > 1 &&
+    new Set(selectedSheets.map((s) => (sheetState[s.name].name.trim() || s.name).toLowerCase())).size !==
+      selectedSheets.length;
 
   if (!open) return null;
 
@@ -94,7 +180,7 @@ export default function ImportExcelModal({ open, onClose, workspaceId, onSuccess
     }} onClick={(e) => e.target === e.currentTarget && handleClose()}>
       <div style={{
         background: "var(--color-surface)", borderRadius: 14, padding: "28px 32px",
-        width: "min(720px, 95vw)", maxHeight: "90vh", display: "flex", flexDirection: "column",
+        width: "min(820px, 95vw)", maxHeight: "92vh", display: "flex", flexDirection: "column",
         boxShadow: "0 20px 60px rgba(0,0,0,0.3)", gap: 20,
       }}>
         {/* Header */}
@@ -103,7 +189,7 @@ export default function ImportExcelModal({ open, onClose, workspaceId, onSuccess
           <div>
             <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>Importar desde Excel</h3>
             <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-muted)" }}>
-              .xlsx · múltiples hojas · columnas vacías filtradas automáticamente
+              .xlsx · varias hojas → un dataset por hoja
             </p>
           </div>
           <button className="btn btn-ghost" onClick={handleClose}
@@ -150,63 +236,93 @@ export default function ImportExcelModal({ open, onClose, workspaceId, onSuccess
 
         {/* Preview section */}
         {preview && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16, overflow: "hidden" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14, overflow: "hidden" }}>
             {/* File info + change */}
             <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px",
               background: "var(--color-bg)", borderRadius: 8, border: "1px solid var(--color-border)" }}>
               <span style={{ fontSize: 18 }}>📊</span>
               <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{preview.filename}</span>
+              <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
+                {preview.sheets.length} hoja{preview.sheets.length !== 1 ? "s" : ""}
+              </span>
               <button className="btn btn-ghost" style={{ fontSize: 12, padding: "3px 10px" }}
                 onClick={() => { setPreview(null); previewMut.reset(); fileRef.current?.click(); }}>
-                Cambiar archivo
+                Cambiar
               </button>
             </div>
 
-            {/* Sheet picker */}
-            {preview.sheets.length > 1 && (
-              <div>
-                <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600 }}>Seleccionar hoja:</p>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {preview.sheets.map((s) => (
-                    <label key={s.name} style={{
-                      display: "flex", alignItems: "center", gap: 6, cursor: "pointer",
-                      padding: "6px 14px", borderRadius: 8, border: "1.5px solid",
-                      borderColor: selectedSheet === s.name ? "var(--color-primary)" : "var(--color-border)",
-                      background: selectedSheet === s.name ? "var(--color-primary-bg)" : "transparent",
-                      fontSize: 13, fontWeight: selectedSheet === s.name ? 600 : 400,
-                      color: selectedSheet === s.name ? "var(--color-primary)" : "var(--color-text)",
-                    }}>
-                      <input type="radio" name="sheet" value={s.name}
-                        checked={selectedSheet === s.name}
-                        onChange={() => handleSheetChange(s.name)}
-                        style={{ display: "none" }} />
-                      <span>{s.name}</span>
-                      <span style={{ fontSize: 11, color: "var(--color-text-muted)", fontWeight: 400 }}>
-                        {s.row_count} filas · {s.columns.length} col
-                      </span>
-                    </label>
-                  ))}
-                </div>
+            {/* Sheets list with checkboxes + editable names */}
+            <div>
+              <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
+                <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>
+                  Hojas a importar
+                  <span style={{ fontWeight: 400, color: "var(--color-text-muted)", marginLeft: 6 }}>
+                    ({selectedCount} de {preview.sheets.length} seleccionada{selectedCount !== 1 ? "s" : ""})
+                  </span>
+                </p>
+                {preview.sheets.length > 1 && (
+                  <button className="btn btn-ghost" style={{ marginLeft: "auto", fontSize: 12, padding: "3px 10px" }}
+                    onClick={selectAll}>
+                    {preview.sheets.every((s) => sheetState[s.name]?.selected) ? "Quitar todas" : "Seleccionar todas"}
+                  </button>
+                )}
               </div>
-            )}
 
-            {/* Dataset name */}
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">Nombre del dataset</label>
-              <input value={dsName} onChange={(e) => setDsName(e.target.value)}
-                placeholder="Nombre del dataset" style={{ fontSize: 14 }} />
+              <div style={{ maxHeight: 200, overflowY: "auto", border: "1px solid var(--color-border)", borderRadius: 8 }}>
+                {preview.sheets.map((s) => {
+                  const st = sheetState[s.name];
+                  const isFocused = focusedSheet === s.name;
+                  return (
+                    <div key={s.name}
+                      onClick={() => setFocusedSheet(s.name)}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 10,
+                        padding: "8px 12px",
+                        borderBottom: "1px solid var(--color-border-light)",
+                        background: isFocused ? "var(--color-primary-bg)" : "transparent",
+                        cursor: "pointer",
+                      }}>
+                      <input type="checkbox" checked={!!st?.selected}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={() => toggleSheet(s.name)}
+                        style={{ width: 16, height: 16, cursor: "pointer" }} />
+                      <div style={{ minWidth: 0, flex: "0 0 32%" }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {s.name}
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--color-text-muted)" }}>
+                          {s.row_count} filas · {s.columns.length} col
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        value={st?.name ?? ""}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => renameSheet(s.name, e.target.value)}
+                        placeholder="Nombre del dataset"
+                        disabled={!st?.selected}
+                        style={{
+                          flex: 1, fontSize: 13, padding: "5px 10px",
+                          border: "1px solid var(--color-border)", borderRadius: 6,
+                          background: st?.selected ? "var(--color-surface)" : "var(--color-bg)",
+                          color: st?.selected ? "var(--color-text)" : "var(--color-text-muted)",
+                        }} />
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
-            {/* Column preview */}
+            {/* Column preview of the focused sheet */}
             {currentSheet && (
               <div style={{ overflow: "hidden", display: "flex", flexDirection: "column", gap: 8 }}>
                 <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>
-                  Vista previa de columnas
+                  Vista previa de <span style={{ color: "var(--color-primary)" }}>{currentSheet.name}</span>
                   <span style={{ fontWeight: 400, color: "var(--color-text-muted)", marginLeft: 6 }}>
-                    ({currentSheet.columns.length} detectadas · {currentSheet.row_count} filas)
+                    ({currentSheet.columns.length} columnas)
                   </span>
                 </p>
-                <div style={{ overflowY: "auto", maxHeight: 220, borderRadius: 8,
+                <div style={{ overflowY: "auto", maxHeight: 180, borderRadius: 8,
                   border: "1px solid var(--color-border)" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                     <thead>
@@ -252,6 +368,12 @@ export default function ImportExcelModal({ open, onClose, workspaceId, onSuccess
                 </div>
               </div>
             )}
+
+            {hasDupName && (
+              <p style={{ margin: 0, color: "var(--pm-red-500)", fontSize: 12 }}>
+                ⚠ Dos hojas tienen el mismo nombre de dataset. Edítalos para que sean únicos.
+              </p>
+            )}
           </div>
         )}
 
@@ -260,11 +382,14 @@ export default function ImportExcelModal({ open, onClose, workspaceId, onSuccess
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end",
             paddingTop: 16, borderTop: "1px solid var(--color-border-light)" }}>
             <button className="btn btn-secondary" onClick={handleClose}>Cancelar</button>
-            <button className="btn btn-primary" disabled={importMut.isPending || !dsName.trim()}
+            <button className="btn btn-primary"
+              disabled={importMut.isPending || selectedCount === 0 || hasDupName}
               onClick={() => importMut.mutate()}>
               {importMut.isPending
                 ? "Importando…"
-                : `Importar${currentSheet ? ` ${currentSheet.row_count} filas` : ""}`}
+                : selectedCount > 1
+                  ? `Importar ${selectedCount} datasets (${totalSelectedRows} filas)`
+                  : `Importar${currentSheet ? ` ${currentSheet.row_count} filas` : ""}`}
             </button>
           </div>
         )}

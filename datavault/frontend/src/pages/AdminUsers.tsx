@@ -5,6 +5,7 @@ import api from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { useConfirm } from "../components/ConfirmDialog";
 import UserMenu from "../components/UserMenu";
+import InviteUserModal from "../components/InviteUserModal";
 import { useToast } from "../components/Toast";
 import { getGroups, getGroupMembers } from "../api/groups";
 import { getWorkspaces, getWorkspaceMembers } from "../api/workspaces";
@@ -30,7 +31,7 @@ const ROLE_META = {
 function Avatar({ name, role, size = 36 }: { name: string; role: string; size?: number }) {
   const gradients: Record<string, string> = {
     admin:  "linear-gradient(135deg,#7C3AED,#5B21B6)",
-    editor: "linear-gradient(135deg,#009A44,#007A36)",
+    editor: "linear-gradient(135deg,#0EA5E9,#0284C7)",
     viewer: "linear-gradient(135deg,#94A3B8,#64748B)",
   };
   return (
@@ -79,6 +80,7 @@ export default function AdminUsers() {
   const [wsFilter,  setWsFilter]  = useState(initWsId);
   const [grpFilter, setGrpFilter] = useState("");
   const [showInactive, setShowInactive] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
   const [sortField, setSortField] = useState<SortField>("username");
   const [sortDir,   setSortDir]   = useState<SortDir>("asc");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -275,8 +277,8 @@ export default function AdminUsers() {
       {/* ── Header ── */}
       <header className="app-header">
         <button className="app-brand-btn" onClick={() => navigate("/")}>
-          <div className="app-header-logo">T</div>
-          <span className="app-header-name">Trans<em>Excel</em></span>
+          <div className="app-header-logo app-header-logo--img"><img src="/opsgrid-logo.svg" alt="OpsGrid" /></div>
+          <span className="app-header-name">Ops<em>Grid</em></span>
         </button>
         <div className="toolbar-sep" />
         <span style={{ fontSize: 13, color: "var(--color-text-secondary)", fontWeight: 500 }}>
@@ -290,12 +292,28 @@ export default function AdminUsers() {
 
         {/* ── Page title + stats ── */}
         <div style={{ marginBottom: 28 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 800, color: "var(--color-text)", margin: 0 }}>
-            Usuarios
-          </h1>
-          <p style={{ fontSize: 14, color: "var(--color-text-secondary)", margin: "4px 0 20px" }}>
-            Gestiona roles y acceso al sistema
-          </p>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 4 }}>
+            <div>
+              <h1 style={{ fontSize: 24, fontWeight: 800, color: "var(--color-text)", margin: 0 }}>
+                Usuarios
+              </h1>
+              <p style={{ fontSize: 14, color: "var(--color-text-secondary)", margin: "4px 0 20px" }}>
+                Gestiona roles y acceso al sistema
+              </p>
+            </div>
+            <button
+              className="btn btn-primary"
+              onClick={() => setShowInviteModal(true)}
+              style={{ flexShrink: 0 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="8.5" cy="7" r="4"/>
+                <line x1="20" y1="8" x2="20" y2="14"/>
+                <line x1="17" y1="11" x2="23" y2="11"/>
+              </svg>
+              Invitar usuario
+            </button>
+          </div>
 
           {/* Stats cards */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
@@ -844,6 +862,8 @@ export default function AdminUsers() {
           </div>
         </div>
       )}
+
+      <InviteUserModal open={showInviteModal} onClose={() => setShowInviteModal(false)} />
     </>
   );
 }

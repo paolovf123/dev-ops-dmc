@@ -14,7 +14,7 @@ import type { UserGroup } from "../types";
 const GROUP_COLORS = [
   ["#6366F1","#818CF8"], ["#8B5CF6","#A78BFA"], ["#EC4899","#F472B6"],
   ["#F59E0B","#FCD34D"], ["#10B981","#34D399"], ["#0EA5E9","#38BDF8"],
-  ["#EF4444","#F87171"], ["#009A44","#34D399"],
+  ["#EF4444","#F87171"], ["#0EA5E9","#34D399"],
 ];
 function groupColor(name: string) {
   let h = 0;
@@ -220,8 +220,8 @@ export default function AdminGroups() {
       {/* ── Header ── */}
       <header className="app-header" style={{ gap: 4 }}>
         <button className="app-brand-btn" onClick={() => navigate("/")}>
-          <div className="app-header-logo">T</div>
-          <span className="app-header-name">Trans<em>Excel</em></span>
+          <div className="app-header-logo app-header-logo--img"><img src="/opsgrid-logo.svg" alt="OpsGrid" /></div>
+          <span className="app-header-name">Ops<em>Grid</em></span>
         </button>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" style={{ flexShrink: 0, margin: "0 2px" }}>
           <polyline points="9 18 15 12 9 6"/>

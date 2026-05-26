@@ -15,7 +15,7 @@ import type { ColumnDefinition } from "../types";
 import type { UseQueryResult } from "@tanstack/react-query";
 
 const PALETTE = [
-  { from: "#009A44", to: "#007A36", light: "#E8F7EE", text: "#005C28" },
+  { from: "#0EA5E9", to: "#0284C7", light: "#E0F2FE", text: "#075985" },
   { from: "#F5821F", to: "#D96C10", light: "#FFF3E8", text: "#9A4400" },
   { from: "#6366F1", to: "#4F46E5", light: "#EEF2FF", text: "#3730A3" },
   { from: "#0EA5E9", to: "#0284C7", light: "#F0F9FF", text: "#075985" },
@@ -32,7 +32,7 @@ function dsColor(name: string) {
 }
 
 const BOX_COLORS = [
-  "#009A44","#3B82F6","#F5821F","#8B5CF6","#0EA5E9",
+  "#0EA5E9","#3B82F6","#F5821F","#8B5CF6","#0EA5E9",
   "#EC4899","#14B8A6","#F59E0B","#6366F1","#10B981",
 ];
 function normKw(s: string) { return s.toLowerCase().replace(/\s+/g, "_"); }
@@ -230,8 +230,8 @@ export default function WorkspaceView() {
       <header className="app-header" style={{ gap: 4 }}>
         {/* Brand */}
         <button className="app-brand-btn" onClick={() => { setCurrent(null); navigate("/"); }}>
-          <div className="app-header-logo">T</div>
-          <span className="app-header-name">Trans<em>Excel</em></span>
+          <div className="app-header-logo app-header-logo--img"><img src="/opsgrid-logo.svg" alt="OpsGrid" /></div>
+          <span className="app-header-name">Ops<em>Grid</em></span>
         </button>
 
         {/* Breadcrumb */}

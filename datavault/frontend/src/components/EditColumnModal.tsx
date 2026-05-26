@@ -40,6 +40,9 @@ export default function EditColumnModal({ column, onSave, onClose }: Props) {
   const [displayField, setDisplayField]         = useState(column.rules.display_field ?? "");
   const [currencySymbol, setCurrencySymbol]     = useState(column.rules.currency_symbol ?? "$");
   const [maxRating, setMaxRating]               = useState(column.rules.max_rating ?? 5);
+  const [unique, setUnique]                     = useState(!!column.rules.unique);
+  const [regex, setRegex]                       = useState((column.rules.regex as string) ?? "");
+  const [regexMessage, setRegexMessage]         = useState((column.rules.regex_message as string) ?? "");
 
   const { current: workspace } = useWorkspace();
   const wsId = workspace?.id;
@@ -84,6 +87,11 @@ export default function EditColumnModal({ column, onSave, onClose }: Props) {
     if (dataType === "relation") {
       rules.related_dataset_id = relatedDatasetId;
       if (displayField) rules.display_field = displayField;
+    }
+    if (unique && dataType !== "relation") rules.unique = true;
+    if (regex.trim() && dataType !== "relation") {
+      rules.regex = regex.trim();
+      if (regexMessage.trim()) rules.regex_message = regexMessage.trim();
     }
     onSave({ name, data_type: dataType, rules });
   };
@@ -239,13 +247,44 @@ export default function EditColumnModal({ column, onSave, onClose }: Props) {
           )}
 
           {dataType !== "relation" && (
-            <label className="checkbox-row-v2">
-              <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} />
-              <span className="checkbox-row-v2-text">
-                Campo requerido
-                <span>No permite guardar el registro si está vacío</span>
-              </span>
-            </label>
+            <>
+              <label className="checkbox-row-v2">
+                <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} />
+                <span className="checkbox-row-v2-text">
+                  Campo requerido
+                  <span>No permite guardar el registro si está vacío</span>
+                </span>
+              </label>
+              <label className="checkbox-row-v2">
+                <input type="checkbox" checked={unique} onChange={(e) => setUnique(e.target.checked)} />
+                <span className="checkbox-row-v2-text">
+                  Valor único
+                  <span>No permite guardar el registro si ya existe otro con el mismo valor en este dataset</span>
+                </span>
+              </label>
+              <div className="form-group">
+                <label className="form-label">Patrón (regex) opcional</label>
+                <input
+                  value={regex}
+                  onChange={(e) => setRegex(e.target.value)}
+                  placeholder="Ej: ^[A-Z]{2}\d{4}$  o  ^\d{8}$"
+                  style={{ fontFamily: "var(--font-mono)", fontSize: 13 }}
+                />
+                <span style={{ fontSize: 11.5, color: "var(--color-text-muted)" }}>
+                  Si se define, el valor debe cumplir esta expresión regular.
+                </span>
+              </div>
+              {regex.trim() && (
+                <div className="form-group">
+                  <label className="form-label">Mensaje cuando no cumple</label>
+                  <input
+                    value={regexMessage}
+                    onChange={(e) => setRegexMessage(e.target.value)}
+                    placeholder="Ej: El DNI debe tener 8 dígitos"
+                  />
+                </div>
+              )}
+            </>
           )}
         </div>
 

@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import api from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import UserMenu from "../components/UserMenu";
+import AuditTimeline from "../components/AuditTimeline";
 
 interface AuditEntry {
   id: string;
@@ -70,6 +71,7 @@ export default function AdminAudit() {
   const [userDropOpen, setUserDropOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [view, setView] = useState<"table" | "timeline">("table");
   const userDropRef = useRef<HTMLDivElement>(null);
   const exportRef = useRef<HTMLDivElement>(null);
 
@@ -255,8 +257,8 @@ export default function AdminAudit() {
       {/* ── Header ── */}
       <header className="app-header" style={{ gap:4 }}>
         <button className="app-brand-btn" onClick={() => navigate("/")}>
-          <div className="app-header-logo">T</div>
-          <span className="app-header-name">Trans<em>Excel</em></span>
+          <div className="app-header-logo app-header-logo--img"><img src="/opsgrid-logo.svg" alt="OpsGrid" /></div>
+          <span className="app-header-name">Ops<em>Grid</em></span>
         </button>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" style={{ flexShrink:0, margin:"0 2px" }}>
           <polyline points="9 18 15 12 9 6"/>
@@ -318,6 +320,23 @@ export default function AdminAudit() {
               );
             })}
 
+            {/* View toggle: Table vs Timeline */}
+            <div style={{ display: "flex", border: "1.5px solid var(--color-border)", borderRadius: 8, overflow: "hidden", height: 38 }}>
+              {([["table", "Tabla"], ["timeline", "Timeline"]] as const).map(([k, label]) => (
+                <button key={k}
+                  onClick={() => setView(k)}
+                  style={{
+                    padding: "0 14px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                    border: "none",
+                    background: view === k ? "var(--color-primary)" : "var(--color-surface)",
+                    color: view === k ? "#fff" : "var(--color-text-secondary)",
+                    transition: "all 0.14s",
+                  }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
             {/* Export dropdown */}
             <div ref={exportRef} style={{ position:"relative" }}>
               <button
@@ -330,11 +349,11 @@ export default function AdminAudit() {
                   color:"var(--color-text-secondary)", fontSize:13, fontWeight:600,
                   transition:"all 0.14s", whiteSpace:"nowrap",
                 }}
-                onMouseEnter={(e) => { if (!downloading && total > 0) { const el=e.currentTarget as HTMLElement; el.style.background="#F0FDF4"; el.style.borderColor="#009A44"; el.style.color="#009A44"; }}}
+                onMouseEnter={(e) => { if (!downloading && total > 0) { const el=e.currentTarget as HTMLElement; el.style.background="#F0FDF4"; el.style.borderColor="#0EA5E9"; el.style.color="#0EA5E9"; }}}
                 onMouseLeave={(e) => { const el=e.currentTarget as HTMLElement; el.style.background="var(--color-surface)"; el.style.borderColor="var(--color-border)"; el.style.color="var(--color-text-secondary)"; }}
               >
                 {downloading
-                  ? <div style={{ width:14, height:14, borderRadius:"50%", border:"2px solid #009A4440", borderTopColor:"#009A44", animation:"spin 0.7s linear infinite" }}/>
+                  ? <div style={{ width:14, height:14, borderRadius:"50%", border:"2px solid #0EA5E940", borderTopColor:"#0EA5E9", animation:"spin 0.7s linear infinite" }}/>
                   : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 }
                 {downloading ? "Exportando…" : "Exportar"}
@@ -413,9 +432,9 @@ export default function AdminAudit() {
             <button onClick={() => setUserDropOpen((v) => !v)} style={{
               display:"flex", alignItems:"center", gap:6, height:32, padding:"0 10px",
               borderRadius:7, cursor:"pointer", fontSize:13, fontWeight: filterUsers.length ? 600 : 400,
-              border:`1px solid ${filterUsers.length ? "var(--color-primary,#009A44)" : "var(--color-border)"}`,
+              border:`1px solid ${filterUsers.length ? "var(--color-primary,#0EA5E9)" : "var(--color-border)"}`,
               background: filterUsers.length ? "#F0FDF4" : "var(--color-bg)",
-              color: filterUsers.length ? "#009A44" : "var(--color-text-muted)", whiteSpace:"nowrap",
+              color: filterUsers.length ? "#0EA5E9" : "var(--color-text-muted)", whiteSpace:"nowrap",
             }}>
               {filterUsers.length === 0 ? (
                 <>
@@ -465,12 +484,12 @@ export default function AdminAudit() {
                         onMouseEnter={(e) => { if(!isActive) (e.currentTarget as HTMLElement).style.background="var(--color-border-light)"; }}
                         onMouseLeave={(e) => { if(!isActive) (e.currentTarget as HTMLElement).style.background="transparent"; }}>
                         {/* Checkbox visual */}
-                        <div style={{ width:16, height:16, borderRadius:4, border:`2px solid ${isActive ? "#009A44":"var(--color-border)"}`, background: isActive ? "#009A44":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"all 0.12s" }}>
+                        <div style={{ width:16, height:16, borderRadius:4, border:`2px solid ${isActive ? "#0EA5E9":"var(--color-border)"}`, background: isActive ? "#0EA5E9":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"all 0.12s" }}>
                           {isActive && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
                         </div>
                         <UserAvatar name={u.username} size={22}/>
                         <div style={{ flex:1, minWidth:0 }}>
-                          <div style={{ fontSize:13, fontWeight: isActive ? 600:500, color: isActive ? "#009A44":"var(--color-text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{u.username}</div>
+                          <div style={{ fontSize:13, fontWeight: isActive ? 600:500, color: isActive ? "#0EA5E9":"var(--color-text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{u.username}</div>
                           <div style={{ fontSize:11, color:"var(--color-text-muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{u.email}</div>
                         </div>
                       </button>
@@ -495,7 +514,7 @@ export default function AdminAudit() {
                 <FilterChip label={allDatasets.find((d) => d.id === filterDataset)?.name ?? "Dataset"} color="#6366F1" bg="#EEF2FF" border="#C7D2FE" onRemove={() => { setFilterDataset(""); setPage(0); }}/>
               )}
               {selectedUserObjs.map((u) => (
-                <FilterChip key={u.id} label={u.username} color="#009A44" bg="#F0FDF4" border="#BBF7D0" onRemove={() => { setFilterUsers((prev) => prev.filter((id) => id !== u.id)); setPage(0); }}/>
+                <FilterChip key={u.id} label={u.username} color="#0EA5E9" bg="#F0FDF4" border="#BBF7D0" onRemove={() => { setFilterUsers((prev) => prev.filter((id) => id !== u.id)); setPage(0); }}/>
               ))}
               <button onClick={() => { setFilterAction(""); setFilterWorkspace(""); setFilterDataset(""); setFilterUsers([]); setUserSearch(""); setPage(0); }}
                 style={{ fontSize:11, fontWeight:600, color:"var(--color-text-muted)", background:"transparent", border:"none", cursor:"pointer", padding:"2px 6px", borderRadius:5, textDecoration:"underline" }}>
@@ -522,6 +541,8 @@ export default function AdminAudit() {
               <p style={{ fontSize:15, margin:0, fontWeight:700, color:"var(--color-text)" }}>Sin registros</p>
               <p style={{ fontSize:13, margin:"6px 0 0" }}>{hasFilters ? "Prueba ajustando los filtros" : "Aún no hay actividad registrada"}</p>
             </div>
+          ) : view === "timeline" ? (
+            <AuditTimeline items={items} loading={isLoading} />
           ) : (
             <div style={{ overflowX:"auto" }}>
               <table style={{ width:"100%", borderCollapse:"collapse" }}>
@@ -565,11 +586,11 @@ export default function AdminAudit() {
                           {entry.user_name ? (
                             <button title={isFiltered ? "Quitar filtro" : `Filtrar por ${entry.user_name}`}
                               onClick={() => { toggleUser(entry.user_id ?? ""); }}
-                              style={{ display:"flex", alignItems:"center", gap:6, background: isFiltered ? "#F0FDF4":"transparent", border:`1px solid ${isFiltered ? "#009A4450":"transparent"}`, borderRadius:99, padding:"2px 8px 2px 3px", cursor:"pointer", transition:"all 0.12s" }}
+                              style={{ display:"flex", alignItems:"center", gap:6, background: isFiltered ? "#F0FDF4":"transparent", border:`1px solid ${isFiltered ? "#0EA5E950":"transparent"}`, borderRadius:99, padding:"2px 8px 2px 3px", cursor:"pointer", transition:"all 0.12s" }}
                               onMouseEnter={(e) => { if(!isFiltered) { (e.currentTarget as HTMLElement).style.background="var(--color-border-light)"; (e.currentTarget as HTMLElement).style.borderColor="var(--color-border)"; }}}
                               onMouseLeave={(e) => { if(!isFiltered) { (e.currentTarget as HTMLElement).style.background="transparent"; (e.currentTarget as HTMLElement).style.borderColor="transparent"; }}}>
                               <UserAvatar name={entry.user_name} size={22}/>
-                              <span style={{ fontSize:12.5, fontWeight: isFiltered ? 700:500, color: isFiltered ? "#009A44":"var(--color-text)" }}>{entry.user_name}</span>
+                              <span style={{ fontSize:12.5, fontWeight: isFiltered ? 700:500, color: isFiltered ? "#0EA5E9":"var(--color-text)" }}>{entry.user_name}</span>
                             </button>
                           ) : (
                             <span style={{ fontSize:12, color:"var(--color-text-muted)", fontStyle:"italic" }}>Sistema</span>
@@ -670,7 +691,7 @@ function FilterChip({ label, color, bg, border, onRemove }: { label: string; col
 function PgBtn({ label, onClick, disabled, active }: { label: string; onClick: () => void; disabled?: boolean; active?: boolean }) {
   return (
     <button onClick={onClick} disabled={disabled || active}
-      style={{ height:32, minWidth:32, padding:"0 10px", borderRadius:8, fontSize:12, fontWeight:600, cursor: disabled || active ? "default":"pointer", border:"1.5px solid", borderColor: active ? "var(--color-primary,#009A44)":"var(--color-border)", background: active ? "var(--color-primary,#009A44)":"var(--color-surface)", color: active ? "#fff":"var(--color-text-secondary)", opacity: disabled ? 0.4:1, transition:"all 0.12s" }}>
+      style={{ height:32, minWidth:32, padding:"0 10px", borderRadius:8, fontSize:12, fontWeight:600, cursor: disabled || active ? "default":"pointer", border:"1.5px solid", borderColor: active ? "var(--color-primary,#0EA5E9)":"var(--color-border)", background: active ? "var(--color-primary,#0EA5E9)":"var(--color-surface)", color: active ? "#fff":"var(--color-text-secondary)", opacity: disabled ? 0.4:1, transition:"all 0.12s" }}>
       {label}
     </button>
   );
@@ -679,9 +700,9 @@ function PgBtn({ label, onClick, disabled, active }: { label: string; onClick: (
 function selectStyle(active: boolean): React.CSSProperties {
   return {
     fontSize:13, height:32, padding:"0 10px", borderRadius:7,
-    border:`1px solid ${active ? "var(--color-primary,#009A44)":"var(--color-border)"}`,
+    border:`1px solid ${active ? "var(--color-primary,#0EA5E9)":"var(--color-border)"}`,
     background: active ? "#F0FDF4":"var(--color-bg)",
-    color: active ? "#009A44":"var(--color-text-muted)",
+    color: active ? "#0EA5E9":"var(--color-text-muted)",
     cursor:"pointer", outline:"none", fontWeight: active ? 600:400,
   };
 }

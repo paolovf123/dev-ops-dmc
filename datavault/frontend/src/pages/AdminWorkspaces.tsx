@@ -73,6 +73,7 @@ export default function AdminWorkspaces() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [newIsSandbox, setNewIsSandbox] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [userSearch, setUserSearch] = useState("");
@@ -100,11 +101,11 @@ export default function AdminWorkspaces() {
   });
 
   const createMut = useMutation({
-    mutationFn: () => createWorkspace({ name: newName.trim(), description: newDesc.trim() || null }),
+    mutationFn: () => createWorkspace({ name: newName.trim(), description: newDesc.trim() || null, is_sandbox: newIsSandbox }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-workspaces"] });
-      toast("Workspace creado", "success");
-      setShowCreate(false); setNewName(""); setNewDesc("");
+      toast(newIsSandbox ? "Workspace demo creado con plantillas de ejemplo" : "Workspace creado", "success");
+      setShowCreate(false); setNewName(""); setNewDesc(""); setNewIsSandbox(false);
     },
     onError: () => toast("Error al crear workspace", "error"),
   });
@@ -191,8 +192,8 @@ export default function AdminWorkspaces() {
     <>
       <header className="app-header">
         <button className="app-brand-btn" onClick={() => navigate("/")}>
-          <div className="app-header-logo">T</div>
-          <span className="app-header-name">Trans<em>Excel</em></span>
+          <div className="app-header-logo app-header-logo--img"><img src="/opsgrid-logo.svg" alt="OpsGrid" /></div>
+          <span className="app-header-name">Ops<em>Grid</em></span>
         </button>
         <div className="app-header-spacer" />
         <nav style={{ display: "flex", gap: 4 }}>
@@ -253,6 +254,17 @@ export default function AdminWorkspaces() {
                 onChange={(e) => setNewDesc(e.target.value)}
                 style={{ ...inputStyle, marginTop: 8 }}
               />
+              <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 10, cursor: "pointer", fontSize: 12 }}>
+                <input type="checkbox" checked={newIsSandbox}
+                  onChange={(e) => setNewIsSandbox(e.target.checked)}
+                  style={{ marginTop: 2 }} />
+                <span>
+                  <strong>Workspace demo / sandbox</strong>
+                  <span style={{ display: "block", color: "var(--color-text-muted)", marginTop: 2 }}>
+                    Pre-pobla con las 4 plantillas (Inventario, CRM, Tickets, Tareas) y filas de ejemplo
+                  </span>
+                </span>
+              </label>
               <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                 <button className="btn btn-primary" style={{ fontSize: 12, flex: 1 }}
                   disabled={!newName.trim() || createMut.isPending}

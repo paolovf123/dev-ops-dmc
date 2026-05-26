@@ -2,8 +2,11 @@ import React, { useState, useEffect } from "react";
 import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getDatasets, deleteDataset, getColumns, getRecords } from "../api/datasets";
 import ImportExcelModal from "../components/ImportExcelModal";
+import EditDatasetModal from "../components/EditDatasetModal";
+import TemplatePickerModal from "../components/TemplatePickerModal";
 import { useNavigate } from "react-router-dom";
 import GlobalSchemaDiagram from "../components/GlobalSchemaDiagram";
+import RelationScanModal from "../components/RelationScanModal";
 import AdminDashboard from "../components/AdminDashboard";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useAuth } from "../auth/AuthContext";
@@ -16,7 +19,7 @@ import type { UseQueryResult } from "@tanstack/react-query";
 
 // Deterministic color palette — each dataset gets a consistent color from its name
 const PALETTE = [
-  { from: "#009A44", to: "#007A36", light: "#E8F7EE", text: "#005C28" },
+  { from: "#0EA5E9", to: "#0284C7", light: "#E0F2FE", text: "#075985" },
   { from: "#F5821F", to: "#D96C10", light: "#FFF3E8", text: "#9A4400" },
   { from: "#6366F1", to: "#4F46E5", light: "#EEF2FF", text: "#3730A3" },
   { from: "#0EA5E9", to: "#0284C7", light: "#F0F9FF", text: "#075985" },
@@ -34,7 +37,7 @@ function dsColor(name: string) {
 
 // ── Helpers (duplicated from GlobalSchemaDiagram for the inline preview) ──────
 const BOX_COLORS = [
-  "#009A44","#3B82F6","#F5821F","#8B5CF6","#0EA5E9",
+  "#0EA5E9","#3B82F6","#F5821F","#8B5CF6","#0EA5E9",
   "#EC4899","#14B8A6","#F59E0B","#6366F1","#10B981",
 ];
 function normKw(s: string) { return s.toLowerCase().replace(/\s+/g, "_"); }
@@ -167,8 +170,11 @@ export default function DatasetList() {
   const { isAdmin } = useAuth();
   const { current: workspace, setCurrent } = useWorkspace();
   const [showSchema, setShowSchema] = useState(false);
+  const [showRelationScan, setShowRelationScan] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
   const [showImportModal, setShowImportModal] = useState(false);
+  const [editingDataset, setEditingDataset] = useState<{ id: string; name: string; description?: string | null } | null>(null);
+  const [showTemplates, setShowTemplates] = useState(false);
 
   useEffect(() => {
     if (isAdmin) setCurrent(null);
@@ -278,6 +284,13 @@ export default function DatasetList() {
                 Diagrama
               </button>
             )}
+            {datasets.length > 1 && (
+              <button className="btn btn-secondary" onClick={() => setShowRelationScan(true)}
+                style={{ borderColor: "#7C3AED", color: "#7C3AED" }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                Detectar relaciones
+              </button>
+            )}
             {isAdmin && (
               <>
                 <button className="btn btn-secondary" onClick={() => navigate("/scripts")}>
@@ -288,6 +301,11 @@ export default function DatasetList() {
                   style={{ borderColor: "#16A34A", color: "#16A34A" }}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                   Importar Excel
+                </button>
+                <button className="btn btn-secondary" onClick={() => setShowTemplates(true)}
+                  style={{ borderColor: "#0EA5E9", color: "#0EA5E9" }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                  Plantillas
                 </button>
                 <button className="btn btn-primary ds-hero-btn" onClick={() => navigate("/create")}>
                   <span style={{ fontSize: 18, lineHeight: 1 }}>＋</span>
@@ -395,6 +413,25 @@ export default function DatasetList() {
         />
       )}
 
+      <RelationScanModal
+        open={showRelationScan}
+        onClose={() => setShowRelationScan(false)}
+        workspaceId={workspace?.id}
+      />
+
+      <EditDatasetModal
+        open={!!editingDataset}
+        onClose={() => setEditingDataset(null)}
+        dataset={editingDataset}
+      />
+
+      <TemplatePickerModal
+        open={showTemplates}
+        onClose={() => setShowTemplates(false)}
+        workspaceId={workspace?.id}
+      />
+
+
       {/* ── Grid ── */}
       <main className="page" style={{ paddingTop: 28 }}>
         {isLoading ? (
@@ -437,7 +474,31 @@ export default function DatasetList() {
                   {/* Body */}
                   <div className="ds-card-body">
                     <div className="ds-card-top">
-                      <h3 className="ds-card-name">{ds.name}</h3>
+                      <h3 className="ds-card-name"
+                        title={isAdmin ? "Doble clic para editar" : ds.name}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          if (!isAdmin) return;
+                          setEditingDataset({ id: ds.id, name: ds.name, description: ds.description });
+                        }}>
+                        {ds.name}
+                      </h3>
+                      {isAdmin && (
+                        <button
+                          className="ds-card-delete"
+                          title={`Editar "${ds.name}"`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingDataset({ id: ds.id, name: ds.name, description: ds.description });
+                          }}
+                          style={{ marginRight: 4 }}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                            <path d="M12 20h9"/>
+                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                          </svg>
+                        </button>
+                      )}
                       <button
                         className="ds-card-delete"
                         title={`Eliminar "${ds.name}"`}
@@ -593,8 +654,8 @@ function AppHeader({
     <header className="app-header" style={{ gap: 4 }}>
       {/* Brand */}
       <button className="app-brand-btn" onClick={() => navigate("/")}>
-        <div className="app-header-logo">T</div>
-        <span className="app-header-name">Trans<em>Excel</em></span>
+        <div className="app-header-logo app-header-logo--img"><img src="/opsgrid-logo.svg" alt="OpsGrid" /></div>
+        <span className="app-header-name">Ops<em>Grid</em></span>
       </button>
 
       {/* Divider */}

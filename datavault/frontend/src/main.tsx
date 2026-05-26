@@ -12,6 +12,8 @@ import DatasetView from "./pages/DatasetView";
 import RecordForm from "./pages/RecordForm";
 import CreateDataset from "./pages/CreateDataset";
 import Login from "./pages/Login";
+import SetPassword from "./pages/SetPassword";
+import Settings from "./pages/Settings";
 import AdminUsers from "./pages/AdminUsers";
 import AdminAudit from "./pages/AdminAudit";
 import AdminGroups from "./pages/AdminGroups";
@@ -57,6 +59,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <BrowserRouter>
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/set-password" element={<SetPassword />} />
               <Route path="/" element={<RequireAuth><DatasetList /></RequireAuth>} />
               <Route path="/ws/:workspaceId" element={<RequireAuth><WorkspaceView /></RequireAuth>} />
               <Route path="/create" element={<RequireAuth><CreateDataset /></RequireAuth>} />
@@ -69,6 +72,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="/admin/audit" element={<RequireAuth><AdminAudit /></RequireAuth>} />
               <Route path="/admin/groups" element={<RequireAuth><AdminGroups /></RequireAuth>} />
               <Route path="/admin/workspaces" element={<RequireAuth><AdminWorkspaces /></RequireAuth>} />
+              <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
             </Routes>
           </BrowserRouter>
         </ConfirmProvider>

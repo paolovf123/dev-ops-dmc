@@ -321,7 +321,7 @@ export default function SchemaDiagram({
 
   const ACCENT_PARENT = "#3B82F6";
   const ACCENT_CHILD  = "#F5821F";
-  const ACCENT_CUR    = "#009A44";
+  const ACCENT_CUR    = "#0EA5E9";
 
   return (
     <div className="schema-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>

@@ -1,7 +1,8 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { getDatasets, getColumns } from "../api/datasets";
 import type { ColumnDefinition } from "../types";
+import RelationScanModal from "./RelationScanModal";
 
 interface Props { onClose: () => void; workspaceId?: string; workspaceName?: string }
 
@@ -39,7 +40,7 @@ const TYPE_BG: Record<string, string> = {
 };
 
 const PALETTE = [
-  "#009A44","#3B82F6","#F5821F","#8B5CF6","#0EA5E9",
+  "#0EA5E9","#3B82F6","#F5821F","#8B5CF6","#0EA5E9",
   "#EC4899","#14B8A6","#F59E0B","#6366F1","#10B981",
   "#EF4444","#06B6D4","#84CC16","#A855F7","#F97316",
 ];
@@ -231,6 +232,7 @@ function downloadPng(svgEl: SVGSVGElement, name: string) {
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 export default function GlobalSchemaDiagram({ onClose, workspaceId, workspaceName }: Props) {
+  const [showRelationScan, setShowRelationScan] = useState(false);
   const svgRef = useRef<SVGSVGElement>(null);
 
   const { data: datasets = [], isLoading: loadingDs } = useQuery({
@@ -328,6 +330,10 @@ export default function GlobalSchemaDiagram({ onClose, workspaceId, workspaceNam
             </p>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-secondary" style={{ fontSize: 13, borderColor: "#7C3AED", color: "#7C3AED" }}
+              onClick={() => setShowRelationScan(true)}>
+              🔗 Detectar relaciones
+            </button>
             <button className="btn btn-secondary" style={{ fontSize: 13 }}
               onClick={() => svgRef.current && downloadPng(svgRef.current, workspaceName ?? "schema")}>
               ⬇ Descargar PNG
@@ -336,6 +342,12 @@ export default function GlobalSchemaDiagram({ onClose, workspaceId, workspaceNam
               style={{ fontSize: 20, padding: "2px 8px", lineHeight: 1 }}>×</button>
           </div>
         </div>
+
+        <RelationScanModal
+          open={showRelationScan}
+          onClose={() => setShowRelationScan(false)}
+          workspaceId={workspaceId}
+        />
 
         {/* Legend */}
         <div className="schema-legend" style={{ flexWrap: "wrap", gap: "6px 14px" }}>

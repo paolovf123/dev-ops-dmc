@@ -12,6 +12,8 @@ from routers.auth import router as auth_router
 from routers.permissions import router as permissions_router
 from routers.groups import router as groups_router
 from routers.workspaces import router as workspaces_router
+from routers.api_tokens import router as api_tokens_router
+from routers.webhooks import router as webhooks_router
 from auth import decode_token
 from database import SessionLocal
 from models import User
@@ -100,6 +102,8 @@ app.include_router(columns.router)
 app.include_router(records.router)
 app.include_router(permissions_router)
 app.include_router(groups_router)
+app.include_router(api_tokens_router)
+app.include_router(webhooks_router)
 
 
 @app.get("/health")

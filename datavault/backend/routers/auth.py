@@ -14,8 +14,12 @@ from auth import (
     ACCESS_TOKEN_EXPIRE_HOURS, COOKIE_NAME, COOKIE_SAMESITE, COOKIE_SECURE,
     create_refresh_token, revoke_token, is_token_revoked, decode_token,
     REFRESH_COOKIE_NAME, REFRESH_TOKEN_EXPIRE_DAYS,
+    email_domain_allowed, create_invite_token, decode_invite_token,
+    PUBLIC_APP_URL, ALLOWED_EMAIL_DOMAINS,
 )
 from limiter import limiter
+from email_util import send_email, smtp_configured
+import secrets
 
 logger = logging.getLogger("datavault.auth")
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -60,12 +64,15 @@ async def register(request: Request, response: Response, body: UserRegister, db:
     is_first = total == 0
     role = "admin" if is_first else "viewer"
 
+    # Auto-activación si el email pertenece a un dominio corporativo permitido
+    auto_activated_by_domain = email_domain_allowed(body.email.lower().strip())
+
     user = User(
         email=body.email.lower().strip(),
         username=body.username.strip(),
         hashed_password=hash_password(body.password),
         role=role,
-        is_active=is_first,  # solo el primer usuario queda activo automáticamente
+        is_active=is_first or auto_activated_by_domain,
     )
     db.add(user)
     await db.commit()
@@ -76,6 +83,134 @@ async def register(request: Request, response: Response, body: UserRegister, db:
     _set_auth_cookie(response, token)
     _set_refresh_cookie(response, refresh_token)
     return Token(access_token=token, user=UserOut.model_validate(user))
+
+
+@router.get("/signup-config")
+async def signup_config():
+    """Devuelve dominios de email auto-aceptados para mostrar hint en la pantalla de registro."""
+    return {
+        "allowed_email_domains": sorted(ALLOWED_EMAIL_DOMAINS),
+        "smtp_configured": smtp_configured(),
+    }
+
+
+@router.post("/invite", status_code=201)
+@limiter.limit("30/minute")
+async def invite_user(
+    request: Request,
+    body: dict,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Invita a un nuevo usuario. Crea la cuenta activa con una contraseña aleatoria
+    y devuelve (o envía por email) un link de un solo uso para que establezca la suya.
+    Permisos: admin global o owner/admin_ws de algún workspace.
+    """
+    email = (body.get("email") or "").strip().lower()
+    username = (body.get("username") or "").strip() or email.split("@")[0]
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Email inválido")
+
+    # Autorización: admin global o cualquier owner/admin_ws
+    if current_user.role != "admin":
+        memberships = (await db.execute(
+            select(WorkspaceMember).where(
+                WorkspaceMember.user_id == current_user.id,
+                WorkspaceMember.role.in_(("owner", "admin_ws")),
+            )
+        )).scalars().all()
+        if not memberships:
+            raise HTTPException(status_code=403, detail="Solo admins o owners de workspace pueden invitar")
+
+    # ¿Ya existe?
+    existing = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
+    if existing:
+        # Si existe pero inactivo, reenvía link para activar; si activo, error
+        if existing.is_active:
+            raise HTTPException(status_code=400, detail="El usuario ya existe y está activo")
+        user = existing
+    else:
+        user = User(
+            email=email,
+            username=username,
+            hashed_password=hash_password(secrets.token_urlsafe(32)),
+            role="viewer",
+            is_active=True,
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+
+    token = create_invite_token(str(user.id))
+    link = f"{PUBLIC_APP_URL}/set-password?token={token}"
+
+    sent = False
+    if smtp_configured():
+        sent = send_email(
+            to=email,
+            subject="Te invitaron a OpsGrid",
+            body_text=(
+                f"Hola,\n\n"
+                f"Fuiste invitado a OpsGrid por {current_user.username or current_user.email}.\n"
+                f"Para activar tu cuenta y definir tu contraseña, abre este link:\n\n{link}\n\n"
+                f"El link expira en 72 horas."
+            ),
+            body_html=(
+                f"<p>Hola,</p>"
+                f"<p>Fuiste invitado a <b>OpsGrid</b> por <b>{current_user.username or current_user.email}</b>.</p>"
+                f"<p><a href='{link}' style='background:#0EA5E9;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600'>Activar cuenta</a></p>"
+                f"<p style='color:#64748B;font-size:12px'>El link expira en 72 horas.</p>"
+            ),
+        )
+
+    return {
+        "user_id": str(user.id),
+        "email": user.email,
+        "invite_link": link,
+        "email_sent": sent,
+    }
+
+
+@router.post("/set-password")
+@limiter.limit("10/minute")
+async def set_password_with_invite(
+    request: Request,
+    response: Response,
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Establece la contraseña usando un token de invitación de un solo uso."""
+    token = (body.get("token") or "").strip()
+    password = body.get("password") or ""
+    if not token:
+        raise HTTPException(status_code=400, detail="Token requerido")
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 8 caracteres")
+
+    user_id = decode_invite_token(token)
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Token inválido o expirado")
+
+    try:
+        uid = uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Token inválido")
+
+    user = (await db.execute(select(User).where(User.id == uid))).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    user.hashed_password = hash_password(password)
+    user.is_active = True
+    await db.commit()
+    await db.refresh(user)
+
+    # Auto-login
+    access = create_access_token({"sub": str(user.id), "role": user.role})
+    refresh, _ = create_refresh_token(str(user.id))
+    _set_auth_cookie(response, access)
+    _set_refresh_cookie(response, refresh)
+    return Token(access_token=access, user=UserOut.model_validate(user))
 
 
 @router.post("/login", response_model=Token)

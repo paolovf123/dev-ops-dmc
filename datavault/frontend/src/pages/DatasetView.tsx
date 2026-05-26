@@ -21,6 +21,7 @@ import EditColumnModal from "../components/EditColumnModal";
 import RelatedRecordsPanel from "../components/RelatedRecordsPanel";
 import LinkTableModal from "../components/LinkTableModal";
 import CsvMappingModal from "../components/CsvMappingModal";
+import EditDatasetModal from "../components/EditDatasetModal";
 import { useConfirm } from "../components/ConfirmDialog";
 import type { ColumnDefinition, JoinedColDef, FormulaColDef } from "../types";
 import { exportCsv, exportExcel } from "../utils/export";
@@ -50,6 +51,7 @@ export default function DatasetView() {
   const [historyRecordId, setHistoryRecordId] = useState<string | null>(null);
   const [relatedPanelRecordId, setRelatedPanelRecordId] = useState<string | null>(null);
   const [showLinkModal, setShowLinkModal] = useState(false);
+  const [editingDataset, setEditingDataset] = useState(false);
   const [editingColumn, setEditingColumn] = useState<ColumnDefinition | null>(null);
   const [csvMappingFile, setCsvMappingFile] = useState<File | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("table");
@@ -59,7 +61,7 @@ export default function DatasetView() {
   const csvInputRef = useRef<HTMLInputElement>(null);
 
   const [csvImporting, setCsvImporting] = useState(false);
-  const [csvResult, setCsvResult] = useState<{ created: number; errors: { row: number; errors: string[] }[] } | null>(null);
+  const [csvResult, setCsvResult] = useState<{ created: number; skipped_duplicates?: number; errors: { row: number; errors: string[] }[] } | null>(null);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -305,7 +307,9 @@ export default function DatasetView() {
       setCsvImporting(true);
       setCsvResult(null);
       try {
-        const result = await importCsv(datasetId!, file);
+        // Auto-dedupe: usa columnas marcadas como `unique` como clave de duplicación
+        const dedupeKeys = columns.filter((c) => c.rules?.unique).map((c) => c.field_key);
+        const result = await importCsv(datasetId!, file, dedupeKeys.length > 0 ? { dedupe_on: dedupeKeys } : undefined);
         qc.invalidateQueries({ queryKey: recsKey });
         setCsvResult(result);
       } finally {
@@ -385,13 +389,34 @@ export default function DatasetView() {
         <button className="btn btn-ghost" onClick={() => navigate("/")}
           style={{ padding: "5px 8px", fontSize: 18 }} title="Volver">←</button>
         <button className="app-brand-btn" onClick={() => navigate("/")}>
-          <div className="app-header-logo" style={{ width: 28, height: 28, fontSize: 13, borderRadius: "var(--radius-xs)" }}>T</div>
-          <span className="app-header-name">Trans<em>Excel</em></span>
+          <div className="app-header-logo" style={{ width: 28, height: 28, fontSize: 13, borderRadius: "var(--radius-xs)" }}><img src="/opsgrid-logo.svg" alt="OpsGrid" style={{ width: "100%", height: "100%" }} /></div>
+          <span className="app-header-name">Ops<em>Grid</em></span>
         </button>
         <div style={{ width: 1, height: 20, background: "var(--color-border)", margin: "0 6px" }} />
         <span style={{ fontWeight: 600, fontSize: 15, color: "var(--color-text)" }}>
           {currentDataset?.name ?? "Dataset"}
         </span>
+        {effectiveIsAdmin && currentDataset && (
+          <button
+            className="btn btn-ghost"
+            title="Editar nombre y descripción"
+            onClick={() => setEditingDataset(true)}
+            style={{ padding: "3px 6px", fontSize: 12, color: "var(--color-text-muted)" }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <path d="M12 20h9"/>
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+            </svg>
+          </button>
+        )}
+        {currentDataset?.description && (
+          <span title={currentDataset.description}
+            style={{
+              fontSize: 12, color: "var(--color-text-muted)",
+              maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }}>
+            · {currentDataset.description}
+          </span>
+        )}
         <div className="app-header-spacer" />
         <span className="app-header-tag">
           {filteredRecords.length} filas · {visibleColumns.length} cols
@@ -583,14 +608,14 @@ export default function DatasetView() {
                 {showExportMenu && (
                   <div className="export-menu">
                     <button className="export-menu-item" onClick={() => { handleExport("csv"); setShowExportMenu(false); }}>
-                      <span className="export-menu-icon" style={{ background: "#E8F7EE", color: "#007A36" }}>CSV</span>
+                      <span className="export-menu-icon" style={{ background: "#E0F2FE", color: "#0284C7" }}>CSV</span>
                       <div>
                         <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>Exportar como CSV</p>
                         <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>Compatible con cualquier herramienta</p>
                       </div>
                     </button>
                     <button className="export-menu-item" onClick={() => { handleExport("xlsx"); setShowExportMenu(false); }}>
-                      <span className="export-menu-icon" style={{ background: "#E8F7EE", color: "#007A36" }}>XLS</span>
+                      <span className="export-menu-icon" style={{ background: "#E0F2FE", color: "#0284C7" }}>XLS</span>
                       <div>
                         <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>Exportar como Excel</p>
                         <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>.xlsx con anchos automáticos</p>
@@ -686,6 +711,11 @@ export default function DatasetView() {
                 marginBottom: 12, fontSize: 13,
               }}>
                 <span>✅ {csvResult.created} registro(s) importado(s)</span>
+                {csvResult.skipped_duplicates ? (
+                  <span style={{ color: "var(--pm-orange-600, #b45309)" }}>
+                    · {csvResult.skipped_duplicates} duplicado(s) omitido(s)
+                  </span>
+                ) : null}
                 {csvResult.errors.length > 0 && (
                   <span style={{ color: "var(--pm-orange-600)" }}>
                     · {csvResult.errors.length} fila(s) con errores
@@ -872,6 +902,12 @@ export default function DatasetView() {
           onClose={() => setCsvMappingFile(null)}
         />
       )}
+
+      <EditDatasetModal
+        open={editingDataset}
+        onClose={() => setEditingDataset(false)}
+        dataset={currentDataset ? { id: currentDataset.id, name: currentDataset.name, description: currentDataset.description } : null}
+      />
 
       {relatedPanelRecordId && (() => {
         const rec = records.find((r) => r.id === relatedPanelRecordId);

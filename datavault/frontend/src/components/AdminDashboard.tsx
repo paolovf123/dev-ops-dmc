@@ -9,7 +9,7 @@ import type { UseQueryResult } from "@tanstack/react-query";
 
 // ── Mini schema preview (same logic as DatasetList's SchemaPreview) ───────────
 const BOX_COLORS = [
-  "#009A44","#3B82F6","#F5821F","#8B5CF6","#0EA5E9",
+  "#0EA5E9","#3B82F6","#F5821F","#8B5CF6","#0EA5E9",
   "#EC4899","#14B8A6","#F59E0B","#6366F1","#10B981",
 ];
 function normKw(s: string) { return s.toLowerCase().replace(/\s+/g, "_"); }
