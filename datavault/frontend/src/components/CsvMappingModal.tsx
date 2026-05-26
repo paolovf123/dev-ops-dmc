@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ColumnDefinition } from "../types";
 import { parseCsv } from "../utils/csvImport";
+import { useEscapeKey } from "../utils/useEscapeKey";
 
 interface Props {
   file: File;
@@ -19,6 +20,7 @@ export default function CsvMappingModal({ file, columns, onConfirm, onClose }: P
   const [parsed, setParsed] = useState<{ headers: string[]; rows: Record<string, string>[] } | null>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  useEscapeKey(onClose);
 
   if (!parsed && !loading) {
     setLoading(true);
@@ -45,11 +47,11 @@ export default function CsvMappingModal({ file, columns, onConfirm, onClose }: P
   return (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal modal-v2" style={{ maxWidth: 680, width: "100%" }}>
-        <div className="modal-accent" style={{ background: "linear-gradient(90deg, #009A44, #0EA5E9)" }} />
+        <div className="modal-accent" style={{ background: "linear-gradient(90deg, #0EA5E9, #0EA5E9)" }} />
 
         <div className="modal-header">
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div className="modal-header-icon" style={{ background: "#E8F7EE", color: "#009A44", fontSize: 18 }}>
+            <div className="modal-header-icon" style={{ background: "#E0F2FE", color: "#0EA5E9", fontSize: 18 }}>
               ⬆
             </div>
             <div>

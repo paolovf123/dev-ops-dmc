@@ -8,6 +8,7 @@ export interface Dataset {
   source_code: string | null;
   source_dataset_ids: string[];
   last_computed_at: string | null;
+  is_bridge: boolean;
 }
 
 export interface ColumnDefinition {
@@ -55,6 +56,16 @@ export interface JoinedColDef {
   sourcePkKey: string;  // campo del dataset origen que se usa como clave
   displayKey: string;   // campo del dataset origen a mostrar
   displayName: string;  // etiqueta del header
+  // Si se define, el join atraviesa una tabla intermedia (N:N):
+  //   currentRow.<localFkKey>  ↔  bridgeRow[viaBridgeFkToLocal]
+  //   bridgeRow[viaBridgeFkToSource]  ↔  sourceRow[sourcePkKey]
+  // El valor mostrado es una lista (comma-separated) de los displayKey matcheados.
+  via?: {
+    bridgeDatasetId: string;
+    bridgeDatasetName: string;
+    bridgeFkToLocal: string;
+    bridgeFkToSource: string;
+  };
 }
 
 // ── Groups ────────────────────────────────────────────────────────────────────

@@ -8,7 +8,7 @@ import api from "../api/client";
 const WS_COLORS = [
   ["#6366F1","#818CF8"], ["#8B5CF6","#A78BFA"], ["#EC4899","#F472B6"],
   ["#F59E0B","#FCD34D"], ["#10B981","#34D399"], ["#0EA5E9","#38BDF8"],
-  ["#EF4444","#F87171"], ["#009A44","#34D399"],
+  ["#EF4444","#F87171"], ["#0EA5E9","#34D399"],
 ];
 function wsColor(name: string) {
   let h = 0;
@@ -83,7 +83,7 @@ export default function WorkspaceSwitcher() {
     }
   };
 
-  const [_fromC] = current ? wsColor(current.name) : ["#009A44"];
+  const [_fromC] = current ? wsColor(current.name) : ["#0EA5E9"];
 
   return (
     <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
@@ -106,7 +106,7 @@ export default function WorkspaceSwitcher() {
         ) : (
           <div style={{
             width: 22, height: 22, borderRadius: 6,
-            background: "linear-gradient(135deg, #009A44, #007A36)",
+            background: "linear-gradient(135deg, #0EA5E9, #0284C7)",
             display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
           }}>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
@@ -148,7 +148,7 @@ export default function WorkspaceSwitcher() {
               <button
                 onClick={() => { setCurrent(null); setOpen(false); navigate("/"); }}
                 style={{
-                  width: "100%", padding: "9px 14px", background: !current ? "var(--color-primary-bg, #E8F7EE)" : "transparent",
+                  width: "100%", padding: "9px 14px", background: !current ? "var(--color-primary-bg, #E0F2FE)" : "transparent",
                   border: "none", cursor: "pointer", textAlign: "left",
                   display: "flex", alignItems: "center", gap: 10, transition: "background 0.1s",
                 }}
@@ -157,7 +157,7 @@ export default function WorkspaceSwitcher() {
               >
                 <div style={{
                   width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-                  background: !current ? "var(--color-primary, #009A44)" : "var(--color-border)",
+                  background: !current ? "var(--color-primary, #0EA5E9)" : "var(--color-border)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                 }}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
@@ -165,11 +165,11 @@ export default function WorkspaceSwitcher() {
                     <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
                   </svg>
                 </div>
-                <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: !current ? "var(--color-primary, #009A44)" : "var(--color-text)" }}>
+                <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: !current ? "var(--color-primary, #0EA5E9)" : "var(--color-text)" }}>
                   Dashboard general
                 </span>
                 {!current && (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary, #009A44)" strokeWidth="2.5">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary, #0EA5E9)" strokeWidth="2.5">
                     <polyline points="20 6 9 17 4 12"/>
                   </svg>
                 )}
@@ -187,7 +187,7 @@ export default function WorkspaceSwitcher() {
                   onClick={() => handleSelect(ws)}
                   style={{
                     width: "100%", padding: "9px 14px",
-                    background: isActive ? "var(--color-primary-bg, #E8F7EE)" : "transparent",
+                    background: isActive ? "var(--color-primary-bg, #E0F2FE)" : "transparent",
                     border: "none", cursor: "pointer", textAlign: "left",
                     display: "flex", alignItems: "center", gap: 10, transition: "background 0.1s",
                   }}
@@ -199,7 +199,7 @@ export default function WorkspaceSwitcher() {
                     {ws.name}
                   </span>
                   {isActive && (
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary, #009A44)" strokeWidth="2.5">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary, #0EA5E9)" strokeWidth="2.5">
                       <polyline points="20 6 9 17 4 12"/>
                     </svg>
                   )}
@@ -223,10 +223,10 @@ export default function WorkspaceSwitcher() {
                   style={{
                     width: "100%", padding: "7px 12px", display: "flex", alignItems: "center", gap: 7,
                     background: "transparent", border: "1.5px dashed var(--color-border)",
-                    borderRadius: 8, cursor: "pointer", color: "var(--color-primary, #009A44)",
+                    borderRadius: 8, cursor: "pointer", color: "var(--color-primary, #0EA5E9)",
                     fontSize: 13, fontWeight: 600, transition: "all 0.15s",
                   }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--color-primary-bg, #E8F7EE)"; }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--color-primary-bg, #E0F2FE)"; }}
                   onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -249,7 +249,7 @@ export default function WorkspaceSwitcher() {
                   <div style={{ display: "flex", gap: 6 }}>
                     <button type="submit" disabled={saving || !newName.trim()}
                       style={{
-                        flex: 1, padding: "7px", background: "var(--color-primary, #009A44)",
+                        flex: 1, padding: "7px", background: "var(--color-primary, #0EA5E9)",
                         border: "none", borderRadius: 7, color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600,
                       }}>
                       {saving ? "Creando…" : "Crear"}

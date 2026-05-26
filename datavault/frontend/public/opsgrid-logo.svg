@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="box" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#0E78D1"/>
+    </linearGradient>
+    <linearGradient id="box2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3A8EE6"/>
+      <stop offset="1" stop-color="#0B5BA8"/>
+    </linearGradient>
+  </defs>
+  <!-- Líneas (conexiones) -->
+  <g stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round" fill="none">
+    <path d="M9 14 H30"/>
+    <path d="M32 16 V28"/>
+    <path d="M40 36 H52"/>
+    <path d="M54 38 V46"/>
+  </g>
+  <!-- Nodos (círculos) -->
+  <g fill="#22D3EE">
+    <circle cx="10" cy="14" r="2.2"/>
+    <circle cx="32" cy="14" r="2.2"/>
+    <circle cx="54" cy="36" r="2.2"/>
+  </g>
+  <!-- Cuadro principal -->
+  <rect x="22" y="26" width="20" height="20" rx="4" fill="url(#box)"/>
+  <!-- Cuadro secundario (más pequeño, abajo derecha) -->
+  <rect x="44" y="46" width="16" height="16" rx="3.5" fill="url(#box2)"/>
+</svg>

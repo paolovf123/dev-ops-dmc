@@ -48,6 +48,7 @@ class DatasetCreate(BaseModel):
     is_computed: bool = False
     source_code: str | None = None
     source_dataset_ids: list[str] = []
+    is_bridge: bool = False
 
 
 class DatasetUpdate(BaseModel):
@@ -55,6 +56,7 @@ class DatasetUpdate(BaseModel):
     description: str | None = None
     source_code: str | None = None
     source_dataset_ids: list[str] | None = None
+    is_bridge: bool | None = None
 
 
 class DatasetOut(BaseModel):
@@ -67,6 +69,7 @@ class DatasetOut(BaseModel):
     source_code: str | None
     source_dataset_ids: list
     last_computed_at: datetime | None
+    is_bridge: bool = False
 
     model_config = {"from_attributes": True}
 

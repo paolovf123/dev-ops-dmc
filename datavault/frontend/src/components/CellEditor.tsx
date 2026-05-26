@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import type { ColumnDefinition } from "../types";
 import { validateCell } from "../utils/validation";
+import { getRecords, getColumns } from "../api/datasets";
 
 export type NavDir = "next-col" | "prev-col" | "next-row" | "prev-row";
 
@@ -255,7 +257,19 @@ export default function CellEditor({ column, value, onCommit, onCancel }: Props)
     );
   }
 
-  // ── Default (text, relation, long_text fallback) ──────────────────────────────
+  // ── Relation (multi-chip N:N) ─────────────────────────────────────────────────
+  if (column.data_type === "relation") {
+    return (
+      <RelationCellEditor
+        column={column}
+        value={value}
+        onCommit={onCommit}
+        onCancel={onCancel}
+      />
+    );
+  }
+
+  // ── Default (text, long_text fallback) ────────────────────────────────────────
   return wrap(
     <input ref={inputRef} type="text"
       value={String(draft)}
@@ -263,5 +277,248 @@ export default function CellEditor({ column, value, onCommit, onCancel }: Props)
       onBlur={() => onCommit(draft)}
       onKeyDown={handleKey}
       style={base} />
+  );
+}
+
+// ── Editor multi-chip para columnas data_type=relation ─────────────────────────
+function RelationCellEditor({ column, value, onCommit, onCancel }: Props) {
+  // Normalizamos el valor entrante a array (modelo N:N unificado)
+  const initialItems = useMemo<string[]>(() => {
+    if (Array.isArray(value)) return (value as unknown[]).map((v) => String(v)).filter(Boolean);
+    if (value == null || value === "") return [];
+    return [String(value)];
+  }, [value]);
+
+  const [items, setItems] = useState<string[]>(initialItems);
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [open, setOpen] = useState(true);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const targetId = column.rules?.related_dataset_id as string | undefined;
+  const displayField = (column.rules?.display_field as string | undefined) ?? "__id__";
+
+  // Debounce del input para no spamear el backend en cada tecla
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 220);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  // Fetch columnas del target para conocer display_field
+  const { data: targetCols = [] } = useQuery({
+    queryKey: ["columns", targetId],
+    queryFn: () => getColumns(targetId!),
+    enabled: !!targetId,
+    staleTime: 60_000,
+  });
+
+  // Fetch registros del target. Para datasets pequeños/medianos (<= 1000 rows)
+  // cargamos todo. Para más grandes hacemos server-side search en cada query
+  // (max 1000 resultados por request — el backend filtra por ILIKE sobre data).
+  // Cuando NO hay query, también obtenemos primeros 1000 + los items ya seleccionados
+  // (esos vienen por id en una query separada para garantizar que se vean los actuales).
+  const { data: targetRecs = [], isLoading } = useQuery({
+    queryKey: ["records", targetId, "relation-picker", debouncedQuery],
+    queryFn: () => getRecords(targetId!, {
+      limit: 1000,
+      ...(debouncedQuery ? { search: debouncedQuery } : {}),
+    }).then((r) => r.data),
+    enabled: !!targetId,
+    staleTime: 30_000,
+  });
+
+  // Fetch específico para resolver labels de los items ya seleccionados que
+  // pueden NO estar en la primera página (si target tiene > 1000 records).
+  const itemsKey = items.join("|");
+  const { data: selectedRecs = [] } = useQuery({
+    queryKey: ["records", targetId, "relation-picker-selected", itemsKey],
+    queryFn: async () => {
+      if (!items.length) return [];
+      // Buscamos cada item por separado. Para chips por __id__ no aplica
+      // (no hay search por id). Para chips por display_field, search por valor.
+      if (displayField === "__id__" || displayField === "id") return [];
+      const queries = items.map((it) =>
+        getRecords(targetId!, { search: it, limit: 50 }).then((r) => r.data)
+      );
+      const results = await Promise.all(queries);
+      const flat = results.flat();
+      const seen = new Set<string>();
+      return flat.filter((r) => seen.has(r.id) ? false : (seen.add(r.id), true));
+    },
+    enabled: !!targetId && items.length > 0,
+    staleTime: 30_000,
+  });
+
+  // Pool combinado de records para resolver labels (autocomplete + selected)
+  const allRecs = useMemo(() => {
+    const seen = new Set<string>();
+    const out = [...targetRecs];
+    for (const r of selectedRecs) {
+      if (!seen.has(r.id)) { seen.add(r.id); out.push(r); }
+    }
+    for (const r of targetRecs) seen.add(r.id);
+    return out;
+  }, [targetRecs, selectedRecs]);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  // Click fuera del editor → commit
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        onCommit(items);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [items, onCommit]);
+
+  // Resolver display: dado un valor guardado (código o __id__), retorna el label visible.
+  const labelFor = (val: string): string => {
+    if (displayField === "__id__" || displayField === "id") {
+      const rec = allRecs.find((r) => r.id === val);
+      if (!rec) return val;
+      const firstCol = targetCols[0];
+      if (firstCol) return String(rec.data[firstCol.field_key] ?? val);
+      return val;
+    }
+    return val;
+  };
+
+  // Opciones del autocomplete. El filtrado por texto se hace SERVER-SIDE via
+  // debouncedQuery → solo filtramos aquí los items ya seleccionados.
+  const options = useMemo(() => {
+    return targetRecs.map((r) => {
+      const storedKey = displayField === "__id__" || displayField === "id"
+        ? r.id
+        : String(r.data[displayField] ?? "");
+      const labelKey = displayField === "__id__" || displayField === "id"
+        ? String(r.data[targetCols[0]?.field_key ?? ""] ?? r.id)
+        : storedKey;
+      return { storedKey, labelKey };
+    }).filter((o) => o.storedKey && !items.includes(o.storedKey)).slice(0, 100);
+  }, [targetRecs, items, displayField, targetCols]);
+
+  const addItem = (storedKey: string) => {
+    if (!storedKey || items.includes(storedKey)) return;
+    setItems((prev) => [...prev, storedKey]);
+    setQuery("");
+    inputRef.current?.focus();
+  };
+
+  const removeItem = (storedKey: string) => {
+    setItems((prev) => prev.filter((it) => it !== storedKey));
+    inputRef.current?.focus();
+  };
+
+  const handleKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      onCancel();
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      // Si hay una opción exacta o la primera del filtrado, agregarla
+      if (options.length > 0) {
+        addItem(options[0].storedKey);
+      } else if (query.trim()) {
+        // Permitir valor libre (útil si el target no tiene records aún)
+        addItem(query.trim());
+      } else {
+        onCommit(items);
+      }
+      return;
+    }
+    if (e.key === "Backspace" && query === "" && items.length > 0) {
+      e.preventDefault();
+      removeItem(items[items.length - 1]);
+    }
+  };
+
+  return (
+    <div ref={containerRef} style={{
+      position: "relative", background: "var(--color-surface)",
+      border: "1.5px solid var(--color-primary)", borderRadius: "var(--radius-xs)",
+      boxShadow: "0 0 0 3px rgba(0,154,68,0.12)",
+      padding: 4, minWidth: 240, maxWidth: 480,
+    }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+        {items.map((it) => (
+          <span key={it} style={{
+            display: "inline-flex", alignItems: "center", gap: 4,
+            fontSize: 11.5, fontWeight: 600, padding: "2px 4px 2px 8px", borderRadius: 99,
+            background: "#FCE7F3", color: "#DB2777", border: "1px solid #FBCFE8",
+          }}>
+            🔗 <span style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {labelFor(it)}
+            </span>
+            <button onClick={() => removeItem(it)}
+              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, lineHeight: 1, color: "#DB2777", padding: "0 2px" }}>
+              ×
+            </button>
+          </span>
+        ))}
+        <input ref={inputRef}
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={handleKey}
+          placeholder={items.length === 0 ? "Buscar y agregar…" : ""}
+          style={{
+            flex: 1, minWidth: 80, border: "none", outline: "none",
+            background: "transparent", fontSize: 12, padding: "3px 4px",
+          }} />
+      </div>
+
+      {open && (
+        <div style={{
+          position: "absolute", top: "100%", left: 0, right: 0, marginTop: 2, zIndex: 100,
+          background: "var(--color-surface)", border: "1px solid var(--color-border)",
+          borderRadius: 6, boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+          maxHeight: 220, overflowY: "auto",
+        }}>
+          {isLoading ? (
+            <div style={{ padding: "8px 12px", fontSize: 12, color: "var(--color-text-muted)" }}>
+              Cargando…
+            </div>
+          ) : !targetId ? (
+            <div style={{ padding: "8px 12px", fontSize: 12, color: "var(--pm-red-500)" }}>
+              Esta columna no tiene dataset destino configurado.
+            </div>
+          ) : options.length === 0 ? (
+            <div style={{ padding: "8px 12px", fontSize: 12, color: "var(--color-text-muted)" }}>
+              {query ? (
+                <>Sin resultados para "{query}". <button onClick={() => addItem(query.trim())}
+                  style={{ background: "none", border: "none", color: "var(--color-primary)", cursor: "pointer", padding: 0, textDecoration: "underline", fontSize: 12 }}>
+                  Agregar como texto libre
+                </button></>
+              ) : items.length > 0 ? "No quedan opciones para agregar." : "Empieza a escribir…"}
+            </div>
+          ) : (
+            options.map((o) => (
+              <button key={o.storedKey} onClick={() => addItem(o.storedKey)}
+                style={{
+                  display: "block", width: "100%", textAlign: "left",
+                  padding: "6px 12px", fontSize: 12.5, cursor: "pointer",
+                  background: "none", border: "none",
+                  borderBottom: "1px solid var(--color-border-light)",
+                  color: "var(--color-text)",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-primary-bg)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
+                <span style={{ fontWeight: 600 }}>{o.labelKey}</span>
+                {o.labelKey !== o.storedKey && (
+                  <span style={{ marginLeft: 6, fontSize: 11, color: "var(--color-text-muted)" }}>
+                    {o.storedKey}
+                  </span>
+                )}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
   );
 }

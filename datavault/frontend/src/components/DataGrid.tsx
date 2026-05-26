@@ -108,6 +108,27 @@ function renderCellValue(col: ColumnDefinition, cellVal: unknown): React.ReactNo
       );
     }
 
+    case "relation": {
+      // Modelo unificado N:N: el valor siempre es un array de referencias.
+      // Se aceptan también escalares legacy y se renderizan como un chip único.
+      const vals: string[] = Array.isArray(cellVal)
+        ? (cellVal as unknown[]).map((v) => String(v)).filter(Boolean)
+        : [String(cellVal)].filter(Boolean);
+      if (vals.length === 0) return "—";
+      return (
+        <span style={{ display: "flex", flexWrap: "wrap", gap: 3, alignItems: "center" }}>
+          {vals.map((v, i) => (
+            <span key={`${v}-${i}`} style={{
+              fontSize: 10.5, fontWeight: 600, padding: "1px 7px", borderRadius: 99,
+              background: "#FCE7F3", color: "#DB2777",
+              border: "1px solid #FBCFE8",
+              maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }} title={v}>🔗 {v}</span>
+          ))}
+        </span>
+      );
+    }
+
     default:
       return String(cellVal);
   }

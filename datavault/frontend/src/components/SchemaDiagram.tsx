@@ -242,15 +242,23 @@ export default function SchemaDiagram({
     })),
   });
 
-  // FK detection
+  // FK detection — incluye:
+  //  1. Columnas data_type=relation con rules.related_dataset_id (confirmadas)
+  //  2. Columnas id_* matching por nombre (auto-detectadas)
+  const otherById = new Map(otherDatasets.map((d) => [d.id, d]));
+
   const parentRels = currentColumns
-    .filter((c) => c.field_key.startsWith("id_"))
     .map((c) => {
-      const refKw = c.field_key.slice(3);
-      const ds = otherDatasets.find((d) =>
-        keyword(d.name) === refKw || normalize(d.name) === refKw ||
-        normalize(d.name).endsWith(`_${refKw}`) || normalize(d.name).startsWith(`${refKw}_`)
-      );
+      let ds: { id: string; name: string } | undefined;
+      if (c.data_type === "relation" && c.rules?.related_dataset_id) {
+        ds = otherById.get(c.rules.related_dataset_id);
+      } else if (c.field_key.startsWith("id_")) {
+        const refKw = c.field_key.slice(3);
+        ds = otherDatasets.find((d) =>
+          keyword(d.name) === refKw || normalize(d.name) === refKw ||
+          normalize(d.name).endsWith(`_${refKw}`) || normalize(d.name).startsWith(`${refKw}_`)
+        );
+      }
       return ds ? { ds, fkKey: c.field_key } : null;
     })
     .filter(Boolean) as { ds: { id: string; name: string }; fkKey: string }[];
@@ -258,9 +266,12 @@ export default function SchemaDiagram({
   const childRels = otherDatasets
     .map((ds, i) => {
       const cols = colQueries[i]?.data ?? [];
-      const fkCol = cols.find(
-        (c) => c.field_key === `id_${curKw}` || c.field_key.includes(curKw)
-      );
+      const fkCol = cols.find((c) => {
+        // 1. relation explícita apuntando al dataset actual
+        if (c.data_type === "relation" && c.rules?.related_dataset_id === currentDatasetId) return true;
+        // 2. id_<curKw> auto-detectado
+        return c.field_key === `id_${curKw}` || c.field_key.includes(curKw);
+      });
       return fkCol ? { ds, fkKey: fkCol.field_key } : null;
     })
     .filter(Boolean) as { ds: { id: string; name: string }; fkKey: string }[];
@@ -321,7 +332,7 @@ export default function SchemaDiagram({
 
   const ACCENT_PARENT = "#3B82F6";
   const ACCENT_CHILD  = "#F5821F";
-  const ACCENT_CUR    = "#009A44";
+  const ACCENT_CUR    = "#0EA5E9";
 
   return (
     <div className="schema-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -364,7 +375,9 @@ export default function SchemaDiagram({
             </div>
           ) : (
             <svg ref={svgRef} viewBox={`0 0 ${svgW} ${svgH}`}
-              style={{ width: "100%", height: "auto", minHeight: Math.min(svgH, 540) }}
+              {...(svgW >= 900
+                ? { style: { width: "100%", height: "auto", minHeight: Math.min(svgH, 540) } }
+                : { width: svgW, height: svgH, style: { display: "block", margin: "0 auto" } })}
               xmlns="http://www.w3.org/2000/svg">
 
               <defs>
@@ -460,14 +473,31 @@ export default function SchemaDiagram({
                   accent={ACCENT_CHILD} />
               ))}
 
-              {!hasSiblings && (
-                <text x={svgW / 2} y={svgH - 22}
-                  textAnchor="middle" fontSize={12} fill="#94A3B8"
-                  fontFamily="Inter,system-ui,sans-serif">
-                  Sin tablas relacionadas detectadas
-                </text>
-              )}
             </svg>
+          )}
+          {!isLoading && !hasSiblings && (
+            <div style={{
+              marginTop: 16, padding: "12px 16px",
+              background: "var(--color-bg)",
+              border: "1px dashed var(--color-border)",
+              borderRadius: "var(--radius-sm)",
+              color: "var(--color-text-secondary)",
+              fontSize: 13, lineHeight: 1.5,
+              maxWidth: 520, marginLeft: "auto", marginRight: "auto",
+            }}>
+              <div style={{ fontWeight: 700, color: "var(--color-text-primary)", marginBottom: 4 }}>
+                Sin tablas relacionadas detectadas
+              </div>
+              Para que aparezcan vínculos en el diagrama, agrega una columna con
+              clave <code style={{
+                background: "var(--color-primary-bg)", color: "var(--color-primary)",
+                padding: "1px 6px", borderRadius: 4, fontWeight: 600,
+              }}>id_&lt;tabla&gt;</code> que apunte a otro dataset
+              (por ejemplo <code style={{
+                background: "var(--color-primary-bg)", color: "var(--color-primary)",
+                padding: "1px 6px", borderRadius: 4, fontWeight: 600,
+              }}>id_{curKw}</code> en una tabla hija).
+            </div>
           )}
         </div>
       </div>

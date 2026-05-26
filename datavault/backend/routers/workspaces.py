@@ -21,6 +21,7 @@ router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 class WorkspaceCreate(BaseModel):
     name: str
     description: Optional[str] = None
+    is_sandbox: Optional[bool] = False
 
 
 class WorkspaceUpdate(BaseModel):
@@ -94,6 +95,7 @@ async def create_workspace(
     ws = Workspace(
         name=body.name,
         description=body.description,
+        is_sandbox=bool(getattr(body, "is_sandbox", False)),
         created_at=datetime.now(timezone.utc),
     )
     db.add(ws)
@@ -106,6 +108,27 @@ async def create_workspace(
         role="owner",
         joined_at=datetime.now(timezone.utc),
     ))
+
+    # Si es sandbox, pre-poblar con las 4 plantillas + sus sample_rows
+    if ws.is_sandbox:
+        from templates import TEMPLATES
+        from models import Dataset, ColumnDefinition, Record
+        for tpl in TEMPLATES:
+            ds = Dataset(name=tpl["name"], description=tpl["description"], workspace_id=ws.id)
+            db.add(ds)
+            await db.flush()
+            for col_spec in tpl["columns"]:
+                db.add(ColumnDefinition(
+                    dataset_id=ds.id,
+                    name=col_spec["name"],
+                    field_key=col_spec["field_key"],
+                    data_type=col_spec["data_type"],
+                    rules=col_spec.get("rules", {}),
+                    position=col_spec.get("position", 0),
+                ))
+            for row in tpl["sample_rows"]:
+                db.add(Record(dataset_id=ds.id, data=row))
+
     await db.commit()
     await db.refresh(ws)
     return WorkspaceOut(id=ws.id, name=ws.name, description=ws.description,

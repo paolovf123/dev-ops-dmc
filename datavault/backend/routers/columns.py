@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, text
 from database import get_db
-from models import Dataset, ColumnDefinition, User
+from models import Dataset, ColumnDefinition, Record, User
 from schemas import ColumnCreate, ColumnUpdate, ColumnOut
 from auth import require_admin, ds_require_viewer
 from pagination import MAX_COLUMNS_PER_DATASET, DEFAULT_PAGE_SIZE
+import json
 import uuid
 
 router = APIRouter(prefix="/datasets/{dataset_id}/columns", tags=["columns"])
@@ -79,8 +80,42 @@ async def update_column(
     col = result.scalar_one_or_none()
     if not col:
         raise HTTPException(status_code=404, detail="Column not found")
-    for field, value in body.model_dump(exclude_unset=True).items():
+
+    previous_type = col.data_type
+    updates = body.model_dump(exclude_unset=True)
+    for field, value in updates.items():
         setattr(col, field, value)
+
+    # Si la columna pasa a data_type=relation (modelo N:N unificado),
+    # migramos los valores escalares existentes a arrays de 1 elemento.
+    became_relation = (
+        previous_type != "relation"
+        and col.data_type == "relation"
+    )
+    if became_relation:
+        rec_res = await db.execute(
+            select(Record.id, Record.data).where(Record.dataset_id == dataset_id)
+        )
+        fk = col.field_key
+        migrated = 0
+        for rid, data in rec_res.all():
+            if not isinstance(data, dict):
+                continue
+            v = data.get(fk)
+            if v is None or isinstance(v, list):
+                continue
+            s = str(v).strip()
+            new_data = dict(data)
+            new_data[fk] = [s] if s else []
+            await db.execute(
+                text("UPDATE records SET data = :data WHERE id = :id"),
+                {"data": json.dumps(new_data), "id": str(rid)},
+            )
+            migrated += 1
+        if migrated:
+            # Comentario informativo en el log; no rompe el flujo.
+            pass
+
     await db.commit()
     await db.refresh(col)
     return col

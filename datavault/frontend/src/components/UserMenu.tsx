@@ -27,7 +27,7 @@ export default function UserMenu() {
 
   const AVATAR_GRAD: Record<string, string> = {
     admin:  "linear-gradient(135deg,#7C3AED,#5B21B6)",
-    editor: "linear-gradient(135deg,#009A44,#007A36)",
+    editor: "linear-gradient(135deg,#0EA5E9,#0284C7)",
     viewer: "linear-gradient(135deg,#94A3B8,#64748B)",
   };
 
@@ -84,6 +84,16 @@ export default function UserMenu() {
               </button>
             </>
           )}
+
+          <div className="um-dropdown-divider" />
+
+          <button className="um-item" onClick={() => { setOpen(false); navigate("/settings"); }}>
+            <span className="um-item-icon">⚙</span>
+            <div>
+              <div className="um-item-label">Integraciones</div>
+              <div className="um-item-sub">API tokens y webhooks</div>
+            </div>
+          </button>
 
           <div className="um-dropdown-divider" />
 

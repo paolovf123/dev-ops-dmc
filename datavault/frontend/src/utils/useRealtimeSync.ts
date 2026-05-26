@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import api from "../api/client";
 
-const WS_BASE = import.meta.env.VITE_WS_URL ?? "ws://localhost:8000";
+const WS_BASE =
+  import.meta.env.VITE_WS_URL ??
+  (typeof window !== "undefined"
+    ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`
+    : "ws://localhost:5173");
 
 interface RealtimeEvent {
   type: "record_create" | "record_update" | "record_delete";

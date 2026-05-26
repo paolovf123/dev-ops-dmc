@@ -58,9 +58,9 @@ export default function Login() {
       <div className="login-card">
         {/* Logo */}
         <div className="login-logo">
-          <div className="app-header-logo" style={{ width: 48, height: 48, fontSize: 22, borderRadius: 12 }}>T</div>
+          <div className="app-header-logo" style={{ width: 48, height: 48, fontSize: 22, borderRadius: 12 }}><img src="/opsgrid-logo.svg" alt="OpsGrid" style={{ width: "100%", height: "100%" }} /></div>
           <div>
-            <div className="app-header-name" style={{ fontSize: 22 }}>Trans<em>Excel</em></div>
+            <div className="app-header-name" style={{ fontSize: 22 }}>Ops<em>Grid</em></div>
             <div style={{ fontSize: 12, color: "var(--color-text-muted)", marginTop: 1 }}>
               Gestión de datos para Paolo Corp
             </div>

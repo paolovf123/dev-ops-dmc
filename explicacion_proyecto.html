@@ -489,6 +489,51 @@
                 </ul>
             </div>
         </div>
+
+        <h4 style="color:var(--primary);margin-top:1.5rem;">🔗 Relaciones N:N unificadas (modelo Airtable-style)</h4>
+        <div class="grid-2" style="margin-bottom:1.5rem;">
+            <div>
+                <ul class="checklist">
+                    <li><span class="dot done"></span>Todas las columnas <code>relation</code> guardan arrays JSONB (1 valor = 1:N · N valores = N:N)</li>
+                    <li><span class="dot done"></span>Auto-migración escalar → array al cambiar a <code>data_type=relation</code></li>
+                    <li><span class="dot done"></span>Editor multi-chip con autocomplete server-side (debounce 220ms)</li>
+                    <li><span class="dot done"></span>Scanner avanzado: nombre + contenido (tilde/case-insensitive)</li>
+                    <li><span class="dot done"></span>Detección de tablas puente y conexiones N:N automáticas</li>
+                </ul>
+            </div>
+            <div>
+                <ul class="checklist">
+                    <li><span class="dot done"></span>Tabla intermedia opcional (<code>is_bridge=true</code>) solo cuando hay atributos del vínculo</li>
+                    <li><span class="dot done"></span>Wizard "Crear N:N" auto-genera bridge con 2 FKs</li>
+                    <li><span class="dot done"></span>Joins via bridge: lookup 2-step transparente en DataGrid</li>
+                    <li><span class="dot done"></span>Cleanup suggestions: detecta variantes "Comercio/COMERCIO/comercio" y unifica</li>
+                    <li><span class="dot done"></span>Diagrama SVG con cardinalidad N↔N, grilla cuando no hay relaciones, datasets aislados separados</li>
+                </ul>
+            </div>
+        </div>
+
+        <h4 style="color:var(--green);margin-top:1.5rem;">🔐 Sistema de permisos avanzado</h4>
+        <div class="grid-2" style="margin-bottom:1.5rem;">
+            <div>
+                <ul class="checklist">
+                    <li><span class="dot done"></span>4 roles: admin / editor / viewer / none (bloqueo explícito)</li>
+                    <li><span class="dot done"></span>Prioridad: admin global &gt; directo &gt; grupo &gt; workspace</li>
+                    <li><span class="dot done"></span>Bloqueo "none" directo overrides cualquier grupo o workspace</li>
+                    <li><span class="dot done"></span><code>effective_role</code> automático en todos los endpoints</li>
+                    <li><span class="dot done"></span>Matriz invertida: ver datasets accesibles por grupo/usuario</li>
+                </ul>
+            </div>
+            <div>
+                <ul class="checklist">
+                    <li><span class="dot done"></span><code>/admin/workspaces</code> reorganizado: 5 tabs (Equipo · Grupos · Datasets · Permisos · Configuración)</li>
+                    <li><span class="dot done"></span>Edición de permisos inline desde el modal del grupo (cambiar rol, agregar/quitar dataset)</li>
+                    <li><span class="dot done"></span><code>/admin/permissions</code> nuevo (solo admin global) con 4 vistas cross-workspace</li>
+                    <li><span class="dot done"></span>Origen del permiso visible: <code>direct</code> / <code>group:X</code> / <code>workspace:rol</code> / <code>global_admin</code></li>
+                    <li><span class="dot done"></span>Audit log de cambios de permisos con timestamps</li>
+                </ul>
+            </div>
+        </div>
+
         <h4 style="color:var(--muted);text-transform:uppercase;font-size:0.78rem;letter-spacing:0.05em;">Migraciones Alembic</h4>
         <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
             <span class="badge slate">1 · init</span>
@@ -496,7 +541,11 @@
             <span class="badge slate">3 · dataset_permissions_and_gin_index</span>
             <span class="badge slate">4 · groups_and_computed_datasets</span>
             <span class="badge slate">5 · add_workspaces</span>
-            <span class="badge slate">6 · workspace_roles_v2</span>
+            <span class="badge slate">6 · pii_audit_perm_audit_log</span>
+            <span class="badge slate">7 · performance_indexes</span>
+            <span class="badge slate">8 · permission_audit_log</span>
+            <span class="badge slate">9 · api_tokens_webhooks_sandbox</span>
+            <span class="badge slate">10 · dataset_is_bridge</span>
         </div>
     </div>
 
@@ -761,10 +810,11 @@
             <table>
                 <tr><th>Ruta</th><th>Página</th></tr>
                 <tr><td><code>/ws/:workspaceId</code></td><td>WorkspaceView</td></tr>
-                <tr><td><code>/admin/users</code></td><td>AdminUsers</td></tr>
+                <tr><td><code>/admin/workspaces</code></td><td><strong>AdminWorkspaces</strong> — hub workspace-centric (5 tabs)</td></tr>
+                <tr><td><code>/admin/permissions</code></td><td><strong>AdminPermissions</strong> — centro de permisos (solo admin global)</td></tr>
+                <tr><td><code>/admin/users</code></td><td>AdminUsers — catálogo global + matriz invertida</td></tr>
                 <tr><td><code>/admin/audit</code></td><td>AdminAudit</td></tr>
-                <tr><td><code>/admin/groups</code></td><td>AdminGroups</td></tr>
-                <tr><td><code>/admin/workspaces</code></td><td>AdminWorkspaces</td></tr>
+                <tr><td><code>/admin/groups</code></td><td><em>(deprecado — redirige al hub)</em></td></tr>
             </table>
         </div>
     </div>

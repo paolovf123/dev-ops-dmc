@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getDatasets, getColumns } from "../api/datasets";
 import type { ColumnDefinition } from "../types";
 import { useWorkspace } from "../workspace/WorkspaceContext";
+import { useEscapeKey } from "../utils/useEscapeKey";
 
 interface Props {
   currentDatasetId: string;
@@ -20,6 +21,7 @@ export default function LinkTableModal({ currentDatasetId, currentDatasetName, o
   const [colName, setColName]         = useState("");
   const [fieldKey, setFieldKey]       = useState("");
   const [displayField, setDisplayField] = useState("");
+  useEscapeKey(onClose);
 
   const { current: workspace } = useWorkspace();
   const wsId = workspace?.id;

@@ -1,7 +1,8 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { getDatasets, getColumns } from "../api/datasets";
 import type { ColumnDefinition } from "../types";
+import RelationScanModal from "./RelationScanModal";
 
 interface Props { onClose: () => void; workspaceId?: string; workspaceName?: string }
 
@@ -39,7 +40,7 @@ const TYPE_BG: Record<string, string> = {
 };
 
 const PALETTE = [
-  "#009A44","#3B82F6","#F5821F","#8B5CF6","#0EA5E9",
+  "#0EA5E9","#3B82F6","#F5821F","#8B5CF6","#0EA5E9",
   "#EC4899","#14B8A6","#F59E0B","#6366F1","#10B981",
   "#EF4444","#06B6D4","#84CC16","#A855F7","#F97316",
 ];
@@ -166,25 +167,52 @@ function TableBox({ x, y, name, columns, accent }: {
 }
 
 // ── Arrow with label near source ──────────────────────────────────────────────
-function Arrow({ x1, y1, x2, y2, label, color, markerId }: {
+function Arrow({ x1, y1, x2, y2, label, color, markerId, leftCard = "1", rightCard = "N", dashed = false }: {
   x1: number; y1: number; x2: number; y2: number;
   label: string; color: string; markerId: string;
+  leftCard?: string; rightCard?: string; dashed?: boolean;
 }) {
+  // (x1,y1) = lado padre. (x2,y2) = lado hija. Cardinalidad por defecto: 1:N.
+  // Para N:N (vía bridge oculto) pasamos leftCard="N" rightCard="N" + dashed=true.
   const mx = x1 + (x2 - x1) * 0.5;
   const d = `M ${x1} ${y1} C ${mx} ${y1} ${mx} ${y2} ${x2} ${y2}`;
 
-  // Label at ~22% of path — near source, safely in the gap
-  const lx = 0.703 * x1 + 0.297 * x2;
-  const ly = 0.844 * y1 + 0.156 * y2 - 16;
-  const text = label.length > 15 ? label.slice(0, 14) + "…" : label;
+  const lx = 0.30 * x1 + 0.70 * x2;
+  const ly = 0.30 * y1 + 0.70 * y2 - 14;
+  const text = label.length > 18 ? label.slice(0, 17) + "…" : label;
   const pw = text.length * 6.5 + 14;
+
+  const dirX = x2 >= x1 ? 1 : -1;
+  const leftX = x1 + dirX * 22;
+  const leftY = y1 - 12;
+  const rightX = x2 - dirX * 22;
+  const rightY = y2 - 12;
 
   return (
     <g>
-      <path d={d} fill="none" stroke={color} strokeWidth={1.8} opacity={0.6}
+      <path d={d} fill="none" stroke={color} strokeWidth={1.8} opacity={0.65}
+        strokeDasharray={dashed ? "6 4" : undefined}
         markerEnd={`url(#${markerId})`} />
+
+      {/* Cardinalidad lado izquierdo */}
+      <circle cx={leftX} cy={leftY + 4} r={9}
+        fill={leftCard === "N" ? color : "white"}
+        stroke={color} strokeWidth={1.4} />
+      <text x={leftX} y={leftY + 7.5} textAnchor="middle"
+        fontSize={10} fill={leftCard === "N" ? "white" : color} fontWeight={800}
+        fontFamily="Inter,system-ui,sans-serif">{leftCard}</text>
+
+      {/* Cardinalidad lado derecho */}
+      <circle cx={rightX} cy={rightY + 4} r={9}
+        fill={rightCard === "N" ? color : "white"}
+        stroke={color} strokeWidth={1.4} />
+      <text x={rightX} y={rightY + 7.5} textAnchor="middle"
+        fontSize={10} fill={rightCard === "N" ? "white" : color} fontWeight={800}
+        fontFamily="Inter,system-ui,sans-serif">{rightCard}</text>
+
+      {/* Pill con nombre del campo FK */}
       <rect x={lx - pw / 2} y={ly - 10} width={pw} height={18}
-        rx={9} fill="white" stroke={color} strokeWidth={1} opacity={0.93} />
+        rx={9} fill="white" stroke={color} strokeWidth={1} opacity={0.95} />
       <text x={lx} y={ly + 3.5} textAnchor="middle"
         fontSize={9.5} fill={color} fontWeight={700}
         fontFamily="Inter,system-ui,sans-serif">
@@ -231,15 +259,24 @@ function downloadPng(svgEl: SVGSVGElement, name: string) {
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 export default function GlobalSchemaDiagram({ onClose, workspaceId, workspaceName }: Props) {
+  const [showRelationScan, setShowRelationScan] = useState(false);
   const svgRef = useRef<SVGSVGElement>(null);
 
-  const { data: datasets = [], isLoading: loadingDs } = useQuery({
+  const { data: allDatasets = [], isLoading: loadingDs } = useQuery({
     queryKey: ["datasets", workspaceId ?? "all"],
     queryFn: () => getDatasets(workspaceId ? { workspace_id: workspaceId } : undefined),
   });
 
+  // Toggle persistente para mostrar tablas intermedias en el diagrama
+  const [showBridges, setShowBridges] = useState(() => localStorage.getItem("dv_show_bridges") === "1");
+  useEffect(() => { localStorage.setItem("dv_show_bridges", showBridges ? "1" : "0"); }, [showBridges]);
+  const bridgeIds = new Set(allDatasets.filter((d) => d.is_bridge).map((d) => d.id));
+  const datasets = showBridges ? allDatasets : allDatasets.filter((d) => !d.is_bridge);
+
+  // Cargamos columnas de TODOS los datasets (incluso bridges ocultos) para poder
+  // computar las relaciones N:N virtuales cuando el toggle está apagado.
   const colQueries = useQueries({
-    queries: datasets.map((ds) => ({
+    queries: allDatasets.map((ds) => ({
       queryKey: ["columns", ds.id],
       queryFn: () => getColumns(ds.id),
       staleTime: 60_000,
@@ -248,56 +285,193 @@ export default function GlobalSchemaDiagram({ onClose, workspaceId, workspaceNam
 
   const allLoaded = !loadingDs && colQueries.every((q) => !q.isLoading);
   const colsMap = new Map<string, ColumnDefinition[]>(
-    datasets.map((ds, i) => [ds.id, colQueries[i]?.data ?? []])
+    allDatasets.map((ds, i) => [ds.id, colQueries[i]?.data ?? []])
   );
   const accentMap = new Map<string, string>(
     datasets.map((ds, i) => [ds.id, PALETTE[i % PALETTE.length]])
   );
 
-  // FK edges
-  const edges: { from: string; to: string; fkKey: string; color: string }[] = [];
+  // FK edges — fuentes:
+  //  1. Columnas con data_type === "relation" + rules.related_dataset_id (relaciones confirmadas)
+  //  2. Columnas id_* cuyo sufijo coincida con el nombre de otro dataset (auto-detectadas)
+  const datasetById = new Map(datasets.map((d) => [d.id, d]));
+  const edges: { from: string; to: string; fkKey: string; color: string; bridge?: string }[] = [];
+  const seen = new Set<string>(); // dedupe por from+fkKey
   datasets.forEach((ds) => {
     const cols = colsMap.get(ds.id) ?? [];
-    cols.filter((c) => c.field_key.startsWith("id_")).forEach((c) => {
-      const refKw = c.field_key.slice(3);
-      const parent = datasets.find((d) =>
-        d.id !== ds.id && (
-          keyword(d.name) === refKw || normalize(d.name) === refKw ||
-          normalize(d.name).endsWith(`_${refKw}`) || normalize(d.name).startsWith(`${refKw}_`)
-        )
-      );
-      if (parent && !edges.find((e) => e.from === ds.id && e.to === parent.id)) {
-        edges.push({ from: ds.id, to: parent.id, fkKey: c.field_key, color: accentMap.get(ds.id) ?? "#888" });
+    cols.forEach((c) => {
+      let parentId: string | undefined;
+
+      if (c.data_type === "relation" && c.rules?.related_dataset_id) {
+        if (datasetById.has(c.rules.related_dataset_id)) {
+          parentId = c.rules.related_dataset_id;
+        }
+      } else if (c.field_key.startsWith("id_")) {
+        const refKw = c.field_key.slice(3);
+        const parent = datasets.find((d) =>
+          d.id !== ds.id && (
+            keyword(d.name) === refKw || normalize(d.name) === refKw ||
+            normalize(d.name).endsWith(`_${refKw}`) || normalize(d.name).startsWith(`${refKw}_`)
+          )
+        );
+        parentId = parent?.id;
+      }
+
+      if (parentId && parentId !== ds.id) {
+        const key = `${ds.id}:${c.field_key}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          edges.push({ from: ds.id, to: parentId, fkKey: c.field_key, color: accentMap.get(ds.id) ?? "#888" });
+        }
       }
     });
   });
 
-  // Layer assignment
+  // Relaciones N:N virtuales: cuando un bridge está OCULTO (showBridges=false),
+  // dibujamos una flecha directa entre los 2 datasets que conectaba.
+  if (!showBridges) {
+    const allById = new Map(allDatasets.map((d) => [d.id, d]));
+    for (const bridge of allDatasets) {
+      if (!bridge.is_bridge) continue;
+      const bridgeCols = colsMap.get(bridge.id) ?? [];
+      // Encontrar las columnas relation del bridge (típicamente 2)
+      const relTargets: string[] = [];
+      for (const c of bridgeCols) {
+        if (c.data_type === "relation" && c.rules?.related_dataset_id) {
+          const tgt = c.rules.related_dataset_id;
+          if (allById.get(tgt) && !bridgeIds.has(tgt)) {
+            if (!relTargets.includes(tgt)) relTargets.push(tgt);
+          }
+        }
+      }
+      // Para cada par único de targets visibles, dibujar una conexión N:N
+      for (let i = 0; i < relTargets.length; i++) {
+        for (let j = i + 1; j < relTargets.length; j++) {
+          const a = relTargets[i], b = relTargets[j];
+          if (!datasetById.has(a) || !datasetById.has(b)) continue;
+          const key = `nn:${a}:${b}:${bridge.id}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          edges.push({
+            from: a, to: b,
+            fkKey: `vía ${bridge.name}`,
+            color: "#7C3AED", // morado para N:N
+            bridge: bridge.id,
+          });
+        }
+      }
+    }
+  }
+
+  // Separar datasets conectados (participan en algún edge) vs aislados
+  const connectedIds = new Set<string>();
+  edges.forEach((e) => { connectedIds.add(e.from); connectedIds.add(e.to); });
+  const connectedDs = datasets.filter((d) => connectedIds.has(d.id));
+  const isolatedDs  = datasets.filter((d) => !connectedIds.has(d.id));
+
+  // Layer assignment solo para los conectados
+  const noRelations = edges.length === 0;
   const reverseEdges = edges.map((e) => ({ from: e.to, to: e.from }));
-  const layers = assignLayers(datasets.map((d) => d.id), reverseEdges);
-  const maxLayer = Math.max(0, ...layers);
+  const layersConn = assignLayers(connectedDs.map((d) => d.id), reverseEdges);
+  const maxLayer = Math.max(0, ...layersConn);
   const byLayer: string[][] = Array.from({ length: maxLayer + 1 }, () => []);
-  datasets.forEach((ds, i) => byLayer[layers[i]].push(ds.id));
+  connectedDs.forEach((ds, i) => byLayer[layersConn[i]].push(ds.id));
 
-  // Compute layer heights for vertical centering
-  const layerContentH = byLayer.map((ids) =>
-    ids.reduce((s, id) => s + boxH(colsMap.get(id) ?? []) + ROW_GAP, -ROW_GAP)
-  );
-  const maxLayerH = Math.max(300, ...layerContentH);
-  const svgH = maxLayerH + MARGIN * 2 + 30; // +30 for column headers
-
-  // Box positions — vertically centered per layer
   const posMap = new Map<string, { x: number; y: number }>();
-  byLayer.forEach((ids, li) => {
-    const totalH = layerContentH[li];
-    let curY = MARGIN + 30 + Math.max(0, (maxLayerH - totalH) / 2);
-    ids.forEach((id) => {
-      posMap.set(id, { x: MARGIN + li * (BOX_W + COL_GAP), y: curY });
-      curY += boxH(colsMap.get(id) ?? []) + ROW_GAP;
-    });
-  });
+  let svgW: number;
+  let svgH: number;
+  let isolatedBandY: number | null = null; // Y donde inicia la banda de aislados (para separador visual)
 
-  const svgW = MARGIN * 2 + (maxLayer + 1) * (BOX_W + COL_GAP) - COL_GAP;
+  if (noRelations && datasets.length > 0) {
+    // Grid layout: evita columna vertical larguísima cuando no hay FKs.
+    // Calculamos cols deseadas (~raíz cuadrada, máx 4).
+    const gridCols = Math.min(4, Math.max(2, Math.ceil(Math.sqrt(datasets.length))));
+    const numRows = Math.ceil(datasets.length / gridCols);
+    const rowHeights: number[] = [];
+    for (let r = 0; r < numRows; r++) {
+      let maxH = 0;
+      for (let c = 0; c < gridCols; c++) {
+        const idx = r * gridCols + c;
+        if (idx >= datasets.length) break;
+        const h = boxH(colsMap.get(datasets[idx].id) ?? []);
+        if (h > maxH) maxH = h;
+      }
+      rowHeights.push(maxH);
+    }
+    const rowYs: number[] = [];
+    let curY = MARGIN;
+    for (const rh of rowHeights) {
+      rowYs.push(curY);
+      curY += rh + ROW_GAP;
+    }
+    datasets.forEach((ds, i) => {
+      const col = i % gridCols;
+      const row = Math.floor(i / gridCols);
+      posMap.set(ds.id, {
+        x: MARGIN + col * (BOX_W + COL_GAP),
+        y: rowYs[row],
+      });
+    });
+    svgW = MARGIN * 2 + gridCols * (BOX_W + COL_GAP) - COL_GAP;
+    svgH = curY - ROW_GAP + MARGIN;
+  } else {
+    // Layer layout: columnas por nivel (MASTER → DETALLE) solo con conectados
+    const layerContentH = byLayer.map((ids) =>
+      ids.reduce((s, id) => s + boxH(colsMap.get(id) ?? []) + ROW_GAP, -ROW_GAP)
+    );
+    const maxLayerH = Math.max(300, ...layerContentH);
+    const layeredH = maxLayerH + MARGIN + 30;
+
+    byLayer.forEach((ids, li) => {
+      const totalH = layerContentH[li];
+      let curY = MARGIN + 30 + Math.max(0, (maxLayerH - totalH) / 2);
+      ids.forEach((id) => {
+        posMap.set(id, { x: MARGIN + li * (BOX_W + COL_GAP), y: curY });
+        curY += boxH(colsMap.get(id) ?? []) + ROW_GAP;
+      });
+    });
+
+    const layeredW = MARGIN * 2 + (maxLayer + 1) * (BOX_W + COL_GAP) - COL_GAP;
+
+    // Datasets aislados → grilla en banda inferior, separados visualmente
+    let isolatedH = 0;
+    if (isolatedDs.length > 0) {
+      const isoCols = Math.min(4, Math.max(2, Math.ceil(Math.sqrt(isolatedDs.length))));
+      const isoRows = Math.ceil(isolatedDs.length / isoCols);
+      const rowMaxH: number[] = [];
+      for (let r = 0; r < isoRows; r++) {
+        let mh = 0;
+        for (let c = 0; c < isoCols; c++) {
+          const idx = r * isoCols + c;
+          if (idx >= isolatedDs.length) break;
+          const h = boxH(colsMap.get(isolatedDs[idx].id) ?? []);
+          if (h > mh) mh = h;
+        }
+        rowMaxH.push(mh);
+      }
+      const ISOLATED_BAND_GAP = 80; // separación entre el grafo y la banda
+      const yStart = layeredH + ISOLATED_BAND_GAP;
+      isolatedBandY = layeredH + ISOLATED_BAND_GAP / 2;
+      let curRowY = yStart;
+      // Centrar la grilla horizontalmente sobre el ancho del grafo conectado
+      const isoBandW = isoCols * (BOX_W + COL_GAP) - COL_GAP;
+      const xOffset = Math.max(MARGIN, MARGIN + (layeredW - MARGIN * 2 - isoBandW) / 2);
+      isolatedDs.forEach((ds, i) => {
+        const col = i % isoCols;
+        const row = Math.floor(i / isoCols);
+        const rowY = curRowY + rowMaxH.slice(0, row).reduce((s, h) => s + h + ROW_GAP, 0);
+        posMap.set(ds.id, {
+          x: xOffset + col * (BOX_W + COL_GAP),
+          y: rowY,
+        });
+      });
+      isolatedH = ISOLATED_BAND_GAP + rowMaxH.reduce((s, h) => s + h + ROW_GAP, 0) - ROW_GAP;
+      svgW = Math.max(layeredW, MARGIN * 2 + isoBandW);
+    } else {
+      svgW = layeredW;
+    }
+    svgH = layeredH + isolatedH + MARGIN;
+  }
 
   // Unique arrow colors for defs
   const arrowColors = [...new Set(edges.map((e) => e.color))];
@@ -328,6 +502,23 @@ export default function GlobalSchemaDiagram({ onClose, workspaceId, workspaceNam
             </p>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
+            {allDatasets.some((d) => d.is_bridge) && (
+              <label style={{
+                display: "flex", alignItems: "center", gap: 6, cursor: "pointer",
+                padding: "5px 10px", borderRadius: 6,
+                background: showBridges ? "var(--color-primary-bg)" : "transparent",
+                border: `1px solid ${showBridges ? "var(--color-primary)" : "var(--color-border)"}`,
+                fontSize: 12, fontWeight: 600, color: showBridges ? "var(--color-primary)" : "var(--color-text-secondary)",
+              }}>
+                <input type="checkbox" checked={showBridges}
+                  onChange={(e) => setShowBridges(e.target.checked)} />
+                Tablas intermedias
+              </label>
+            )}
+            <button className="btn btn-secondary" style={{ fontSize: 13, borderColor: "#7C3AED", color: "#7C3AED" }}
+              onClick={() => setShowRelationScan(true)}>
+              🔗 Detectar relaciones
+            </button>
             <button className="btn btn-secondary" style={{ fontSize: 13 }}
               onClick={() => svgRef.current && downloadPng(svgRef.current, workspaceName ?? "schema")}>
               ⬇ Descargar PNG
@@ -336,6 +527,12 @@ export default function GlobalSchemaDiagram({ onClose, workspaceId, workspaceNam
               style={{ fontSize: 20, padding: "2px 8px", lineHeight: 1 }}>×</button>
           </div>
         </div>
+
+        <RelationScanModal
+          open={showRelationScan}
+          onClose={() => setShowRelationScan(false)}
+          workspaceId={workspaceId}
+        />
 
         {/* Legend */}
         <div className="schema-legend" style={{ flexWrap: "wrap", gap: "6px 14px" }}>
@@ -346,8 +543,28 @@ export default function GlobalSchemaDiagram({ onClose, workspaceId, workspaceNam
               <span style={{ fontSize: 12 }}>{ds.name}</span>
             </span>
           ))}
-          <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--color-text-muted)", flexShrink: 0 }}>
-            Flechas: hijo → padre (FK)
+          <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--color-text-muted)",
+            flexShrink: 0, display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <span style={{
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                width: 16, height: 16, borderRadius: "50%",
+                background: "#64748B", border: "1.4px solid #64748B",
+                fontSize: 9, fontWeight: 800, color: "#fff",
+              }}>N</span>
+              ↔
+              <span style={{
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                width: 16, height: 16, borderRadius: "50%",
+                background: "#64748B", border: "1.4px solid #64748B",
+                fontSize: 9, fontWeight: 800, color: "#fff",
+              }}>N</span>
+              relación
+            </span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <svg width="24" height="6" viewBox="0 0 24 6"><line x1="0" y1="3" x2="24" y2="3" stroke="#7C3AED" strokeWidth="2" strokeDasharray="4 3"/></svg>
+              vía intermedia
+            </span>
           </span>
         </div>
 
@@ -363,7 +580,9 @@ export default function GlobalSchemaDiagram({ onClose, workspaceId, workspaceNam
             </div>
           ) : (
             <svg ref={svgRef} viewBox={`0 0 ${svgW} ${svgH}`}
-              style={{ width: "100%", height: "auto", minHeight: Math.min(svgH, 600), display: "block" }}
+              {...(svgW >= 900
+                ? { style: { width: "100%", height: "auto", minHeight: Math.min(svgH, 600), display: "block" } }
+                : { width: svgW, height: svgH, style: { display: "block", margin: "0 auto" } })}
               xmlns="http://www.w3.org/2000/svg">
 
               <defs>
@@ -381,8 +600,8 @@ export default function GlobalSchemaDiagram({ onClose, workspaceId, workspaceNam
               <rect width={svgW} height={svgH} fill="#EFF2F7" />
               <rect width={svgW} height={svgH} fill="url(#gdots)" />
 
-              {/* Layer column headers */}
-              {byLayer.map((_, li) => {
+              {/* Layer column headers — solo cuando hay relaciones */}
+              {!noRelations && byLayer.map((_, li) => {
                 const lx = MARGIN + li * (BOX_W + COL_GAP) + BOX_W / 2;
                 const label = li < LAYER_LABELS.length
                   ? LAYER_LABELS[li]
@@ -400,29 +619,62 @@ export default function GlobalSchemaDiagram({ onClose, workspaceId, workspaceNam
                 );
               })}
 
-              {/* Arrows (under boxes) */}
+              {/* Arrows (under boxes). Conexión: padre.right (center) → hija.left (fila FK).
+                  Si es una relación N:N virtual (vía bridge oculto), ambos lados son N y se dibuja
+                  con línea punteada. */}
               {edges.map((edge, ei) => {
                 const fp = posMap.get(edge.from);
                 const tp = posMap.get(edge.to);
                 if (!fp || !tp) return null;
-                const fh = boxH(colsMap.get(edge.from) ?? []);
-                const th = boxH(colsMap.get(edge.to) ?? []);
-                // Count parallel edges between same source/dest layer to offset Y
-                const sameLayerEdges = edges.filter((e) => {
-                  const ep = posMap.get(e.from);
-                  const etp = posMap.get(e.to);
-                  return ep && etp && Math.abs(ep.x - fp.x) < 1 && Math.abs(etp.x - tp.x) < 1;
-                });
-                const edgeIdx = sameLayerEdges.indexOf(edge);
-                const yOffset = (edgeIdx - (sameLayerEdges.length - 1) / 2) * 22;
+                const childCols = colsMap.get(edge.from) ?? [];
+                const parentCols = colsMap.get(edge.to) ?? [];
+                const parentH = boxH(parentCols);
+                const childH  = boxH(childCols);
+                const isNN = !!edge.bridge;
+
+                // Para N:N: conectar centros de ambas cajas (no hay fila FK específica).
+                // Para FK normal: padre.right (center) → hija.left (fila FK).
+                let x1, y1, x2, y2;
+                if (isNN) {
+                  x1 = tp.x + BOX_W; y1 = tp.y + parentH / 2;
+                  x2 = fp.x;         y2 = fp.y + childH / 2;
+                } else {
+                  const fkIdx = childCols.findIndex((c) => c.field_key === edge.fkKey);
+                  const fkY = fkIdx >= 0 && fkIdx < MAX_R
+                    ? fp.y + HDR_H + fkIdx * ROW_H + ROW_H / 2 + 2
+                    : fp.y + childH / 2;
+                  x1 = tp.x + BOX_W; y1 = tp.y + parentH / 2;
+                  x2 = fp.x;         y2 = fkY;
+                }
+
+                // Modelo unificado N:N: todas las relaciones son arrays. Ambos lados "N".
+                // Las flechas via bridge siguen siendo dashed para distinguirlas visualmente
+                // (son "indirectas" vs columna relation directa).
                 return (
                   <Arrow key={ei}
-                    x1={fp.x + BOX_W} y1={fp.y + fh / 2 + yOffset}
-                    x2={tp.x} y2={tp.y + th / 2 + yOffset}
+                    x1={x1} y1={y1} x2={x2} y2={y2}
                     label={edge.fkKey} color={edge.color}
-                    markerId={`garr-${edge.color.replace("#", "")}`} />
+                    markerId={`garr-${edge.color.replace("#", "")}`}
+                    leftCard="N"
+                    rightCard="N"
+                    dashed={isNN} />
                 );
               })}
+
+              {/* Separador visual + label para banda de datasets aislados */}
+              {isolatedBandY !== null && (
+                <g>
+                  <line x1={MARGIN} y1={isolatedBandY} x2={svgW - MARGIN} y2={isolatedBandY}
+                    stroke="#CBD5E0" strokeWidth={1} strokeDasharray="6 5" />
+                  <rect x={svgW / 2 - 88} y={isolatedBandY - 11} width={176} height={22} rx={11}
+                    fill="rgba(255,255,255,0.95)" stroke="#CBD5E0" strokeWidth={1} />
+                  <text x={svgW / 2} y={isolatedBandY + 4} textAnchor="middle"
+                    fontSize={10} fill="#64748B" fontWeight={700}
+                    fontFamily="Inter,system-ui,sans-serif" letterSpacing={1}>
+                    SIN RELACIONES
+                  </text>
+                </g>
+              )}
 
               {/* Boxes */}
               {datasets.map((ds, i) => {

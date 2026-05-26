@@ -10,7 +10,7 @@ interface Props {
 }
 
 const ACTION_LABELS: Record<string, { label: string; color: string; icon: string }> = {
-  create: { label: "Creado",     color: "#009A44", icon: "✦" },
+  create: { label: "Creado",     color: "#0EA5E9", icon: "✦" },
   update: { label: "Editado",    color: "#3B82F6", icon: "✎" },
   delete: { label: "Eliminado",  color: "#EF4444", icon: "✕" },
 };

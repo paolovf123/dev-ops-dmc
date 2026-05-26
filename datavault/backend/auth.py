@@ -33,6 +33,43 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 1
 REFRESH_TOKEN_EXPIRE_DAYS = 14
 WS_TICKET_EXPIRE_SECONDS = 60
+INVITE_TOKEN_EXPIRE_HOURS = 72  # 3 días para usar el link de invitación
+
+# Dominios cuyos registros se auto-activan (sin necesidad de aprobación manual)
+ALLOWED_EMAIL_DOMAINS = {
+    d.strip().lower().lstrip("@")
+    for d in os.getenv("ALLOWED_EMAIL_DOMAINS", "").split(",")
+    if d.strip()
+}
+
+# URL base pública para construir links de invitación
+PUBLIC_APP_URL = os.getenv("PUBLIC_APP_URL", "http://localhost:5173").rstrip("/")
+
+
+def email_domain_allowed(email: str) -> bool:
+    if not ALLOWED_EMAIL_DOMAINS:
+        return False
+    domain = email.split("@")[-1].lower().strip() if "@" in email else ""
+    return domain in ALLOWED_EMAIL_DOMAINS
+
+
+def create_invite_token(user_id: str) -> str:
+    payload = {
+        "sub": user_id,
+        "scope": "invite",
+        "exp": datetime.now(timezone.utc) + timedelta(hours=INVITE_TOKEN_EXPIRE_HOURS),
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_invite_token(token: str) -> str | None:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("scope") != "invite":
+            return None
+        return payload.get("sub")
+    except JWTError:
+        return None
 
 # Cookie config
 COOKIE_NAME = "dv_token"
@@ -146,6 +183,15 @@ async def get_current_user(
     )
     if not token:
         raise exc
+
+    # Soporta API tokens (opsg_*) además de JWT de sesión
+    if token.startswith("opsg_"):
+        from routers.api_tokens import authenticate_api_token
+        user = await authenticate_api_token(token, db)
+        if not user or not user.is_active:
+            raise exc
+        return user
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")

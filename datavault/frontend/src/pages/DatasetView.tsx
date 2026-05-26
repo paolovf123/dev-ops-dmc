@@ -7,6 +7,7 @@ import { useRealtimeSync } from "../utils/useRealtimeSync";
 import {
   getDatasets, getColumns, createColumn, updateColumn, deleteColumn,
   getRecords, createRecord, updateRecord, deleteRecord, bulkDelete, importCsv,
+  updateDataset,
 } from "../api/datasets";
 import DataGrid, { type ExtraColumn } from "../components/DataGrid";
 import AddColumnModal from "../components/AddColumnModal";
@@ -23,6 +24,7 @@ import LinkTableModal from "../components/LinkTableModal";
 import CsvMappingModal from "../components/CsvMappingModal";
 import SearchReplaceModal from "../components/SearchReplaceModal";
 import ConditionalFormattingModal, { type CondRule } from "../components/ConditionalFormattingModal";
+import EditDatasetModal from "../components/EditDatasetModal";
 import { useConfirm } from "../components/ConfirmDialog";
 import type { ColumnDefinition, JoinedColDef, FormulaColDef } from "../types";
 import { exportCsv, exportExcel, printDataset } from "../utils/export";
@@ -52,6 +54,7 @@ export default function DatasetView() {
   const [historyRecordId, setHistoryRecordId] = useState<string | null>(null);
   const [relatedPanelRecordId, setRelatedPanelRecordId] = useState<string | null>(null);
   const [showLinkModal, setShowLinkModal] = useState(false);
+  const [editingDataset, setEditingDataset] = useState(false);
   const [editingColumn, setEditingColumn] = useState<ColumnDefinition | null>(null);
   const [csvMappingFile, setCsvMappingFile] = useState<File | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -67,7 +70,7 @@ export default function DatasetView() {
   const csvInputRef = useRef<HTMLInputElement>(null);
 
   const [csvImporting, setCsvImporting] = useState(false);
-  const [csvResult, setCsvResult] = useState<{ created: number; errors: { row: number; errors: string[] }[] } | null>(null);
+  const [csvResult, setCsvResult] = useState<{ created: number; skipped_duplicates?: number; errors: { row: number; errors: string[] }[] } | null>(null);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -220,11 +223,69 @@ export default function DatasetView() {
     })),
   });
 
+  // Bridges en uso: fetch records de las tablas intermedias para joins N:N
+  const uniqueBridgeIds = useMemo(
+    () => [...new Set(joinedCols.filter((j) => j.via).map((j) => j.via!.bridgeDatasetId))],
+    [joinedCols]
+  );
+  const bridgeQueries = useQueries({
+    queries: uniqueBridgeIds.map((dsId) => ({
+      queryKey: ["records", dsId, "bridge-lookup"],
+      queryFn: () => getRecords(dsId, { limit: 1000 }).then((r) => r.data),
+      staleTime: 60_000,
+    })),
+  });
+
   const extraColumns: ExtraColumn[] = useMemo(() => {
     return joinedCols.map((def) => {
       const srcIdx = uniqueSourceIds.indexOf(def.sourceDatasetId);
       const sourceRecs = sourceQueries[srcIdx]?.data ?? [];
-      const lookup = new Map(
+
+      if (def.via) {
+        // Bridge join (N:N). Buildup:
+        //   bridge.fkToLocal → currentRow.id (lookup target = current record id)
+        //   bridge.fkToSource → sourceRow.id (lookup target = source record id)
+        const bIdx = uniqueBridgeIds.indexOf(def.via.bridgeDatasetId);
+        const bridgeRecs = bridgeQueries[bIdx]?.data ?? [];
+        // map source.id → displayValue
+        const srcById = new Map(sourceRecs.map((r) => [r.id, String(r.data[def.displayKey] ?? "")]));
+        // group bridge rows by their fkToLocal value
+        const fkLocal = def.via.bridgeFkToLocal;
+        const fkSrc = def.via.bridgeFkToSource;
+        // currentRow.id (or sourcePkKey-derived) → array of bridge sourceIds
+        const bridgeByLocal = new Map<string, string[]>();
+        for (const b of bridgeRecs) {
+          const localRef = String(b.data[fkLocal] ?? "");
+          const srcRef = String(b.data[fkSrc] ?? "");
+          if (!localRef || !srcRef) continue;
+          const arr = bridgeByLocal.get(localRef) ?? [];
+          arr.push(srcRef);
+          bridgeByLocal.set(localRef, arr);
+        }
+        // ExtraColumn.lookup mapea fkValue → displayString.
+        // Acá la "fkValue" es el id del registro actual (localFkKey = "__id__"),
+        // y la display es la lista de valores del source unidos.
+        const lookup = new Map<string, string>();
+        bridgeByLocal.forEach((srcIds, localRef) => {
+          const values = srcIds.map((id) => srcById.get(id) ?? "").filter(Boolean);
+          lookup.set(localRef, values.join(", "));
+        });
+        return {
+          uid: def.uid,
+          header: `${def.sourceDatasetName} › ${def.displayName} (vía ${def.via.bridgeDatasetName})`,
+          fkKey: def.localFkKey,
+          lookup,
+          onRemove: () => setJoinedCols((prev) => prev.filter((j) => j.uid !== def.uid)),
+        };
+      }
+
+      // Join directo (sin bridge). Modelo N:N: el localFkKey puede ser:
+      //   - array de strings (caso normal, relation N:N)
+      //   - escalar (caso legacy o columna text con código FK)
+      // Para que `lookup.get(fkValue)` funcione con la firma actual de DataGrid,
+      // construimos la lookup map por valor único del source y, en la celda,
+      // el render desarma el array antes de buscar.
+      const sourceLookup = new Map<string, string>(
         sourceRecs.map((r) => [
           def.sourcePkKey === "__id__" || def.sourcePkKey === "id"
             ? r.id
@@ -232,15 +293,43 @@ export default function DatasetView() {
           String(r.data[def.displayKey] ?? ""),
         ])
       );
+      // Wrapper que entiende arrays: cuando la "key" es JSON array serializado por DataGrid
+      // (porque el fkKey apunta a una celda array), devolvemos lista coma-separada de displays.
+      const lookup = new Map<string, string>(sourceLookup);
+      // Augmentar la lookup con resoluciones para arrays serializados.
+      // DataGrid stringify el rec.data[fkKey] cuando es array → "[\"Y00313\",\"Y00421\"]"
+      // Capturamos ese patrón y devolvemos los displays unidos.
+      const arrayLookup = (key: string): string | undefined => {
+        if (key.startsWith("[") && key.endsWith("]")) {
+          try {
+            const items = JSON.parse(key);
+            if (Array.isArray(items)) {
+              const vals = items.map((it) => sourceLookup.get(String(it))).filter(Boolean);
+              return vals.length > 0 ? vals.join(", ") : undefined;
+            }
+          } catch { /* noop */ }
+        }
+        return sourceLookup.get(key);
+      };
+      // Proxy de Map para inyectar el array handling
+      const lookupProxy = new Proxy(lookup, {
+        get(target, prop) {
+          if (prop === "get") {
+            return (key: string) => arrayLookup(key);
+          }
+          // @ts-expect-error proxy types
+          return target[prop];
+        },
+      });
       return {
         uid: def.uid,
         header: `${def.sourceDatasetName} › ${def.displayName}`,
         fkKey: def.localFkKey,
-        lookup,
+        lookup: lookupProxy as Map<string, string>,
         onRemove: () => setJoinedCols((prev) => prev.filter((j) => j.uid !== def.uid)),
       };
     });
-  }, [joinedCols, sourceQueries, uniqueSourceIds]);
+  }, [joinedCols, sourceQueries, uniqueSourceIds, bridgeQueries, uniqueBridgeIds]);
 
   const filteredRecords = useMemo(() => {
     const activeFilters = Object.entries(columnFilters).filter(([, v]) => v);
@@ -357,7 +446,9 @@ export default function DatasetView() {
       setCsvImporting(true);
       setCsvResult(null);
       try {
-        const result = await importCsv(datasetId!, file);
+        // Auto-dedupe: usa columnas marcadas como `unique` como clave de duplicación
+        const dedupeKeys = columns.filter((c) => c.rules?.unique).map((c) => c.field_key);
+        const result = await importCsv(datasetId!, file, dedupeKeys.length > 0 ? { dedupe_on: dedupeKeys } : undefined);
         qc.invalidateQueries({ queryKey: recsKey });
         setCsvResult(result);
       } finally {
@@ -437,13 +528,34 @@ export default function DatasetView() {
         <button className="btn btn-ghost" onClick={() => navigate("/")}
           style={{ padding: "5px 8px", fontSize: 18 }} title="Volver">←</button>
         <button className="app-brand-btn" onClick={() => navigate("/")}>
-          <div className="app-header-logo" style={{ width: 28, height: 28, fontSize: 13, borderRadius: "var(--radius-xs)" }}>T</div>
-          <span className="app-header-name">Trans<em>Excel</em></span>
+          <div className="app-header-logo" style={{ width: 28, height: 28, fontSize: 13, borderRadius: "var(--radius-xs)" }}><img src="/opsgrid-logo.svg" alt="OpsGrid" style={{ width: "100%", height: "100%" }} /></div>
+          <span className="app-header-name">Ops<em>Grid</em></span>
         </button>
         <div style={{ width: 1, height: 20, background: "var(--color-border)", margin: "0 6px" }} />
         <span style={{ fontWeight: 600, fontSize: 15, color: "var(--color-text)" }}>
           {currentDataset?.name ?? "Dataset"}
         </span>
+        {effectiveIsAdmin && currentDataset && (
+          <button
+            className="btn btn-ghost"
+            title="Editar nombre y descripción"
+            onClick={() => setEditingDataset(true)}
+            style={{ padding: "3px 6px", fontSize: 12, color: "var(--color-text-muted)" }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <path d="M12 20h9"/>
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+            </svg>
+          </button>
+        )}
+        {currentDataset?.description && (
+          <span title={currentDataset.description}
+            style={{
+              fontSize: 12, color: "var(--color-text-muted)",
+              maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }}>
+            · {currentDataset.description}
+          </span>
+        )}
         <div className="app-header-spacer" />
         <span className="app-header-tag">
           {filteredRecords.length} filas · {visibleColumns.length} cols
@@ -525,6 +637,57 @@ export default function DatasetView() {
 
       {/* ── Main ── */}
       <main className="page">
+        {/* Banner: sugerencia automática "esto parece tabla intermedia" */}
+        {(() => {
+          if (!currentDataset || currentDataset.is_bridge) return null;
+          if (localStorage.getItem(`dv_bridge_dismissed_${datasetId}`) === "1") return null;
+          const relCols = columns.filter((c) => c.data_type === "relation" && c.rules?.related_dataset_id);
+          const distinctTargets = new Set(relCols.map((c) => c.rules.related_dataset_id));
+          // Heurística: 2+ relation cols apuntando a 2+ datasets distintos, y ≤6 columnas totales
+          const looksLikeBridge = distinctTargets.size >= 2 && columns.length <= 6;
+          if (!looksLikeBridge || !effectiveIsAdmin) return null;
+          return (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 12,
+              padding: "10px 16px", marginBottom: 12, borderRadius: 8,
+              background: "#FEF3C7", border: "1px solid #FCD34D",
+            }}>
+              <span style={{ fontSize: 18 }}>💡</span>
+              <div style={{ flex: 1, fontSize: 13, lineHeight: 1.4 }}>
+                <strong>Este dataset parece ser una tabla intermedia (N:N).</strong>
+                {" "}Tiene {distinctTargets.size} columnas <code style={{ background: "rgba(0,0,0,0.05)", padding: "0 4px", borderRadius: 3 }}>relation</code> apuntando a datasets distintos.
+                Marcarlo como intermedia lo ocultará de la lista principal y mejorará el diagrama.
+              </div>
+              <button
+                onClick={async () => {
+                  try {
+                    await updateDataset(currentDataset.id, { is_bridge: true });
+                    qc.invalidateQueries({ queryKey: ["datasets"] });
+                  } catch { /* noop */ }
+                }}
+                style={{
+                  padding: "6px 12px", fontSize: 12, fontWeight: 600,
+                  background: "#D97706", color: "#fff",
+                  border: "none", borderRadius: 6, cursor: "pointer", whiteSpace: "nowrap",
+                }}>
+                Marcar como intermedia
+              </button>
+              <button
+                onClick={() => {
+                  localStorage.setItem(`dv_bridge_dismissed_${datasetId}`, "1");
+                  // Forzar re-render: cambio rápido del state
+                  window.dispatchEvent(new Event("storage"));
+                }}
+                title="Descartar sugerencia"
+                style={{
+                  padding: "4px 8px", fontSize: 16,
+                  background: "transparent", border: "none", cursor: "pointer",
+                  color: "var(--color-text-muted)",
+                }}>×</button>
+            </div>
+          );
+        })()}
+
         {/* View mode tabs */}
         <div className="view-tabs">
           {VIEW_MODES.map((vm) => (
@@ -635,14 +798,14 @@ export default function DatasetView() {
                 {showExportMenu && (
                   <div className="export-menu">
                     <button className="export-menu-item" onClick={() => { handleExport("csv"); setShowExportMenu(false); }}>
-                      <span className="export-menu-icon" style={{ background: "#E8F7EE", color: "#007A36" }}>CSV</span>
+                      <span className="export-menu-icon" style={{ background: "#E0F2FE", color: "#0284C7" }}>CSV</span>
                       <div>
                         <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>Exportar como CSV</p>
                         <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>Compatible con cualquier herramienta</p>
                       </div>
                     </button>
                     <button className="export-menu-item" onClick={() => { handleExport("xlsx"); setShowExportMenu(false); }}>
-                      <span className="export-menu-icon" style={{ background: "#E8F7EE", color: "#007A36" }}>XLS</span>
+                      <span className="export-menu-icon" style={{ background: "#E0F2FE", color: "#0284C7" }}>XLS</span>
                       <div>
                         <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>Exportar como Excel</p>
                         <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>.xlsx con anchos y formato por tipo</p>
@@ -788,6 +951,11 @@ export default function DatasetView() {
                 marginBottom: 12, fontSize: 13,
               }}>
                 <span>✅ {csvResult.created} registro(s) importado(s)</span>
+                {csvResult.skipped_duplicates ? (
+                  <span style={{ color: "var(--pm-orange-600, #b45309)" }}>
+                    · {csvResult.skipped_duplicates} duplicado(s) omitido(s)
+                  </span>
+                ) : null}
                 {csvResult.errors.length > 0 && (
                   <span style={{ color: "var(--pm-orange-600)" }}>
                     · {csvResult.errors.length} fila(s) con errores
@@ -995,6 +1163,12 @@ export default function DatasetView() {
           onClose={() => setShowCondFormat(false)}
         />
       )}
+
+      <EditDatasetModal
+        open={editingDataset}
+        onClose={() => setEditingDataset(false)}
+        dataset={currentDataset ? { id: currentDataset.id, name: currentDataset.name, description: currentDataset.description } : null}
+      />
 
       {relatedPanelRecordId && (() => {
         const rec = records.find((r) => r.id === relatedPanelRecordId);

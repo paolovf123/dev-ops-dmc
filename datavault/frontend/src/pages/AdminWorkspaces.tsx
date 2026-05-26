@@ -10,8 +10,14 @@ import { useAuth } from "../auth/AuthContext";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/Toast";
 import UserMenu from "../components/UserMenu";
+import WsTabGroups from "../components/admin/WsTabGroups";
+import WsTabDatasets from "../components/admin/WsTabDatasets";
+import WsTabPermissions from "../components/admin/WsTabPermissions";
+import WsTabConfig from "../components/admin/WsTabConfig";
 import type { Workspace } from "../workspace/WorkspaceContext";
 import type { WorkspaceMember } from "../api/workspaces";
+
+type WsTab = "team" | "groups" | "datasets" | "permissions" | "config";
 
 const ROLE_BADGE: Record<string, { bg: string; color: string; label: string; dot: string }> = {
   owner:    { bg: "#EDE9FE", color: "#7C3AED", label: "Owner",    dot: "#7C3AED" },
@@ -73,6 +79,8 @@ export default function AdminWorkspaces() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [currentTab, setCurrentTab] = useState<WsTab>("team");
+  const [newIsSandbox, setNewIsSandbox] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [userSearch, setUserSearch] = useState("");
@@ -100,11 +108,11 @@ export default function AdminWorkspaces() {
   });
 
   const createMut = useMutation({
-    mutationFn: () => createWorkspace({ name: newName.trim(), description: newDesc.trim() || null }),
+    mutationFn: () => createWorkspace({ name: newName.trim(), description: newDesc.trim() || null, is_sandbox: newIsSandbox }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-workspaces"] });
-      toast("Workspace creado", "success");
-      setShowCreate(false); setNewName(""); setNewDesc("");
+      toast(newIsSandbox ? "Workspace demo creado con plantillas de ejemplo" : "Workspace creado", "success");
+      setShowCreate(false); setNewName(""); setNewDesc(""); setNewIsSandbox(false);
     },
     onError: () => toast("Error al crear workspace", "error"),
   });
@@ -191,8 +199,8 @@ export default function AdminWorkspaces() {
     <>
       <header className="app-header">
         <button className="app-brand-btn" onClick={() => navigate("/")}>
-          <div className="app-header-logo">T</div>
-          <span className="app-header-name">Trans<em>Excel</em></span>
+          <div className="app-header-logo app-header-logo--img"><img src="/opsgrid-logo.svg" alt="OpsGrid" /></div>
+          <span className="app-header-name">Ops<em>Grid</em></span>
         </button>
         <div className="app-header-spacer" />
         <nav style={{ display: "flex", gap: 4 }}>
@@ -200,10 +208,14 @@ export default function AdminWorkspaces() {
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
             Usuarios
           </button>
-          <button className="btn btn-ghost" style={{ fontSize: 13, gap: 6 }} onClick={() => navigate("/admin/groups")}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6"/><circle cx="16" cy="8" r="3"/><path d="M22 20c0-3.3-2.7-6-6-6"/><path d="M9 14c0 0 1.5-.5 3-.5s3 .5 3 .5"/></svg>
-            Grupos
-          </button>
+          {isAdmin && (
+            <button className="btn btn-ghost" style={{ fontSize: 13, gap: 6 }}
+              onClick={() => navigate("/admin/permissions")}
+              title="Vista cross-workspace de seguridad">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Centro de permisos
+            </button>
+          )}
         </nav>
         <UserMenu />
       </header>
@@ -253,6 +265,17 @@ export default function AdminWorkspaces() {
                 onChange={(e) => setNewDesc(e.target.value)}
                 style={{ ...inputStyle, marginTop: 8 }}
               />
+              <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 10, cursor: "pointer", fontSize: 12 }}>
+                <input type="checkbox" checked={newIsSandbox}
+                  onChange={(e) => setNewIsSandbox(e.target.checked)}
+                  style={{ marginTop: 2 }} />
+                <span>
+                  <strong>Workspace demo / sandbox</strong>
+                  <span style={{ display: "block", color: "var(--color-text-muted)", marginTop: 2 }}>
+                    Pre-pobla con las 4 plantillas (Inventario, CRM, Tickets, Tareas) y filas de ejemplo
+                  </span>
+                </span>
+              </label>
               <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                 <button className="btn btn-primary" style={{ fontSize: 12, flex: 1 }}
                   disabled={!newName.trim() || createMut.isPending}
@@ -402,6 +425,50 @@ export default function AdminWorkspaces() {
                 </button>
               </div>
 
+              {/* Tab bar */}
+              <div style={{
+                display: "flex", gap: 2, marginBottom: 20,
+                borderBottom: "1px solid var(--color-border)", paddingBottom: 0,
+              }}>
+                {([
+                  ["team",        "👥 Equipo"],
+                  ["groups",      "🔗 Grupos"],
+                  ["datasets",    "📊 Datasets"],
+                  ["permissions", "🔒 Permisos"],
+                  ["config",      "⚙️ Configuración"],
+                ] as [WsTab, string][]).map(([k, label]) => (
+                  <button key={k} onClick={() => setCurrentTab(k)}
+                    style={{
+                      padding: "8px 14px", fontSize: 13, fontWeight: currentTab === k ? 700 : 500,
+                      background: "none", border: "none", cursor: "pointer",
+                      borderBottom: currentTab === k ? "2px solid var(--color-primary)" : "2px solid transparent",
+                      color: currentTab === k ? "var(--color-primary)" : "var(--color-text-secondary)",
+                      marginBottom: -1,
+                    }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {currentTab === "groups" && (
+                <WsTabGroups workspaceId={selected.id} workspaceName={selected.name} />
+              )}
+              {currentTab === "datasets" && (
+                <WsTabDatasets workspaceId={selected.id} workspaceName={selected.name} />
+              )}
+              {currentTab === "permissions" && (
+                <WsTabPermissions workspaceId={selected.id} workspaceName={selected.name} />
+              )}
+              {currentTab === "config" && (
+                <WsTabConfig
+                  workspace={{ id: selected.id, name: selected.name, description: selected.description ?? null }}
+                  isAdminGlobal={isAdmin}
+                  onUpdated={() => { /* la query de workspaces se invalida desde el sub-componente */ }}
+                  onDeleted={() => setSelected(null)}
+                />
+              )}
+
+              {currentTab === "team" && (<>
               {/* Agregar miembro */}
               <div style={{
                 background: "var(--color-surface)", border: "1px solid var(--color-border)",
@@ -568,6 +635,7 @@ export default function AdminWorkspaces() {
                   </div>
                 )}
               </div>
+              </>)}
             </>
           )}
         </div>

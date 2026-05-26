@@ -5,6 +5,7 @@ import { getDatasets, deleteDataset, getColumns, getRecords } from "../api/datas
 import ImportExcelModal from "../components/ImportExcelModal";
 import { getWorkspaces } from "../api/workspaces";
 import GlobalSchemaDiagram from "../components/GlobalSchemaDiagram";
+import RelationsManagerModal from "../components/RelationsManagerModal";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useAuth } from "../auth/AuthContext";
 import { useWorkspace } from "../workspace/WorkspaceContext";
@@ -15,7 +16,7 @@ import type { ColumnDefinition } from "../types";
 import type { UseQueryResult } from "@tanstack/react-query";
 
 const PALETTE = [
-  { from: "#009A44", to: "#007A36", light: "#E8F7EE", text: "#005C28" },
+  { from: "#0EA5E9", to: "#0284C7", light: "#E0F2FE", text: "#075985" },
   { from: "#F5821F", to: "#D96C10", light: "#FFF3E8", text: "#9A4400" },
   { from: "#6366F1", to: "#4F46E5", light: "#EEF2FF", text: "#3730A3" },
   { from: "#0EA5E9", to: "#0284C7", light: "#F0F9FF", text: "#075985" },
@@ -32,7 +33,7 @@ function dsColor(name: string) {
 }
 
 const BOX_COLORS = [
-  "#009A44","#3B82F6","#F5821F","#8B5CF6","#0EA5E9",
+  "#0EA5E9","#3B82F6","#F5821F","#8B5CF6","#0EA5E9",
   "#EC4899","#14B8A6","#F59E0B","#6366F1","#10B981",
 ];
 function normKw(s: string) { return s.toLowerCase().replace(/\s+/g, "_"); }
@@ -161,6 +162,7 @@ export default function WorkspaceView() {
   const [showSchema, setShowSchema] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showRelManager, setShowRelManager] = useState(false);
 
   // Resolve workspace info from the list
   const { data: allWorkspaces = [] } = useQuery({
@@ -183,6 +185,12 @@ export default function WorkspaceView() {
     queryFn: () => getDatasets({ workspace_id: workspaceId }),
     enabled: !!workspaceId,
   });
+
+  // Toggle persistente para mostrar tablas intermedias (puentes N:N)
+  const [showBridges, setShowBridges] = useState(() => localStorage.getItem("dv_show_bridges") === "1");
+  useEffect(() => { localStorage.setItem("dv_show_bridges", showBridges ? "1" : "0"); }, [showBridges]);
+  const bridgesCount = datasets.filter((d) => d.is_bridge).length;
+  const visibleDatasets = showBridges ? datasets : datasets.filter((d) => !d.is_bridge);
 
   const colQueries = useQueries({
     queries: datasets.map((ds) => ({
@@ -230,8 +238,8 @@ export default function WorkspaceView() {
       <header className="app-header" style={{ gap: 4 }}>
         {/* Brand */}
         <button className="app-brand-btn" onClick={() => { setCurrent(null); navigate("/"); }}>
-          <div className="app-header-logo">T</div>
-          <span className="app-header-name">Trans<em>Excel</em></span>
+          <div className="app-header-logo app-header-logo--img"><img src="/opsgrid-logo.svg" alt="OpsGrid" /></div>
+          <span className="app-header-name">Ops<em>Grid</em></span>
         </button>
 
         {/* Breadcrumb */}
@@ -289,6 +297,13 @@ export default function WorkspaceView() {
               <button className="btn btn-secondary" onClick={() => setShowSchema(true)}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="3" width="6" height="6" rx="1"/><rect x="3" y="15" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><path d="M9 6h6M6 9v6M18 9v6M9 18h6"/></svg>
                 Diagrama
+              </button>
+            )}
+            {canManage && datasets.length > 1 && (
+              <button className="btn btn-secondary" onClick={() => setShowRelManager(true)}
+                style={{ borderColor: "#7C3AED", color: "#7C3AED" }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M9 6h6a3 3 0 0 1 3 3v6"/></svg>
+                Relaciones
               </button>
             )}
             {canManage && (
@@ -400,21 +415,48 @@ export default function WorkspaceView() {
         />
       )}
 
+      <RelationsManagerModal
+        open={showRelManager}
+        onClose={() => setShowRelManager(false)}
+        workspaceId={workspaceId}
+      />
+
       <main className="page" style={{ paddingTop: 28 }}>
+        {bridgesCount > 0 && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: 10, marginBottom: 14,
+            padding: "8px 14px", borderRadius: 8,
+            background: showBridges ? "var(--color-primary-bg)" : "var(--color-bg)",
+            border: `1px solid ${showBridges ? "var(--color-primary)" : "var(--color-border)"}`,
+          }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13 }}>
+              <input
+                type="checkbox"
+                checked={showBridges}
+                onChange={(e) => setShowBridges(e.target.checked)}
+              />
+              <span style={{ fontWeight: 600 }}>Mostrar tablas intermedias</span>
+              <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>
+                ({bridgesCount} oculta{bridgesCount !== 1 ? "s" : ""})
+              </span>
+            </label>
+          </div>
+        )}
         {isLoading ? (
           <div className="ds-grid">{[1, 2, 3].map((n) => <SkeletonCard key={n} />)}</div>
-        ) : datasets.length === 0 ? (
+        ) : visibleDatasets.length === 0 ? (
           <div className="ds-empty" onClick={() => navigate("/create")}>
             <div className="ds-empty-icon">🗄️</div>
-            <h3>Sin datasets todavía</h3>
-            <p>Haz clic para crear tu primer dataset</p>
+            <h3>{datasets.length === 0 ? "Sin datasets todavía" : "Solo hay tablas intermedias"}</h3>
+            <p>{datasets.length === 0 ? "Haz clic para crear tu primer dataset" : "Marca el toggle de arriba para verlas"}</p>
           </div>
         ) : (
           <div className="ds-grid">
-            {datasets.map((ds, i) => {
+            {visibleDatasets.map((ds) => {
+              const origIdx = datasets.indexOf(ds);
               const color = dsColor(ds.name);
-              const colCount = colQueries[i]?.data?.length ?? null;
-              const recCount = recQueries[i]?.data ?? null;
+              const colCount = colQueries[origIdx]?.data?.length ?? null;
+              const recCount = recQueries[origIdx]?.data ?? null;
               return (
                 <article key={ds.id} className="ds-card"
                   onClick={() => navigate(`/datasets/${ds.id}`)}

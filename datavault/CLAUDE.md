@@ -155,19 +155,41 @@ POST   /datasets/{id}/records/bulk-delete   body: {ids: [...]}
 
 | data_type | Reglas disponibles |
 |-----------|--------------------|
-| text      | required |
-| number    | required, min, max |
+| text / long_text  | required, unique, regex |
+| number / currency / percent / rating | required, min, max, currency_symbol, max_rating |
 | date      | required |
 | enum      | required, options: ["A","B",...] |
+| multiselect | options: ["A","B",...] |
 | boolean   | — |
+| email / phone / url | required |
+| **relation** (N:N unificado) | required, **related_dataset_id**, **display_field** |
 
-## Columnas vinculadas (joins en frontend)
+**Modelo unificado N:N** (mayo 2026): TODAS las columnas `data_type=relation` guardan
+sus valores como **array JSONB** (ej. `["Y00313", "Y00421"]`), no escalares.
+- Array de 1 elemento = relación 1:N (caso típico)
+- Array de N elementos = relación N:N (mismo modelo, distinta cardinalidad efectiva)
+- El cambio `data_type → relation` migra automáticamente valores escalares existentes
+  a arrays de 1 elemento (`update_column` en `routers/columns.py`)
 
-La detección automática de relaciones se basa en `field_key`:
-- Una columna `id_<keyword>` en el dataset actual → apunta al dataset cuyo nombre termina en `<keyword>`
-- El lookup usa `r.id` del dataset origen (sentinel `"__id__"`) — no un campo de `r.data`
+## Detección y matching de relaciones
 
-Ejemplo: `Producto.id_proveedor` → detecta `Proveedor`, muestra campos de ese registro.
+### Scanner avanzado (`GET /datasets/relationships/scan`)
+Detecta relaciones automáticamente cruzando todos los datasets accesibles:
+- **Name match**: campos `id_X` / `cod_X` / `X_id` donde X matchea nombre del target
+- **Content match**: compara los valores reales del campo contra los de cada
+  columna "tipo clave" del target (set intersection + containment coefficient)
+- **Normalización**: tilde-insensible + case-insensitive (`_norm()` en datasets.py)
+- **Detección de tabla puente**: cuando un bridge tiene 2 columnas relation a otros
+  dos datasets, sugiere la N:N directa entre ellos
+- **Self-FK**: detecta auto-referencias dentro del mismo dataset
+- **Cleanup suggestions**: detecta variantes (mismo valor en mayúsculas/tildes
+  distintas) y propone normalizar con `POST /datasets/{id}/columns/{col_id}/normalize-values`
+
+### Joins en frontend (DataGrid)
+- `JoinedColDef` soporta `via?: { bridgeDatasetId, bridgeFkToLocal, bridgeFkToSource }`
+- Cuando hay `via`, hace lookup 2-step (currentRow → bridge → source)
+- El editor multi-chip (`CellEditor.tsx`) usa server-side search con debounce 220ms
+  contra `GET /datasets/{id}/records?search=…&limit=1000`
 
 ## Datos de desarrollo (setup_seed.py)
 
@@ -260,20 +282,21 @@ ALLOWED_ORIGINS=http://localhost:5173
   ```
 
 ## Rutas frontend completas
-| Ruta | Página |
-|------|--------|
-| `/` | DatasetList |
-| `/create` | CreateDataset |
-| `/scripts` | ScriptsHub |
-| `/computed/new` | ComputedDatasetEditor (nuevo) |
-| `/datasets/:id/computed` | ComputedDatasetEditor (editar) |
-| `/datasets/:id` | DatasetView |
-| `/datasets/:id/new` | RecordForm |
-| `/ws/:workspaceId` | WorkspaceView |
-| `/admin/users` | AdminUsers |
-| `/admin/audit` | AdminAudit |
-| `/admin/groups` | AdminGroups |
-| `/admin/workspaces` | AdminWorkspaces |
+| Ruta | Página | Acceso |
+|------|--------|--------|
+| `/` | DatasetList | Cualquier user |
+| `/create` | CreateDataset | editor+ |
+| `/scripts` | ScriptsHub | editor+ |
+| `/computed/new` | ComputedDatasetEditor (nuevo) | editor+ |
+| `/datasets/:id/computed` | ComputedDatasetEditor (editar) | editor+ |
+| `/datasets/:id` | DatasetView | viewer+ (depende de permisos) |
+| `/datasets/:id/new` | RecordForm | editor+ |
+| `/ws/:workspaceId` | WorkspaceView | miembro del workspace |
+| `/admin/workspaces` | **AdminWorkspaces** (hub IA) — 5 tabs: Equipo / Grupos / Datasets / Permisos / Configuración | admin global / owner / admin_ws |
+| `/admin/permissions` | **AdminPermissions** (Centro de permisos cross-workspace) — 4 tabs: Por workspace / grupo / usuario / dataset | **solo admin global** |
+| `/admin/users` | AdminUsers | admin global / owner / admin_ws |
+| `/admin/audit` | AdminAudit | admin global |
+| `/admin/groups` | (deprecado, banner redirige a /admin/workspaces) | admin global / owner / admin_ws |
 
 ## Feature 3: Workspaces (Equipos)
 
@@ -460,6 +483,39 @@ El frontend (S3) recibe todo por defecto. Estos paths se proxean al ALB/backend:
 3. `29e5809b0914_dataset_permissions_and_gin_index`
 4. `c3f7a2b8d91e_groups_and_computed_datasets`
 5. `d4e8f1a2b3c5_add_workspaces`
+6. `4d9b3e33f961_pii_audit_perm_audit_log`
+7. `f7a8b9c0d1e2_performance_indexes`
+8. `e1f2a3b4c5d6_permission_audit_log`
+9. `a1b2c3d4e5f6_api_tokens_webhooks_sandbox`
+10. `b3d4e5f6a7c8_dataset_is_bridge` — flag para marcar tablas intermedias N:N (ocultas por defecto en la lista principal)
+
+## Features nuevas (Mayo–Junio 2026)
+
+### Feature 4: Relaciones N:N unificadas (modelo Airtable-style)
+- TODAS las columnas `relation` guardan arrays JSONB (ver sección "Tipos de columna")
+- Cell editor multi-chip con autocomplete server-side (debounce 220ms)
+- Auto-migración escalar → array al cambiar data_type a relation
+- Tabla intermedia opcional (`is_bridge=true`) solo cuando se necesita guardar
+  **atributos del vínculo** (cantidad, fecha, monto)
+- Wizard "Crear tabla intermedia con atributos" en el gestor de relaciones
+- `RelationsManagerModal` con tabs: Relaciones activas / Tablas intermedias / Crear N:N
+
+### Feature 5: Permisos invertidos + Hub administrativo
+- Endpoint `GET /groups/{id}/dataset-access` — datasets a los que el grupo tiene acceso
+- Endpoint `GET /auth/users/{id}/dataset-access` — rol efectivo del usuario por dataset
+  con origen (`direct` / `group:X` / `workspace:rol` / `global_admin`)
+- `DatasetAccessModal` editable: cambiar rol inline, quitar, agregar nuevo dataset
+- `/admin/workspaces` reorganizado como **hub workspace-centric** (Fase A)
+  con 5 tabs por workspace (Equipo, Grupos, Datasets, Permisos, Configuración)
+- `/admin/permissions` nuevo (Fase B) — **solo admin global** — vista cross-workspace:
+  matriz por workspace, listas planas por grupo/usuario/dataset
+
+### Feature 6: Sistema de relaciones mejorado (scanner v2)
+- Scanner detecta por contenido + nombre + tilde-insensible
+- Sugerencias de limpieza para valores con variantes (case/tildes)
+- Cardinalidad N:N visible en el diagrama global
+- Layout en cuadrícula cuando no hay relaciones
+- Datasets aislados separados del grafo conectado
 
 ## Tips Windows / Git Bash
 - `docker exec` con rutas absolutas: usar `//bin/ls //app/` (doble slash)

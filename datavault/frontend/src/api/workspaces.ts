@@ -12,7 +12,7 @@ export interface WorkspaceMember {
 export const getWorkspaces = () =>
   api.get<Workspace[]>("/workspaces").then((r) => r.data);
 
-export const createWorkspace = (body: { name: string; description?: string | null }) =>
+export const createWorkspace = (body: { name: string; description?: string | null; is_sandbox?: boolean }) =>
   api.post<Workspace>("/workspaces", body).then((r) => r.data);
 
 export const updateWorkspace = (id: string, body: { name?: string; description?: string }) =>

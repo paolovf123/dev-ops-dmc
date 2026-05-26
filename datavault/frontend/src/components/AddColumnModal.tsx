@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getDatasets, getColumns } from "../api/datasets";
 import type { ColumnDefinition } from "../types";
 import { useWorkspace } from "../workspace/WorkspaceContext";
+import { useEscapeKey } from "../utils/useEscapeKey";
 
 interface Props {
   onSave: (col: Omit<ColumnDefinition, "id" | "dataset_id" | "created_at">) => void;
@@ -54,7 +55,11 @@ export default function AddColumnModal({ onSave, onClose }: Props) {
   const [relatedDatasetId, setRelatedDatasetId] = useState("");
   const [displayField, setDisplayField]         = useState("");
   const [currencySymbol, setCurrencySymbol]     = useState("$");
+  const [unique, setUnique]                     = useState(false);
+  const [regex, setRegex]                       = useState("");
+  const [regexMessage, setRegexMessage]         = useState("");
   const [maxRating, setMaxRating]               = useState(5);
+  useEscapeKey(onClose);
 
   const { current: workspace } = useWorkspace();
   const wsId = workspace?.id;
@@ -102,6 +107,11 @@ export default function AddColumnModal({ onSave, onClose }: Props) {
     if (dataType === "relation") {
       rules.related_dataset_id = relatedDatasetId;
       if (displayField) rules.display_field = displayField;
+    }
+    if (unique && dataType !== "relation") rules.unique = true;
+    if (regex.trim() && dataType !== "relation") {
+      rules.regex = regex.trim();
+      if (regexMessage.trim()) rules.regex_message = regexMessage.trim();
     }
     onSave({ name, field_key: fieldKey, data_type: dataType, rules, position: 0 });
   };
@@ -292,13 +302,44 @@ export default function AddColumnModal({ onSave, onClose }: Props) {
           )}
 
           {dataType !== "relation" && (
-            <label className="checkbox-row-v2">
-              <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} />
-              <span className="checkbox-row-v2-text">
-                Campo requerido
-                <span>No permite guardar el registro si está vacío</span>
-              </span>
-            </label>
+            <>
+              <label className="checkbox-row-v2">
+                <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} />
+                <span className="checkbox-row-v2-text">
+                  Campo requerido
+                  <span>No permite guardar el registro si está vacío</span>
+                </span>
+              </label>
+              <label className="checkbox-row-v2">
+                <input type="checkbox" checked={unique} onChange={(e) => setUnique(e.target.checked)} />
+                <span className="checkbox-row-v2-text">
+                  Valor único
+                  <span>Bloquea registros con un valor que ya exista en este dataset</span>
+                </span>
+              </label>
+              <div className="form-group">
+                <label className="form-label">Patrón (regex) opcional</label>
+                <input
+                  value={regex}
+                  onChange={(e) => setRegex(e.target.value)}
+                  placeholder="Ej: ^[A-Z]{2}\d{4}$  o  ^\d{8}$"
+                  style={{ fontFamily: "var(--font-mono)", fontSize: 13 }}
+                />
+                <span style={{ fontSize: 11.5, color: "var(--color-text-muted)" }}>
+                  Si se define, el valor debe cumplir esta expresión regular.
+                </span>
+              </div>
+              {regex.trim() && (
+                <div className="form-group">
+                  <label className="form-label">Mensaje cuando no cumple</label>
+                  <input
+                    value={regexMessage}
+                    onChange={(e) => setRegexMessage(e.target.value)}
+                    placeholder="Ej: El DNI debe tener 8 dígitos"
+                  />
+                </div>
+              )}
+            </>
           )}
         </div>
 

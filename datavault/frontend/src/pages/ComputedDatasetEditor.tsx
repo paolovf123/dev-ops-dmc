@@ -296,8 +296,8 @@ export default function ComputedDatasetEditor() {
         <button className="btn btn-ghost" onClick={() => navigate(isNew ? "/" : `/datasets/${datasetId}`)}
           style={{ padding: "5px 8px", fontSize: 18 }}>←</button>
         <button className="app-brand-btn" onClick={() => navigate("/")}>
-          <div className="app-header-logo" style={{ width: 28, height: 28, fontSize: 13, borderRadius: "var(--radius-xs)" }}>T</div>
-          <span className="app-header-name">Trans<em>Excel</em></span>
+          <div className="app-header-logo" style={{ width: 28, height: 28, fontSize: 13, borderRadius: "var(--radius-xs)" }}><img src="/opsgrid-logo.svg" alt="OpsGrid" style={{ width: "100%", height: "100%" }} /></div>
+          <span className="app-header-name">Ops<em>Grid</em></span>
         </button>
         <div style={{ width: 1, height: 20, background: "var(--color-border)", margin: "0 6px" }} />
         <span style={{ fontWeight: 600, fontSize: 15 }}>

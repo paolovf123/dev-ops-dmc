@@ -21,6 +21,7 @@ class Workspace(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_sandbox: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     members: Mapped[list["WorkspaceMember"]] = relationship("WorkspaceMember", back_populates="workspace", cascade="all, delete-orphan")
@@ -88,6 +89,10 @@ class Dataset(Base):
     source_code: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_dataset_ids: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     last_computed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Bridge / junction table: dataset que existe SOLO para conectar N:N entre otros dos.
+    # Cuando es true, queda oculto de la lista principal por defecto.
+    is_bridge: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
     workspace: Mapped["Workspace | None"] = relationship("Workspace", back_populates="datasets")
     columns: Mapped[list["ColumnDefinition"]] = relationship("ColumnDefinition", back_populates="dataset", cascade="all, delete-orphan")
@@ -175,3 +180,39 @@ class ChangeHistory(Base):
     user_name: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     record: Mapped["Record"] = relationship("Record", back_populates="history")
+
+
+class ApiToken(Base):
+    """Token de API para integraciones externas. El valor solo se ve al crearlo;
+    en la BD solo guardamos el hash + un prefijo corto para identificarlo."""
+    __tablename__ = "api_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    prefix: Mapped[str] = mapped_column(String(12), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    scope: Mapped[str] = mapped_column(String(10), nullable=False, default="read")  # read | write
+    workspace_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+
+
+class Webhook(Base):
+    """Suscripción a eventos del workspace. Se envía POST con el evento serializado."""
+    __tablename__ = "webhooks"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True)
+    dataset_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("datasets.id", ondelete="CASCADE"), nullable=True)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    events: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)  # ["record.create","record.update","record.delete"]
+    secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_fired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fail_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")

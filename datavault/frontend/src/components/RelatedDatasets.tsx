@@ -67,28 +67,38 @@ export default function RelatedDatasets({ currentDatasetId, currentDatasetName, 
 
   const isLoadingCols = colQueries.some((q) => q.isLoading);
 
-  // ── PARENTS: current dataset has id_<kw> → points to another dataset ─────────
+  // ── PARENTS: a quién apunta el dataset actual ─────────────────────────────
+  //   1. Columnas data_type=relation con rules.related_dataset_id (confirmadas)
+  //   2. Columnas id_<kw> que matchean el nombre de otro dataset (heurístico)
+  const otherById = new Map(otherDatasets.map((d) => [d.id, d]));
   const parentRels = currentColumns
-    .filter((c) => c.field_key.startsWith("id_"))
     .map((c) => {
-      const refKw = c.field_key.slice(3); // "id_clientes" → "clientes"
-      const parentDs = otherDatasets.find((d) =>
-        keyword(d.name) === refKw ||
-        normalize(d.name) === refKw ||
-        normalize(d.name).endsWith(`_${refKw}`) ||
-        normalize(d.name).startsWith(`${refKw}_`)
-      );
-      return parentDs ? { ds: parentDs, fkKey: c.field_key } : null;
+      let ds: (typeof allDatasets)[0] | undefined;
+      if (c.data_type === "relation" && c.rules?.related_dataset_id) {
+        ds = otherById.get(c.rules.related_dataset_id);
+      } else if (c.field_key.startsWith("id_")) {
+        const refKw = c.field_key.slice(3);
+        ds = otherDatasets.find((d) =>
+          keyword(d.name) === refKw ||
+          normalize(d.name) === refKw ||
+          normalize(d.name).endsWith(`_${refKw}`) ||
+          normalize(d.name).startsWith(`${refKw}_`)
+        );
+      }
+      return ds ? { ds, fkKey: c.field_key } : null;
     })
     .filter(Boolean) as { ds: (typeof allDatasets)[0]; fkKey: string }[];
 
-  // ── CHILDREN: another dataset has id_<curKw> → references us ────────────────
+  // ── CHILDREN: quién apunta al dataset actual ──────────────────────────────
   const childRels = otherDatasets
     .map((ds, i) => {
       const cols = colQueries[i]?.data ?? [];
-      const fkCol = cols.find(
-        (c) => c.field_key === `id_${curKw}` || c.field_key.includes(curKw)
-      );
+      const fkCol = cols.find((c) => {
+        // 1. relation explícita apuntando al dataset actual
+        if (c.data_type === "relation" && c.rules?.related_dataset_id === currentDatasetId) return true;
+        // 2. heurístico id_<curKw>
+        return c.field_key === `id_${curKw}` || c.field_key.includes(curKw);
+      });
       return fkCol ? { ds, fkKey: fkCol.field_key } : null;
     })
     .filter(Boolean) as { ds: (typeof allDatasets)[0]; fkKey: string }[];

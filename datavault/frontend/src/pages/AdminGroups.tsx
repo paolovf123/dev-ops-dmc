@@ -9,12 +9,13 @@ import { useWorkspace } from "../workspace/WorkspaceContext";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/Toast";
 import UserMenu from "../components/UserMenu";
+import DatasetAccessModal from "../components/DatasetAccessModal";
 import type { UserGroup } from "../types";
 
 const GROUP_COLORS = [
   ["#6366F1","#818CF8"], ["#8B5CF6","#A78BFA"], ["#EC4899","#F472B6"],
   ["#F59E0B","#FCD34D"], ["#10B981","#34D399"], ["#0EA5E9","#38BDF8"],
-  ["#EF4444","#F87171"], ["#009A44","#34D399"],
+  ["#EF4444","#F87171"], ["#0EA5E9","#34D399"],
 ];
 function groupColor(name: string) {
   let h = 0;
@@ -79,6 +80,7 @@ export default function AdminGroups() {
   const { current } = useWorkspace();
 
   const [selectedGroup, setSelectedGroup] = useState<UserGroup | null>(null);
+  const [showAccessFor, setShowAccessFor] = useState<{ kind: "group" | "user"; id: string; name: string } | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
@@ -217,11 +219,28 @@ export default function AdminGroups() {
 
   return (
     <>
+      {/* Banner: aviso de mudanza */}
+      <div style={{
+        background: "#FEF3C7", borderBottom: "1px solid #FCD34D",
+        padding: "10px 20px", fontSize: 13,
+        display: "flex", alignItems: "center", gap: 10, justifyContent: "center",
+      }}>
+        💡 <strong>La gestión de grupos se movió.</strong>
+        Ahora vivís cada grupo dentro de su workspace en
+        <button onClick={() => navigate("/admin/workspaces")}
+          style={{
+            background: "#D97706", color: "#fff", border: "none", borderRadius: 4,
+            padding: "3px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+          }}>
+          /admin/workspaces
+        </button>
+        <span style={{ color: "var(--color-text-muted)" }}>(tab "🔗 Grupos" del workspace).</span>
+      </div>
       {/* ── Header ── */}
       <header className="app-header" style={{ gap: 4 }}>
         <button className="app-brand-btn" onClick={() => navigate("/")}>
-          <div className="app-header-logo">T</div>
-          <span className="app-header-name">Trans<em>Excel</em></span>
+          <div className="app-header-logo app-header-logo--img"><img src="/opsgrid-logo.svg" alt="OpsGrid" /></div>
+          <span className="app-header-name">Ops<em>Grid</em></span>
         </button>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" style={{ flexShrink: 0, margin: "0 2px" }}>
           <polyline points="9 18 15 12 9 6"/>
@@ -236,7 +255,7 @@ export default function AdminGroups() {
             { title: "Usuarios",  path: managedWsId ? `/admin/users?workspace_id=${managedWsId}` : "/admin/users", icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg> },
             ...(isAdmin ? [{ title: "Auditoría", path: "/admin/audit", icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> }] : []),
           ].map(({ title, path, icon }) => (
-            <button key={path} onClick={() => navigate(path)}
+            <button key={title} onClick={() => navigate(path)}
               style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 10px", height:34, borderRadius:7, background:"transparent", border:"1.5px solid transparent", cursor:"pointer", color:"var(--color-text-secondary)", fontSize:12.5, fontWeight:600, transition:"all 0.14s", whiteSpace:"nowrap" }}
               onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.background="var(--color-border-light)"; el.style.borderColor="var(--color-border)"; el.style.color="var(--color-text)"; }}
               onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.background="transparent"; el.style.borderColor="transparent"; el.style.color="var(--color-text-secondary)"; }}
@@ -412,6 +431,16 @@ export default function AdminGroups() {
                     {selectedGroup.description && (
                       <p style={{ margin:"4px 0 0", fontSize:13, color:"var(--color-text-muted)" }}>{selectedGroup.description}</p>
                     )}
+                    <button
+                      onClick={() => setShowAccessFor({ kind: "group", id: selectedGroup.id, name: selectedGroup.name })}
+                      style={{
+                        marginTop: 8, padding: "5px 12px", fontSize: 12, fontWeight: 600,
+                        background: "var(--color-primary-bg)", color: "var(--color-primary)",
+                        border: "1px solid var(--color-primary)", borderRadius: 6,
+                        cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
+                      }}>
+                      🔓 Ver datasets accesibles
+                    </button>
                   </div>
                   {/* Mini stats */}
                   <div style={{ display:"flex", gap:0, borderLeft:"1px solid var(--color-border)", marginLeft:8 }}>
@@ -624,6 +653,15 @@ export default function AdminGroups() {
           )}
         </div>
       </div>
+
+      {showAccessFor && (
+        <DatasetAccessModal
+          open={!!showAccessFor}
+          onClose={() => setShowAccessFor(null)}
+          subject={showAccessFor}
+          workspaceId={showAccessFor.kind === "group" ? (selectedGroup?.workspace_id ?? undefined) : undefined}
+        />
+      )}
     </>
   );
 }

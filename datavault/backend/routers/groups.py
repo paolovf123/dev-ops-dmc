@@ -3,8 +3,9 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from pydantic import BaseModel
 from database import get_db
-from models import UserGroup, UserGroupMember, User
+from models import UserGroup, UserGroupMember, User, Dataset, DatasetGroupPermission
 from schemas import GroupCreate, GroupUpdate, GroupOut, GroupMemberOut, AddMemberBody
 from auth import require_admin, get_current_user, effective_workspace_role
 
@@ -227,3 +228,68 @@ async def remove_member(
         await db.delete(member)
         await db.commit()
         logger.info("group_member_removed group=%s user=%s by=%s", group_id, user_id, current_user.id)
+
+
+# ── Matriz invertida: datasets accesibles por grupo ────────────────────────────
+
+class GroupDatasetAccessOut(BaseModel):
+    dataset_id: uuid.UUID
+    dataset_name: str
+    workspace_id: uuid.UUID | None
+    workspace_name: str | None
+    role: str  # "admin" | "editor" | "viewer" | "none"
+    is_bridge: bool = False
+
+
+@router.get("/{group_id}/dataset-access", response_model=list[GroupDatasetAccessOut])
+async def list_group_dataset_access(
+    group_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Lista todos los datasets a los que este grupo tiene permiso explícito.
+    Incluye el rol concreto (admin/editor/viewer/none) y el workspace al que pertenece cada dataset.
+    Admin global ve todo. Miembros del grupo (o admins de su workspace) pueden verla."""
+    group = await _get_group_or_404(group_id, db)
+    # Permisos para ver: admin global, miembros del grupo, owners/admins del workspace del grupo
+    if current_user.role != "admin":
+        is_member = await db.execute(
+            select(UserGroupMember).where(
+                UserGroupMember.group_id == group_id,
+                UserGroupMember.user_id == current_user.id,
+            )
+        )
+        ok = is_member.scalar_one_or_none() is not None
+        if not ok and group.workspace_id:
+            ws_role = await effective_workspace_role(current_user, group.workspace_id, db)
+            ok = ws_role in ("owner", "admin_ws")
+        if not ok:
+            raise HTTPException(status_code=403, detail="Sin acceso a este grupo")
+
+    # Join: dataset_group_permissions + datasets
+    rows = await db.execute(
+        select(DatasetGroupPermission, Dataset)
+        .join(Dataset, DatasetGroupPermission.dataset_id == Dataset.id)
+        .where(DatasetGroupPermission.group_id == group_id)
+        .order_by(Dataset.name)
+    )
+    pairs = rows.all()
+    # Lookup workspaces para nombres
+    from models import Workspace
+    ws_ids = {d.workspace_id for _, d in pairs if d.workspace_id}
+    ws_map = {}
+    if ws_ids:
+        ws_rows = await db.execute(select(Workspace).where(Workspace.id.in_(ws_ids)))
+        ws_map = {w.id: w.name for w in ws_rows.scalars().all()}
+
+    out: list[GroupDatasetAccessOut] = []
+    for perm, ds in pairs:
+        out.append(GroupDatasetAccessOut(
+            dataset_id=ds.id,
+            dataset_name=ds.name,
+            workspace_id=ds.workspace_id,
+            workspace_name=ws_map.get(ds.workspace_id) if ds.workspace_id else None,
+            role=perm.role,
+            is_bridge=ds.is_bridge,
+        ))
+    return out

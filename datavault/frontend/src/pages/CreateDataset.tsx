@@ -5,6 +5,8 @@ import * as XLSX from "xlsx";
 import { createDataset, createColumn } from "../api/datasets";
 import client from "../api/client";
 import type { ColumnDefinition } from "../types";
+import ImportExcelModal from "../components/ImportExcelModal";
+import { useWorkspace } from "../workspace/WorkspaceContext";
 
 interface ColDraft {
   uid: string;
@@ -245,6 +247,9 @@ export default function CreateDataset() {
   const [saving, setSaving] = useState(false);
   const [nameError, setNameError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { current: currentWorkspace } = useWorkspace();
+  // Cuando el Excel tiene 2+ hojas, abrimos ImportExcelModal con el archivo preseleccionado
+  const [multiSheetFile, setMultiSheetFile] = useState<File | null>(null);
 
   const updateCol = (uid: string, patch: Partial<ColDraft>) =>
     setCols((prev) =>
@@ -268,6 +273,23 @@ export default function CreateDataset() {
   const handleFile = async (file: File) => {
     setImportStatus(`Leyendo ${file.name}…`);
     try {
+      // Para Excel chequeamos cuántas hojas tiene. Si son 2+, derivamos al
+      // ImportExcelModal que sabe importar varias hojas como datasets distintos.
+      const isExcel = /\.(xlsx|xls|xlsm)$/i.test(file.name);
+      if (isExcel) {
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type: "array", bookSheets: true });
+        const nonEmptySheets = wb.SheetNames.filter((n) => {
+          // Si no podemos leer el sheet sin contenido, asumimos que sí tiene
+          const s = wb.Sheets?.[n];
+          return !s || true; // bookSheets=true no carga celdas; tratamos todas como válidas
+        });
+        if (nonEmptySheets.length > 1) {
+          setMultiSheetFile(file);
+          setImportStatus(`${nonEmptySheets.length} hojas detectadas — abriendo importador múltiple…`);
+          return;
+        }
+      }
       const parsed = await parseFile(file);
       setCols(parsed.inferredCols);
       setImportedRows(parsed.rows);
@@ -440,6 +462,24 @@ export default function CreateDataset() {
             </button>
           </div>
         </main>
+
+        <ImportExcelModal
+          open={!!multiSheetFile}
+          onClose={() => { setMultiSheetFile(null); setImportStatus(""); }}
+          workspaceId={currentWorkspace?.id}
+          initialFile={multiSheetFile}
+          onSuccess={(datasetId) => {
+            setMultiSheetFile(null);
+            qc.invalidateQueries({ queryKey: ["datasets"] });
+            navigate(`/datasets/${datasetId}`);
+          }}
+          onMultiSuccess={(summary) => {
+            setMultiSheetFile(null);
+            qc.invalidateQueries({ queryKey: ["datasets"] });
+            if (summary.firstId) navigate(`/datasets/${summary.firstId}`);
+            else navigate("/");
+          }}
+        />
       </>
     );
   }
@@ -450,8 +490,8 @@ export default function CreateDataset() {
       <header className="app-header">
         <button className="btn btn-ghost" onClick={() => navigate("/")} style={{ padding: "5px 8px", fontSize: 18 }}>←</button>
         <button className="app-brand-btn" onClick={() => navigate("/")}>
-          <div className="app-header-logo" style={{ width: 28, height: 28, fontSize: 13, borderRadius: "var(--radius-xs)" }}>T</div>
-          <span className="app-header-name">Trans<em>Excel</em></span>
+          <div className="app-header-logo" style={{ width: 28, height: 28, fontSize: 13, borderRadius: "var(--radius-xs)" }}><img src="/opsgrid-logo.svg" alt="OpsGrid" style={{ width: "100%", height: "100%" }} /></div>
+          <span className="app-header-name">Ops<em>Grid</em></span>
         </button>
         <div style={{ width: 1, height: 20, background: "var(--color-border)", margin: "0 6px" }} />
         <span style={{ fontWeight: 600, fontSize: 15 }}>Nuevo dataset</span>
