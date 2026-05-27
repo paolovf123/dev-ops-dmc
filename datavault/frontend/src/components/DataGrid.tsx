@@ -16,6 +16,7 @@ export interface JoinLookup {
 export interface ExtraColumn {
   uid: string;
   header: string;
+  title?: string;   // texto completo "Origen › Columna" para el tooltip
   fkKey: string;
   lookup: JoinLookup;
   onRemove: () => void;
@@ -103,12 +104,12 @@ function renderCellValue(col: ColumnDefinition, cellVal: unknown): React.ReactNo
         : String(cellVal).split(",").map((s) => s.trim()).filter(Boolean);
       if (vals.length === 0) return "—";
       return (
-        <span style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+        <span style={{ display: "flex", gap: 3, alignItems: "center", overflow: "hidden" }}>
           {vals.map((v) => (
             <span key={v} style={{
-              fontSize: 10, fontWeight: 600, padding: "1px 7px", borderRadius: 99,
-              background: "#E0F2FE", color: "var(--color-primary)",
-              border: "1px solid #BAE6FD",
+              fontSize: 11.5, fontWeight: 500, padding: "2px 8px", borderRadius: 6,
+              background: "#EFF8FF", color: "var(--color-primary)",
+              border: "1px solid #BAE6FD", whiteSpace: "nowrap", flexShrink: 0,
             }}>{v}</span>
           ))}
         </span>
@@ -123,13 +124,13 @@ function renderCellValue(col: ColumnDefinition, cellVal: unknown): React.ReactNo
         : [String(cellVal)].filter(Boolean);
       if (vals.length === 0) return "—";
       return (
-        <span style={{ display: "flex", flexWrap: "wrap", gap: 3, alignItems: "center" }}>
+        <span style={{ display: "flex", gap: 3, alignItems: "center", overflow: "hidden" }}>
           {vals.map((v, i) => (
             <span key={`${v}-${i}`} style={{
-              fontSize: 10.5, fontWeight: 600, padding: "1px 7px", borderRadius: 99,
-              background: "#FCE7F3", color: "#DB2777",
-              border: "1px solid #FBCFE8",
-              maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              fontSize: 11.5, fontWeight: 500, padding: "2px 8px", borderRadius: 6,
+              background: "#FDF2F8", color: "#BE185D",
+              border: "1px solid #FBCFE8", flexShrink: 0,
+              maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
             }} title={v}>{v}</span>
           ))}
         </span>
@@ -787,15 +788,11 @@ export default function DataGrid({
                         </div>
                       )}
                       <span className="th-inner">
-                        {onReorderAny && (
-                          <span className="col-drag-handle" title="Arrastrar para reordenar" onClick={(e) => e.stopPropagation()}>⠿</span>
-                        )}
                         <span className="th-col-name">{col.name}</span>
                         <span className="th-col-right">
-                          <span className={`col-type col-type-${col.data_type}`}>{col.data_type}</span>
                           <SortIcon active={sortKey === col.field_key} dir={sortDir} />
                           <button
-                            className="col-filter-btn"
+                            className={`col-filter-btn${filterActive ? " is-active" : ""}`}
                             title={filterActive ? `Filtro activo (${visualFilters[col.field_key].size})` : "Filtrar valores"}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -868,15 +865,15 @@ export default function DataGrid({
                   return (
                     <th key={uCol.id}
                       className={`th-joined${isOver ? " th-drag-over" : ""}`}
+                      title={ec.title ?? ec.header}
                       {...dndProps}>
                       <span className="th-inner">
-                        {onReorderAny && (
-                          <span className="col-drag-handle" title="Arrastrar para reordenar">⠿</span>
-                        )}
-                        <span>{ec.header}</span>
+                        <span className="th-col-name">{ec.header}</span>
+                        <span className="th-col-right">
+                          <button onClick={ec.onRemove} title="Quitar columna vinculada" className="col-del-btn"
+                            style={{ color: "var(--pm-orange-600)" }}>×</button>
+                        </span>
                       </span>
-                      <button onClick={ec.onRemove} title="Quitar columna vinculada" className="col-del-btn"
-                        style={{ color: "var(--pm-orange-600)" }}>×</button>
                     </th>
                   );
                 }
@@ -889,15 +886,14 @@ export default function DataGrid({
                       title={`=${fc.formula}`}
                       {...dndProps}>
                       <span className="th-inner">
-                        {onReorderAny && (
-                          <span className="col-drag-handle" title="Arrastrar para reordenar">⠿</span>
-                        )}
-                        <span><span style={{ marginRight: 4 }}>ƒ</span>{fc.name}</span>
+                        <span className="th-col-name"><span style={{ marginRight: 4 }}>ƒ</span>{fc.name}</span>
+                        <span className="th-col-right">
+                          {onRemoveFormula && (
+                            <button onClick={() => onRemoveFormula(fc.uid)} title="Quitar columna calculada"
+                              className="col-del-btn" style={{ color: "var(--pm-violet-600)" }}>×</button>
+                          )}
+                        </span>
                       </span>
-                      {onRemoveFormula && (
-                        <button onClick={() => onRemoveFormula(fc.uid)} title="Quitar columna calculada"
-                          className="col-del-btn" style={{ color: "var(--pm-violet-600)" }}>×</button>
-                      )}
                     </th>
                   );
                 }
@@ -1055,9 +1051,14 @@ export default function DataGrid({
 
                   if (uCol.type === 'extra') {
                     const ec = uCol.ec;
+                    const jv = ec.lookup.get(ec.fkKey === "__id__" ? rec.id : String(rec.data[ec.fkKey] ?? ""));
                     return (
                       <td key={uCol.id} className="td-joined">
-                        {ec.lookup.get(ec.fkKey === "__id__" ? rec.id : String(rec.data[ec.fkKey] ?? "")) ?? <span style={{ color: "var(--color-text-muted)" }}>—</span>}
+                        <span className="cell-inner">
+                          {jv
+                            ? <span className="joined-val" title={jv}>{jv}</span>
+                            : <span className="cell-empty">—</span>}
+                        </span>
                       </td>
                     );
                   }
@@ -1066,7 +1067,9 @@ export default function DataGrid({
                     const fc = uCol.fc;
                     return (
                       <td key={uCol.id} className="td-formula">
-                        <FormulaCell formula={fc.formula} data={rec.data as Record<string, unknown>} />
+                        <span className="cell-inner">
+                          <FormulaCell formula={fc.formula} data={rec.data as Record<string, unknown>} />
+                        </span>
                       </td>
                     );
                   }

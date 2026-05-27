@@ -698,8 +698,19 @@ input::placeholder { color: var(--color-text-muted); }
   border-bottom: 1px solid var(--color-border-light);
   color: var(--color-text);
   cursor: text;
+  vertical-align: middle;
   transition: background 0.08s;
 }
+/* Contenido de celda unificado: una sola línea, centrado y truncado de forma
+   idéntica en columnas normales, vinculadas y calculadas (evita desalineación). */
+.data-table td .cell-inner {
+  display: block;
+  max-width: 360px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.data-table td .cell-empty { color: var(--color-text-muted); }
 .data-table tbody tr:last-child td { border-bottom: none; }
 .data-table tbody tr:hover td {
   background: #F0FDF7;
@@ -770,8 +781,14 @@ input::placeholder { color: var(--color-text-muted); }
   flex-shrink: 0;
 }
 .sort-icon { font-size: 11px; transition: opacity 0.15s, color 0.15s; }
-.sort-icon--inactive { opacity: 0.2; }
+.sort-icon--inactive { opacity: 0; }
+.th-sortable:hover .sort-icon--inactive { opacity: 0.4; }
 .sort-icon--active { opacity: 1; color: var(--color-primary); }
+
+/* Botón de filtro: oculto, aparece en hover (o si hay filtro activo) — declutter */
+.col-filter-btn { opacity: 0; transition: opacity 0.12s; }
+.th-sortable:hover .col-filter-btn { opacity: 0.55; }
+.col-filter-btn.is-active { opacity: 1 !important; }
 
 /* Column delete button — inline in flex row, no absolute */
 .col-del-btn {
@@ -1141,13 +1158,26 @@ tr:hover .row-del-btn { opacity: 1; }
   background: var(--pm-orange-50) !important;
   color: var(--pm-orange-600) !important;
   border-left: 2px solid var(--pm-orange-500) !important;
+  cursor: grab;
 }
+.data-table th.th-joined:active { cursor: grabbing; }
 .data-table td.td-joined {
   border-left: 2px solid #FDE8D0;
-  color: var(--color-text-secondary);
-  font-size: 13px;
+  background: #FFFCF8;
 }
-.data-table tr:hover td.td-joined { background: #FFF5EC; }
+.data-table tr:hover td.td-joined { background: #FFF9F2; }
+/* Valor vinculado (lookup): texto plano, como Airtable — el borde naranja de la
+   columna ya indica que viene de otra tabla, no hace falta pintar cada valor. */
+.joined-val {
+  display: inline-block;
+  max-width: 100%;
+  color: var(--color-text);
+  font-size: 13.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
 
 /* ─── Related datasets section ──────────────────────────────────────────────── */
 .related-section {
@@ -1309,11 +1339,13 @@ tr:hover .row-del-btn { opacity: 1; }
   background: var(--pm-violet-50) !important;
   color: var(--pm-violet-600) !important;
   border-left: 2px solid var(--pm-violet-500) !important;
+  cursor: grab;
 }
+.data-table th.th-formula:active { cursor: grabbing; }
 .data-table td.td-formula {
   border-left: 2px solid var(--pm-violet-100);
   color: var(--color-text-secondary);
-  font-size: 13px;
+  background: #FCFBFE;
 }
 .data-table tr:hover td.td-formula { background: var(--pm-violet-50); }
 .formula-badge-small {
@@ -1573,8 +1605,12 @@ td.cell-focused {
 }
 
 /* ─── Row history button ──────────────────────────────────────────────────── */
+/* Columna de acciones = relleno flexible: absorbe el espacio sobrante para que
+   las columnas de datos se ajusten a su contenido (en vez de estirarse y dejar
+   celdas medio vacías). Cuando la tabla scrollea (muchas columnas) queda mínima. */
 .col-actions {
-  width: 70px;
+  width: 100%;
+  min-width: 70px;
   padding-left: 4px !important;
   padding-right: 10px !important;
   text-align: right;

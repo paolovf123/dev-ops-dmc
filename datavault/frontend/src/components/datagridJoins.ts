@@ -49,7 +49,8 @@ export function buildExtraColumn(
     });
     return {
       uid: def.uid,
-      header: `${def.sourceDatasetName} › ${def.displayName} (vía ${def.via.bridgeDatasetName})`,
+      header: def.displayName,
+      title: `${def.sourceDatasetName} › ${def.displayName} (vía ${def.via.bridgeDatasetName})`,
       fkKey: def.localFkKey,
       lookup,
       onRemove,
@@ -84,7 +85,8 @@ export function buildExtraColumn(
   };
   return {
     uid: def.uid,
-    header: `${def.sourceDatasetName} › ${def.displayName}`,
+    header: def.displayName,
+    title: `${def.sourceDatasetName} › ${def.displayName}`,
     fkKey: def.localFkKey,
     lookup,
     onRemove,
