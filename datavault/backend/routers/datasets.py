@@ -763,6 +763,11 @@ def _name_matches(keyword: str, dataset_name: str) -> bool:
 
 # Tope alto para valores únicos por columna candidata (cubre tablas reales sin OOM)
 _SCAN_DISTINCT_LIMIT = 50000
+# Cardinalidad mínima para que una columna clave sea destino de relación. Por debajo
+# de esto es un dominio enum (sexo=2, estado_civil=5, tipo_documento=3), no una llave
+# de entidad — relacionarse contra un enum no es una FK útil. Distritos (~25), códigos
+# (cientos) y catálogos reales quedan por encima del piso.
+_MIN_KEY_CARDINALITY = 8
 # Penalización para datasets que parezcan respaldos / copias / versiones antiguas —
 # un humano espera vincular contra el dataset principal, no contra su backup.
 _BACKUP_HINTS = ("backup", "_bak", "_old", "copy", "_copia", "draft", "_v0", "_v1", "archivo", "_archived")
@@ -959,22 +964,23 @@ def _build_relation_candidates(datasets, sd: _ScanData, min_content_ratio: float
                     if ratio_id > best_ratio:
                         best_ratio, best_matched, best_field = ratio_id, matched_id, "__id__"
 
-                # Iterar TODAS las columnas del target (no solo key_cols) detecta catálogos.
-                tgt_key_set = set(sd.key_cols_by_ds[tgt.id])
-                for tgt_col_obj in sd.cols_by_ds[tgt.id]:
-                    tgt_col = tgt_col_obj.field_key
+                # Solo las columnas CLAVE (únicas/casi-únicas) del target cuentan como
+                # destino de relación: una FK referencia un identificador único. Matchear
+                # contra una columna NO-clave (sexo, estado_civil, distrito) es vocabulario
+                # compartido, no una relación → se ignora. Los catálogos legítimos tienen su
+                # columna de nombre casi-única, así que igual caen en key_cols y se detectan.
+                for tgt_col in sd.key_cols_by_ds[tgt.id]:
                     if is_self and tgt_col == col.field_key:
                         continue
                     tgt_vals = sd.col_values_by_ds[tgt.id].get(tgt_col, set())
-                    if len(tgt_vals) < 3:
+                    if len(tgt_vals) < _MIN_KEY_CARDINALITY:  # enum, no entidad
                         continue
                     matched = sum(1 for v in src_vals if v in tgt_vals)
                     if matched == 0:
                         continue
                     # ratio_src (FK clásica: source ⊆ target) vs ratio_min (catálogo pequeño).
                     ratio = max(matched / len(src_vals), matched / min(len(src_vals), len(tgt_vals)))
-                    eff = ratio + (0.02 if tgt_col in tgt_key_set else 0.0)
-                    if eff > best_ratio:
+                    if ratio > best_ratio:
                         best_ratio, best_matched, best_field = ratio, matched, tgt_col
 
                 # Nombre fuerte pero sin overlap: sugerir code-like en vez de __id__
@@ -986,9 +992,18 @@ def _build_relation_candidates(datasets, sd: _ScanData, min_content_ratio: float
                 if not name_match and best_ratio < min_content_ratio:
                     continue
 
+                # El CONTENIDO manda (0.85): es la evidencia real de que dos columnas
+                # se relacionan. El nombre es solo un refuerzo menor (0.15) y SOLO si
+                # hay respaldo de datos — en Excels los nombres de columna suelen ser
+                # malos/genéricos, así que un match de puro nombre (sin overlap de
+                # valores) vale casi nada y queda al fondo del ranking.
+                name_only = name_match and best_ratio == 0.0
+                name_bonus = 0.0
+                if name_match:
+                    name_bonus = 0.05 if name_only else 0.15
                 score = round(
-                    0.5 * (1.0 if name_match else 0.0)
-                    + 0.5 * best_ratio
+                    0.85 * best_ratio
+                    + name_bonus
                     + _backup_penalty(tgt.name),
                     3,
                 )
@@ -1003,6 +1018,7 @@ def _build_relation_candidates(datasets, sd: _ScanData, min_content_ratio: float
                     "to_dataset_name": tgt.name,
                     "to_field": best_field,
                     "name_match": name_match,
+                    "name_only": name_only,
                     "content_match_ratio": round(best_ratio, 3),
                     "content_matched": best_matched,
                     "values_sampled": len(src_vals),

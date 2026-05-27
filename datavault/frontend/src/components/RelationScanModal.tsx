@@ -256,12 +256,13 @@ export default function RelationScanModal({ open, onClose, workspaceId }: Props)
                         </td>
                         <td style={td}>
                           <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                            {c.name_match && <Badge color="#2563EB">nombre</Badge>}
                             {c.content_match_ratio > 0 && (
                               <Badge color="#16A34A">
                                 contenido {Math.round(c.content_match_ratio * 100)}%
                               </Badge>
                             )}
+                            {c.name_match && !c.name_only && <Badge color="#2563EB">nombre</Badge>}
+                            {c.name_only && <Badge color="#D97706">solo nombre · sin datos</Badge>}
                           </div>
                           <div style={{ fontSize: 10, color: "var(--color-text-muted)", marginTop: 2 }}>
                             {c.content_matched}/{c.values_sampled} valores
@@ -309,8 +310,8 @@ export default function RelationScanModal({ open, onClose, workspaceId }: Props)
             </div>
 
             <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>
-              Score = 0.5 × (nombre coincide) + 0.5 × (proporción de valores que coinciden, insensible a mayúsculas y tildes).
-              Hasta 3 destinos por columna fuente; los respaldos están penalizados.
+              Score = 0.85 × (proporción de valores que coinciden, insensible a mayúsculas y tildes) + 0.15 × (el nombre coincide, solo como refuerzo).
+              El contenido manda: un match de puro nombre, sin datos que lo respalden, queda al fondo. Hasta 3 destinos por columna fuente; los respaldos están penalizados.
             </p>
             </>}
 

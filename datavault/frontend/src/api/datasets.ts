@@ -179,6 +179,7 @@ export interface RelationCandidate {
   to_dataset_name: string;
   to_field: string;
   name_match: boolean;
+  name_only?: boolean;  // match solo por nombre, sin evidencia de datos (débil)
   content_match_ratio: number;
   content_matched: number;
   values_sampled: number;

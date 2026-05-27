@@ -175,9 +175,22 @@ sus valores como **array JSONB** (ej. `["Y00313", "Y00421"]`), no escalares.
 
 ### Scanner avanzado (`GET /datasets/relationships/scan`)
 Detecta relaciones automáticamente cruzando todos los datasets accesibles:
+- **El CONTENIDO manda** (decisión de producto: en Excels los nombres de columna
+  suelen ser malos). Score = `0.85 × content_ratio + 0.15 × name_bonus + backup_penalty`
+  (en `_build_relation_candidates`). El `name_bonus` solo vale 0.15 si hay overlap de
+  datos; un match de puro nombre (`best_ratio==0`) baja a 0.05 y se marca `name_only=True`
+  → queda al fondo del ranking.
+- **Content match**: compara los valores reales del campo contra las columnas del
+  target (set intersection + containment coefficient en ambos sentidos: FK clásica
+  source⊆target y catálogo pequeño). DOS guardas contra falsos positivos:
+  1. **Solo columnas CLAVE (únicas) son destino**: una FK referencia un identificador
+     único. Matchear contra una columna no-única (sexo, distrito repetido) es vocabulario
+     compartido, no relación → se ignora. (los catálogos legítimos tienen su columna
+     casi-única, así que igual caen en `key_cols`)
+  2. **Piso de cardinalidad** `_MIN_KEY_CARDINALITY=8`: por debajo es un dominio enum
+     (sexo=2, estado_civil=5), no una entidad. (en datos reales: 155 → 56 candidatos)
 - **Name match**: campos `id_X` / `cod_X` / `X_id` donde X matchea nombre del target
-- **Content match**: compara los valores reales del campo contra los de cada
-  columna "tipo clave" del target (set intersection + containment coefficient)
+  (solo refuerzo, ya no decide por sí solo)
 - **Normalización**: tilde-insensible + case-insensitive (`_norm()` en datasets.py)
 - **Detección de tabla puente**: cuando un bridge tiene 2 columnas relation a otros
   dos datasets, sugiere la N:N directa entre ellos
