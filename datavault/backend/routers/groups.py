@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from pydantic import BaseModel
 from database import get_db
-from models import UserGroup, UserGroupMember, User, Dataset, DatasetGroupPermission
+from models import UserGroup, UserGroupMember, User, Dataset, DatasetGroupPermission, WorkspaceMember
 from schemas import GroupCreate, GroupUpdate, GroupOut, GroupMemberOut, AddMemberBody
 from auth import require_admin, get_current_user, effective_workspace_role
 
@@ -47,17 +47,15 @@ async def list_groups(
         if workspace_id is not None:
             q = q.where(UserGroup.workspace_id == workspace_id)
     else:
-        # Obtener workspaces donde el usuario es owner o admin_ws
-        ws_result = await db.execute(
-            select(UserGroup.workspace_id.distinct())
-            .where(UserGroup.workspace_id.isnot(None))
+        # Workspaces donde el usuario es owner/admin_ws — una sola query
+        # (antes: una query de rol por cada workspace con grupos → N+1).
+        mem_result = await db.execute(
+            select(WorkspaceMember.workspace_id).where(
+                WorkspaceMember.user_id == current_user.id,
+                WorkspaceMember.role.in_(("owner", "admin_ws")),
+            )
         )
-        all_ws_ids = [r[0] for r in ws_result]
-        allowed_ws_ids = []
-        for wsid in all_ws_ids:
-            role = await effective_workspace_role(current_user, wsid, db)
-            if role in ("owner", "admin_ws"):
-                allowed_ws_ids.append(wsid)
+        allowed_ws_ids = [r[0] for r in mem_result]
 
         if not allowed_ws_ids:
             raise HTTPException(status_code=403, detail="Sin acceso a grupos")

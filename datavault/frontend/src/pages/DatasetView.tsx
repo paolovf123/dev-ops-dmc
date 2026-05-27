@@ -10,6 +10,8 @@ import {
   updateDataset,
 } from "../api/datasets";
 import DataGrid, { type ExtraColumn } from "../components/DataGrid";
+import { buildExtraColumn } from "../components/datagridJoins";
+import { IcSearch, IcLink, IcTable, IcBridge, IcPalette } from "../components/ui/icons";
 import AddColumnModal from "../components/AddColumnModal";
 import ColumnPanel from "../components/ColumnPanel";
 import RelatedDatasets from "../components/RelatedDatasets";
@@ -238,96 +240,12 @@ export default function DatasetView() {
 
   const extraColumns: ExtraColumn[] = useMemo(() => {
     return joinedCols.map((def) => {
-      const srcIdx = uniqueSourceIds.indexOf(def.sourceDatasetId);
-      const sourceRecs = sourceQueries[srcIdx]?.data ?? [];
-
-      if (def.via) {
-        // Bridge join (N:N). Buildup:
-        //   bridge.fkToLocal → currentRow.id (lookup target = current record id)
-        //   bridge.fkToSource → sourceRow.id (lookup target = source record id)
-        const bIdx = uniqueBridgeIds.indexOf(def.via.bridgeDatasetId);
-        const bridgeRecs = bridgeQueries[bIdx]?.data ?? [];
-        // map source.id → displayValue
-        const srcById = new Map(sourceRecs.map((r) => [r.id, String(r.data[def.displayKey] ?? "")]));
-        // group bridge rows by their fkToLocal value
-        const fkLocal = def.via.bridgeFkToLocal;
-        const fkSrc = def.via.bridgeFkToSource;
-        // currentRow.id (or sourcePkKey-derived) → array of bridge sourceIds
-        const bridgeByLocal = new Map<string, string[]>();
-        for (const b of bridgeRecs) {
-          const localRef = String(b.data[fkLocal] ?? "");
-          const srcRef = String(b.data[fkSrc] ?? "");
-          if (!localRef || !srcRef) continue;
-          const arr = bridgeByLocal.get(localRef) ?? [];
-          arr.push(srcRef);
-          bridgeByLocal.set(localRef, arr);
-        }
-        // ExtraColumn.lookup mapea fkValue → displayString.
-        // Acá la "fkValue" es el id del registro actual (localFkKey = "__id__"),
-        // y la display es la lista de valores del source unidos.
-        const lookup = new Map<string, string>();
-        bridgeByLocal.forEach((srcIds, localRef) => {
-          const values = srcIds.map((id) => srcById.get(id) ?? "").filter(Boolean);
-          lookup.set(localRef, values.join(", "));
-        });
-        return {
-          uid: def.uid,
-          header: `${def.sourceDatasetName} › ${def.displayName} (vía ${def.via.bridgeDatasetName})`,
-          fkKey: def.localFkKey,
-          lookup,
-          onRemove: () => setJoinedCols((prev) => prev.filter((j) => j.uid !== def.uid)),
-        };
-      }
-
-      // Join directo (sin bridge). Modelo N:N: el localFkKey puede ser:
-      //   - array de strings (caso normal, relation N:N)
-      //   - escalar (caso legacy o columna text con código FK)
-      // Para que `lookup.get(fkValue)` funcione con la firma actual de DataGrid,
-      // construimos la lookup map por valor único del source y, en la celda,
-      // el render desarma el array antes de buscar.
-      const sourceLookup = new Map<string, string>(
-        sourceRecs.map((r) => [
-          def.sourcePkKey === "__id__" || def.sourcePkKey === "id"
-            ? r.id
-            : String(r.data[def.sourcePkKey] ?? ""),
-          String(r.data[def.displayKey] ?? ""),
-        ])
-      );
-      // Wrapper que entiende arrays: cuando la "key" es JSON array serializado por DataGrid
-      // (porque el fkKey apunta a una celda array), devolvemos lista coma-separada de displays.
-      const lookup = new Map<string, string>(sourceLookup);
-      // Augmentar la lookup con resoluciones para arrays serializados.
-      // DataGrid stringify el rec.data[fkKey] cuando es array → "[\"Y00313\",\"Y00421\"]"
-      // Capturamos ese patrón y devolvemos los displays unidos.
-      const arrayLookup = (key: string): string | undefined => {
-        if (key.startsWith("[") && key.endsWith("]")) {
-          try {
-            const items = JSON.parse(key);
-            if (Array.isArray(items)) {
-              const vals = items.map((it) => sourceLookup.get(String(it))).filter(Boolean);
-              return vals.length > 0 ? vals.join(", ") : undefined;
-            }
-          } catch { /* noop */ }
-        }
-        return sourceLookup.get(key);
-      };
-      // Proxy de Map para inyectar el array handling
-      const lookupProxy = new Proxy(lookup, {
-        get(target, prop) {
-          if (prop === "get") {
-            return (key: string) => arrayLookup(key);
-          }
-          // @ts-expect-error proxy types
-          return target[prop];
-        },
-      });
-      return {
-        uid: def.uid,
-        header: `${def.sourceDatasetName} › ${def.displayName}`,
-        fkKey: def.localFkKey,
-        lookup: lookupProxy as Map<string, string>,
-        onRemove: () => setJoinedCols((prev) => prev.filter((j) => j.uid !== def.uid)),
-      };
+      const sourceRecs = sourceQueries[uniqueSourceIds.indexOf(def.sourceDatasetId)]?.data ?? [];
+      const bridgeRecs = def.via
+        ? (bridgeQueries[uniqueBridgeIds.indexOf(def.via.bridgeDatasetId)]?.data ?? [])
+        : [];
+      return buildExtraColumn(def, sourceRecs, bridgeRecs,
+        () => setJoinedCols((prev) => prev.filter((j) => j.uid !== def.uid)));
     });
   }, [joinedCols, sourceQueries, uniqueSourceIds, bridgeQueries, uniqueBridgeIds]);
 
@@ -560,7 +478,7 @@ export default function DatasetView() {
         <span className="app-header-tag">
           {filteredRecords.length} filas · {visibleColumns.length} cols
           {formulaCols.length > 0 && ` · ${formulaCols.length} ƒ`}
-          {joinedCols.length > 0 && ` · ${joinedCols.length} 🔗`}
+          {joinedCols.length > 0 && ` · ${joinedCols.length} vínculo${joinedCols.length !== 1 ? "s" : ""}`}
         </span>
         {wsConnected && (
           <span title="Sincronización en tiempo real activa" style={{
@@ -581,7 +499,7 @@ export default function DatasetView() {
           disabled={columns.length === 0}
           title="Ver diagrama de relaciones"
           style={{ fontSize: 16, padding: "5px 10px" }}>
-          🗺 Diagrama
+          Diagrama
         </button>
         {user && (
           <div className="header-user-menu">
@@ -652,7 +570,7 @@ export default function DatasetView() {
               padding: "10px 16px", marginBottom: 12, borderRadius: 8,
               background: "#FEF3C7", border: "1px solid #FCD34D",
             }}>
-              <span style={{ fontSize: 18 }}>💡</span>
+              <span style={{ display: "inline-flex", color: "#92400E", flexShrink: 0 }}><IcBridge size={18} /></span>
               <div style={{ flex: 1, fontSize: 13, lineHeight: 1.4 }}>
                 <strong>Este dataset parece ser una tabla intermedia (N:N).</strong>
                 {" "}Tiene {distinctTargets.size} columnas <code style={{ background: "rgba(0,0,0,0.05)", padding: "0 4px", borderRadius: 3 }}>relation</code> apuntando a datasets distintos.
@@ -874,7 +792,7 @@ export default function DatasetView() {
                       </button>
                     )}
                     <button className="export-menu-item" onClick={() => { setShowSearchReplace(true); setShowMoreMenu(false); }}>
-                      <span className="export-menu-icon" style={{ background: "#FEF3C7", color: "#92400E" }}>🔍</span>
+                      <span className="export-menu-icon" style={{ background: "#FEF3C7", color: "#92400E", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><IcSearch size={15} /></span>
                       <div>
                         <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>Buscar y reemplazar</p>
                         <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>Ctrl+H · sustituir en lote por columna o tabla</p>
@@ -897,7 +815,7 @@ export default function DatasetView() {
                       } catch { /* clipboard blocked */ }
                       setShowMoreMenu(false);
                     }}>
-                      <span className="export-menu-icon" style={{ background: "#ECFEFF", color: "#0E7490" }}>🔗</span>
+                      <span className="export-menu-icon" style={{ background: "#ECFEFF", color: "#0E7490", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><IcLink size={15} /></span>
                       <div>
                         <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>Copiar enlace de esta vista</p>
                         <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>
@@ -907,7 +825,7 @@ export default function DatasetView() {
                     </button>
                     {effectiveIsEditor && (
                       <button className="export-menu-item" onClick={() => { setShowCondFormat(true); setShowMoreMenu(false); }}>
-                        <span className="export-menu-icon" style={{ background: "#F3E8FF", color: "#6B21A8" }}>🎨</span>
+                        <span className="export-menu-icon" style={{ background: "#F3E8FF", color: "#6B21A8", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><IcPalette size={15} /></span>
                         <div>
                           <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>Formato condicional</p>
                           <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>
@@ -950,7 +868,7 @@ export default function DatasetView() {
                 border: `1px solid ${csvResult.errors.length > 0 ? "var(--pm-orange-200, #fed7aa)" : "var(--color-primary-border)"}`,
                 marginBottom: 12, fontSize: 13,
               }}>
-                <span>✅ {csvResult.created} registro(s) importado(s)</span>
+                <span>{csvResult.created} registro(s) importado(s)</span>
                 {csvResult.skipped_duplicates ? (
                   <span style={{ color: "var(--pm-orange-600, #b45309)" }}>
                     · {csvResult.skipped_duplicates} duplicado(s) omitido(s)
@@ -991,7 +909,7 @@ export default function DatasetView() {
         {viewMode === "table" && (
           columns.length === 0 ? (
             <div className="empty card">
-              <div className="empty-icon">📋</div>
+              <div className="empty-icon" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-muted)" }}><IcTable size={30} /></div>
               <h3 style={{ color: "var(--color-text-secondary)" }}>Dataset vacío</h3>
               <p>Agrega columnas para empezar a registrar datos.</p>
               <button className="btn btn-primary" onClick={() => setShowAddCol(true)} style={{ marginTop: 16 }}>

@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { updateWorkspace, deleteWorkspace } from "../../api/workspaces";
 import { useToast } from "../Toast";
 import { useConfirm } from "../ConfirmDialog";
+import { IcTrash } from "../ui/icons";
 
 interface Props {
   workspace: { id: string; name: string; description: string | null };
@@ -52,10 +53,7 @@ export default function WsTabConfig({ workspace, isAdminGlobal, onUpdated, onDel
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 720 }}>
       {/* Editar nombre y descripción */}
-      <div style={{
-        background: "var(--color-surface)", border: "1px solid var(--color-border)",
-        borderRadius: 12, padding: "18px 20px",
-      }}>
+      <div className="dk-card" style={{ padding: "18px 20px" }}>
         <p style={{ margin: "0 0 14px", fontWeight: 700, fontSize: 14 }}>Información general</p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -111,7 +109,7 @@ export default function WsTabConfig({ workspace, isAdminGlobal, onUpdated, onDel
           background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: 12,
           padding: "18px 20px",
         }}>
-          <p style={{ margin: "0 0 6px", fontWeight: 700, fontSize: 14, color: "#991B1B" }}>⚠ Zona peligrosa</p>
+          <p style={{ margin: "0 0 6px", fontWeight: 700, fontSize: 14, color: "#991B1B" }}>Zona peligrosa</p>
           <p style={{ margin: "0 0 12px", fontSize: 12, color: "#7F1D1D" }}>
             Eliminar este workspace borrará <strong>todos sus datasets, registros, grupos y permisos</strong>.
             Esta acción no se puede deshacer.
@@ -129,10 +127,10 @@ export default function WsTabConfig({ workspace, isAdminGlobal, onUpdated, onDel
             }}
             style={{
               fontSize: 13, fontWeight: 600, padding: "8px 16px", borderRadius: 6,
-              background: "#DC2626", color: "#fff", border: "none",
-              cursor: "pointer",
+              background: "#DC2626", color: "#fff", border: "none", cursor: "pointer",
+              display: "inline-flex", alignItems: "center", gap: 6,
             }}>
-            🗑 Eliminar workspace
+            <IcTrash size={14} /> Eliminar workspace
           </button>
         </div>
       )}

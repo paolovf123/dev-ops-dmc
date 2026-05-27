@@ -4,6 +4,8 @@ import { getGroups, createGroup, deleteGroup, getGroupMembers } from "../../api/
 import { useToast } from "../Toast";
 import { useConfirm } from "../ConfirmDialog";
 import DatasetAccessModal from "../DatasetAccessModal";
+import { EmptyState } from "../ui";
+import { IcUsers, IcLock, IcPlus, IcTrash } from "../ui/icons";
 
 interface Props {
   workspaceId: string;
@@ -74,10 +76,8 @@ export default function WsTabGroups({ workspaceId, workspaceName }: Props) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {/* Toolbar */}
-      <div style={{
-        display: "flex", justifyContent: "space-between", alignItems: "center",
-        padding: "14px 18px", background: "var(--color-surface)",
-        border: "1px solid var(--color-border)", borderRadius: 12,
+      <div className="dk-card dk-card-pad" style={{
+        display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap",
       }}>
         <div>
           <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>
@@ -86,13 +86,13 @@ export default function WsTabGroups({ workspaceId, workspaceName }: Props) {
               ({groups.length})
             </span>
           </p>
-          <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--color-text-muted)" }}>
+          <p style={{ margin: "3px 0 0", fontSize: 12, color: "var(--color-text-muted)" }}>
             Los grupos agrupan miembros del workspace y se les asigna acceso a datasets.
           </p>
         </div>
-        <button className="btn btn-primary" style={{ fontSize: 12, padding: "6px 12px" }}
+        <button className="btn btn-primary" style={{ fontSize: 12, padding: "6px 13px", gap: 5 }}
           onClick={() => setShowCreate((v) => !v)}>
-          {showCreate ? "Cancelar" : "+ Nuevo grupo"}
+          {showCreate ? "Cancelar" : <><IcPlus size={13} /> Nuevo grupo</>}
         </button>
       </div>
 
@@ -135,13 +135,9 @@ export default function WsTabGroups({ workspaceId, workspaceName }: Props) {
           Cargando grupos…
         </div>
       ) : groups.length === 0 ? (
-        <div style={{
-          padding: 40, textAlign: "center", color: "var(--color-text-muted)",
-          background: "var(--color-surface)", border: "1px dashed var(--color-border)", borderRadius: 12,
-        }}>
-          <div style={{ fontSize: 28, marginBottom: 8 }}>👥</div>
-          <p style={{ margin: 0, fontSize: 13 }}>Sin grupos en este workspace.</p>
-          <p style={{ margin: "4px 0 0", fontSize: 12 }}>Creá uno arriba para empezar a organizar accesos por equipo.</p>
+        <div className="dk-card">
+          <EmptyState icon={<IcUsers size={22} />} title="Sin grupos en este workspace"
+            subtitle="Creá uno arriba para empezar a organizar accesos por equipo." />
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
@@ -182,13 +178,9 @@ export default function WsTabGroups({ workspaceId, workspaceName }: Props) {
                   </p>
                 )}
                 <div style={{ display: "flex", gap: 6, marginTop: "auto" }}>
-                  <button
-                    onClick={() => setAccessFor({ id: g.id, name: g.name })}
-                    style={{
-                      flex: 1, fontSize: 11, fontWeight: 600, padding: "6px 10px", borderRadius: 6,
-                      background: color + "15", color, border: `1px solid ${color}40`, cursor: "pointer",
-                    }}>
-                    🔓 Acceso a datasets
+                  <button className="dk-row-action" style={{ flex: 1, justifyContent: "center" }}
+                    onClick={() => setAccessFor({ id: g.id, name: g.name })}>
+                    <IcLock /> Acceso a datasets
                   </button>
                   <button
                     onClick={async () => {
@@ -200,11 +192,9 @@ export default function WsTabGroups({ workspaceId, workspaceName }: Props) {
                       if (ok) deleteMut.mutate(g.id);
                     }}
                     title="Eliminar grupo"
-                    style={{
-                      fontSize: 11, padding: "6px 10px", borderRadius: 6,
-                      background: "#fff", color: "#DC2626", border: "1px solid #DC2626", cursor: "pointer",
-                    }}>
-                    🗑
+                    className="dk-row-action"
+                    style={{ color: "#DC2626", padding: "5px 9px" }}>
+                    <IcTrash />
                   </button>
                 </div>
               </div>

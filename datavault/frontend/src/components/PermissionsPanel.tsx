@@ -244,7 +244,7 @@ export default function PermissionsPanel({ datasetId, onClose }: Props) {
                       key={perm.id}
                       label={perm.group_name ?? "Grupo"}
                       role={perm.role}
-                      icon="👥"
+                      icon=""
                       onChangeRole={(role) => setGroupPermMut.mutate({ groupId: perm.group_id, role })}
                       onRemove={() => removeGroupPermMut.mutate(perm.group_id)}
                     />
@@ -310,7 +310,7 @@ function PermissionRow({
       border: "1px solid var(--color-border-light)",
       background: "var(--color-surface)",
     }}>
-      <span style={{ fontSize: 18 }}>{icon ?? "👤"}</span>
+      <span style={{ fontSize: 18 }}>{icon ?? ""}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{ margin: 0, fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</p>
         {sublabel && sublabel !== label && (

@@ -6,11 +6,18 @@ import { useConfirm } from "./ConfirmDialog";
 import { styleForCell, type CondRule } from "./ConditionalFormattingModal";
 import { validateCell } from "../utils/validation";
 
+/** Resolución de display de un join. `Map<string,string>` lo satisface
+ *  estructuralmente; también lo cumple un objeto con `get` custom (ej. el que
+ *  expande claves de array serializadas). */
+export interface JoinLookup {
+  get(key: string): string | undefined;
+}
+
 export interface ExtraColumn {
   uid: string;
   header: string;
   fkKey: string;
-  lookup: Map<string, string>;
+  lookup: JoinLookup;
   onRemove: () => void;
 }
 
@@ -123,7 +130,7 @@ function renderCellValue(col: ColumnDefinition, cellVal: unknown): React.ReactNo
               background: "#FCE7F3", color: "#DB2777",
               border: "1px solid #FBCFE8",
               maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-            }} title={v}>🔗 {v}</span>
+            }} title={v}>{v}</span>
           ))}
         </span>
       );
@@ -866,7 +873,7 @@ export default function DataGrid({
                         {onReorderAny && (
                           <span className="col-drag-handle" title="Arrastrar para reordenar">⠿</span>
                         )}
-                        <span>🔗 {ec.header}</span>
+                        <span>{ec.header}</span>
                       </span>
                       <button onClick={ec.onRemove} title="Quitar columna vinculada" className="col-del-btn"
                         style={{ color: "var(--pm-orange-600)" }}>×</button>

@@ -216,3 +216,39 @@ class Webhook(Base):
     last_fired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
     fail_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
+
+class Subscription(Base):
+    """Suscripción de un workspace a un plan (una por workspace).
+    plan: free | pro | business · status: trialing | active | past_due | canceled | pending."""
+    __tablename__ = "subscriptions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, unique=True)
+    plan: Mapped[str] = mapped_column(String(20), nullable=False, default="free", server_default="free")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="trialing", server_default="trialing")
+    provider: Mapped[str | None] = mapped_column(String(20), nullable=True)   # mercadopago | manual
+    provider_ref: Mapped[str | None] = mapped_column(Text, nullable=True)     # MP preapproval/payment id
+    trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    current_period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class PaymentClaim(Base):
+    """Aviso de pago por transferencia bancaria (o pago manual). El admin lo revisa
+    y al aprobarlo activa/actualiza la suscripción del workspace."""
+    __tablename__ = "payment_claims"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    plan: Mapped[str] = mapped_column(String(20), nullable=False)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)   # PEN
+    method: Mapped[str] = mapped_column(String(20), nullable=False, default="transfer")  # transfer | mercadopago
+    reference: Mapped[str | None] = mapped_column(Text, nullable=True)        # nro de operación / comprobante
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")  # pending|approved|rejected
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

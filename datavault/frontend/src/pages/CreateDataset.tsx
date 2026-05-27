@@ -7,6 +7,7 @@ import client from "../api/client";
 import type { ColumnDefinition } from "../types";
 import ImportExcelModal from "../components/ImportExcelModal";
 import { useWorkspace } from "../workspace/WorkspaceContext";
+import { IcUpload } from "../components/ui/icons";
 
 interface ColDraft {
   uid: string;
@@ -24,8 +25,8 @@ const DATA_TYPES: { value: ColumnDefinition["data_type"]; label: string; icon: s
   { value: "text",        label: "Texto",       icon: "Aa", group: "Texto"     },
   { value: "long_text",   label: "Texto largo",  icon: "¶",  group: "Texto"     },
   { value: "url",         label: "Enlace",       icon: "⎋",  group: "Texto"     },
-  { value: "email",       label: "Email",        icon: "✉",  group: "Texto"     },
-  { value: "phone",       label: "Teléfono",     icon: "☎",  group: "Texto"     },
+  { value: "email",       label: "Email",        icon: "",  group: "Texto"     },
+  { value: "phone",       label: "Teléfono",     icon: "",  group: "Texto"     },
   { value: "number",      label: "Número",       icon: "#",  group: "Número"    },
   { value: "currency",    label: "Moneda",       icon: "$",  group: "Número"    },
   { value: "percent",     label: "Porcentaje",   icon: "%",  group: "Número"    },
@@ -71,7 +72,7 @@ interface Template {
 
 const TEMPLATES: Template[] = [
   {
-    id: "clientes", emoji: "👤", name: "Clientes",
+    id: "clientes", emoji: "", name: "Clientes",
     description: "CRM básico: contacto, empresa, estado",
     columns: [
       { name: "Nombre", data_type: "text", required: true },
@@ -84,7 +85,7 @@ const TEMPLATES: Template[] = [
     ],
   },
   {
-    id: "productos", emoji: "📦", name: "Productos",
+    id: "productos", emoji: "", name: "Productos",
     description: "Catálogo con precio, stock y categoría",
     columns: [
       { name: "Nombre", data_type: "text", required: true },
@@ -97,7 +98,7 @@ const TEMPLATES: Template[] = [
     ],
   },
   {
-    id: "tareas", emoji: "✅", name: "Tareas",
+    id: "tareas", emoji: "", name: "Tareas",
     description: "Lista de pendientes con estado y prioridad",
     columns: [
       { name: "Tarea", data_type: "text", required: true },
@@ -109,7 +110,7 @@ const TEMPLATES: Template[] = [
     ],
   },
   {
-    id: "inventario", emoji: "🏷️", name: "Inventario",
+    id: "inventario", emoji: "", name: "Inventario",
     description: "Stock por ubicación con última revisión",
     columns: [
       { name: "Producto", data_type: "text", required: true },
@@ -121,7 +122,7 @@ const TEMPLATES: Template[] = [
     ],
   },
   {
-    id: "presupuesto", emoji: "💰", name: "Presupuesto mensual",
+    id: "presupuesto", emoji: "", name: "Presupuesto mensual",
     description: "Ingresos y gastos categorizados",
     columns: [
       { name: "Fecha", data_type: "date", required: true },
@@ -134,7 +135,7 @@ const TEMPLATES: Template[] = [
     ],
   },
   {
-    id: "contactos", emoji: "📇", name: "Contactos",
+    id: "contactos", emoji: "", name: "Contactos",
     description: "Agenda con tags y cumpleaños",
     columns: [
       { name: "Nombre", data_type: "text", required: true },
@@ -394,7 +395,7 @@ export default function CreateDataset() {
               textAlign: "center",
               transition: "background 0.12s",
             }}>
-            <div style={{ fontSize: 32, lineHeight: 1, marginBottom: 8 }}>📤</div>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 8, color: "var(--color-text-muted)" }}><IcUpload size={28} /></div>
             <h3 style={{ margin: "0 0 6px" }}>Importa desde Excel o CSV</h3>
             <p style={{ color: "var(--color-text-muted)", fontSize: 13, margin: "0 0 14px" }}>
               Arrastrá un archivo <strong>.xlsx</strong>, <strong>.xls</strong> o <strong>.csv</strong> acá,
@@ -497,17 +498,17 @@ export default function CreateDataset() {
         <span style={{ fontWeight: 600, fontSize: 15 }}>Nuevo dataset</span>
         {linkedName && (
           <span style={{ fontSize: 12, padding: "3px 10px", borderRadius: 20, background: "var(--color-primary-bg)", color: "var(--pm-green-600)", fontWeight: 600, border: "1px solid var(--color-primary-border)", marginLeft: 6 }}>
-            🔗 Relacionado con {linkedName}
+            Relacionado con {linkedName}
           </span>
         )}
         {appliedTemplate && (
           <span style={{ fontSize: 12, padding: "3px 10px", borderRadius: 20, background: "var(--color-primary-bg)", color: "var(--color-primary)", fontWeight: 600, border: "1px solid var(--color-primary-border)", marginLeft: 6 }}>
-            📋 Plantilla: {TEMPLATES.find((t) => t.id === appliedTemplate)?.name}
+            Plantilla: {TEMPLATES.find((t) => t.id === appliedTemplate)?.name}
           </span>
         )}
         {importedRows.length > 0 && (
           <span style={{ fontSize: 12, padding: "3px 10px", borderRadius: 20, background: "#FEF3C7", color: "#92400E", fontWeight: 600, border: "1px solid #FDE68A", marginLeft: 6 }}>
-            📤 {importedRows.length} filas listas para importar
+            {importedRows.length} filas listas para importar
           </span>
         )}
         {!linkedName && (
@@ -588,7 +589,7 @@ function ColRow({ col, linkedName, onChange, onRemove }: {
         background: "var(--color-primary-bg)", borderRadius: 8, padding: "8px 10px",
         margin: "0 -10px", border: "1px solid var(--color-primary-border)" }}>
         <div>
-          <p style={{ margin: 0, fontWeight: 600, fontSize: 13, color: "var(--pm-green-600)" }}>🔑 {col.name}</p>
+          <p style={{ margin: 0, fontWeight: 600, fontSize: 13, color: "var(--pm-green-600)" }}>{col.name}</p>
           <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--color-text-muted)" }}>Clave foránea — apunta a {linkedName}</p>
         </div>
         <code style={{ fontSize: 12, padding: "5px 0", display: "block", color: "var(--color-text-secondary)" }}>{col.field_key}</code>

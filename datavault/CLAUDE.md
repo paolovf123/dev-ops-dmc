@@ -263,9 +263,14 @@ ALLOWED_ORIGINS=http://localhost:5173
 ### Feature 2: Scripts Python (Computed Datasets)
 - Cada script = Dataset propio (`is_computed=True`), completamente independiente
 - Re-ejecutar reemplaza solo los datos de ese script; no afecta otros scripts
-- `POST /datasets/{id}/compute` → invoca AWS Lambda con el código + DataFrames fuente
-- Lambda: `lambda/executor/` — paquetes: pandas, numpy, scipy, scikit-learn, openpyxl, duckdb
-- Timeout Lambda: 15 minutos. Variable necesaria: `LAMBDA_EXECUTOR_ARN`
+- `POST /datasets/{id}/compute` → ejecuta el código + DataFrames fuente en el **executor aislado** (ver Feature 8). Hoy el payload manda solo valores: `[{"__id__": str(r.id), **r.data}]` (sin el esquema)
+- Librerías disponibles en el sandbox: pandas, numpy, duckdb, openpyxl + stdlib seguro. **NO** scipy/scikit-learn (las limpiezas básicas no los necesitan; si hicieran falta, agregarlos a `executor/requirements.txt` y al whitelist de `runner.py`)
+- DuckDB sigue disponible para JOINs/agregaciones (ver ejemplo más arriba)
+
+**Columnas de relación en scripts** — toda columna `relation` guarda un **array JSONB** (ej. `['Y00313']`), nunca un escalar. Implicaciones:
+- **Limpieza de tabla** → las relaciones se SALTAN (son FKs; tocarlas rompe el vínculo; además las listas no son hasheables → revientan `drop_duplicates`/`groupby`). Detectar con `isinstance(v, (list, dict))` y excluirlas de cada paso.
+- **Reporte / dataset nuevo** → las relaciones se RESUELVEN con `UNNEST(col)` + `JOIN` contra el dataset target. El array es la llave del join (lo que habilita N:N).
+- Mejora pendiente acordada: pasar el esquema (`data_type`/`related_dataset_id`/`display_field`) al executor para que la detección de relaciones sea automática (no por olfateo de valores) y para que "Generar plantilla" escriba los `UNNEST … JOIN` solos.
 - UI: `ScriptsHub.tsx` → `/scripts` — hub principal (crear, ejecutar, editar, ver, eliminar)
 - UI: `ComputedDatasetEditor.tsx` — editor Monaco, tema azul-morado, 620px alto
   - Sidebar: selector de datasets fuente + chips de columnas
@@ -516,6 +521,38 @@ El frontend (S3) recibe todo por defecto. Estos paths se proxean al ALB/backend:
 - Cardinalidad N:N visible en el diagrama global
 - Layout en cuadrícula cuando no hay relaciones
 - Datasets aislados separados del grafo conectado
+
+### Feature 7: Design kit + consolidación administrativa (Mayo 2026)
+- **Design kit** (`frontend/src/index.css`): capa de clases `dk-*` (page, tabs, card, toolbar, search, select, table, badge, empty, row-action, seg/seg-btn, chip, access-row). Estilo "profesional limpio" (Linear/Stripe).
+- **Primitivos reutilizables** (`frontend/src/components/ui/`): PageHeader, Tabs, Toolbar, SearchInput, Select, Count, Badge, DataTable, EmptyState + iconos de línea en `icons.tsx`.
+- **Emojis**: se usan como guías de navegación SOLO en tabs/títulos; iconos de línea en lugares secundarios.
+- **Consolidación de páginas admin**: `/admin/users`, `/admin/groups`, `/admin/permissions` y `/admin/accesos` se unificaron en **una sola página `AdminPeople.tsx`** ("Personas y accesos", rutas `/admin/personas` y `/admin/accesos`).
+  - Tabs: usuarios (solo admin global) / miembros / grupos / accesos.
+  - Selector de workspace pre-selecciona el primero (`wsId || workspaces[0]?.id`).
+  - Rutas legacy redirigen vía `<Navigate>`. Páginas borradas: `AdminPermissions.tsx`, `AdminGroups.tsx`, `AdminAccess.tsx`.
+- **AdminWorkspaces.tsx** recortado a solo CRUD de workspace + tabs [datasets, config]; auto-selecciona el primer workspace.
+- **Matriz de accesos reconstruida** (`WsTabPermissions.tsx`): master-detail con chips de grupo + `RoleSegmented` por dataset (Sin acceso / Ver / Editar / Admin), mutación optimista. Reemplaza el `<select>`-por-celda. Endpoint batch `GET /workspaces/{id}/access-matrix?mode=groups|users` (evita N+1).
+
+### Feature 8: Executor self-hosted aislado (reemplaza AWS Lambda)
+- Los scripts **ya no corren en Lambda**. Servicio `executor` en docker-compose: FastAPI (`executor/app.py`) que corre el código de usuario en un **subproceso** (`executor/runner.py`).
+- Aislamiento en capas: subproceso aparte de la API · `RLIMIT_AS` (memoria, `EXECUTOR_MEM_MB=768`) + `RLIMIT_CPU` · timeout de pared (`EXECUTOR_WALL_SECONDS=30`) · `__builtins__` recortado · `__import__` con whitelist · corre como usuario no-root (uid 10001).
+- **Red `execnet` con `internal: true`**: el executor NO tiene salida a internet ni acceso a la DB. Solo el backend (en `appnet`+`execnet`) puede alcanzarlo.
+- DataFrames se registran como **vistas duckdb** (evita el replacement-scan que hace `import inspect`, bloqueado por el sandbox).
+- `backend/lambda_executor.py` enruta: `EXECUTOR_URL` (HTTP, preferido) → `LAMBDA_EXECUTOR_ARN` (boto3, fallback). Nombres `Lambda*` se conservan por compatibilidad del router.
+
+### Feature 9: Billing / monetización (MVP)
+- **Modelo plan-por-workspace + asientos (seats)**. Modelos `Subscription` (workspace_id único, plan, status, provider, period) y `PaymentClaim` (workspace_id, plan, amount, method, reference, status…). Migración `5003cbadcb35`.
+- **Planes** (`backend/billing_plans.py`, precios en PEN, basados en costo de infra AWS + 20% impuestos, rentable desde 1 plan Pro):
+  | Plan | Precio | Miembros | Datasets | Registros | Scripts/API |
+  |------|--------|----------|----------|-----------|-------------|
+  | Free | S/0 | 3 | 3 | 2 000 | ✗ |
+  | Pro | S/490 | 50 | 50 | 200 000 | ✓ |
+  | Business | S/980 | 100 | 100 | 400 000 | ✓ |
+  - Sin datasets infinitos (decisión de negocio: ofrecerlos es malo).
+- **Pago**: Mercado Pago (Checkout Pro) + transferencia bancaria manual (claims que un admin aprueba/rechaza). Cuentas bancarias de la empresa aún no existen pero el diseño ya las contempla.
+- **Enforcement**: `assert_can(workspace_id, resource, db)` lanza HTTP 402 al exceder el plan.
+- Endpoints (`routers/billing.py`): `GET /billing/plans`, `GET/POST /workspaces/{id}/billing[...]`, `POST /billing/webhook`, `GET /billing/claims`, `POST /billing/claims/{id}/approve|reject`.
+- UI: `pages/Billing.tsx` + `api/billing.ts`; entrada en UserMenu ("Planes y facturación", gated por `isManager`).
 
 ## Tips Windows / Git Bash
 - `docker exec` con rutas absolutas: usar `//bin/ls //app/` (doble slash)

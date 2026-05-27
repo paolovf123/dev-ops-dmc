@@ -10,6 +10,8 @@ import DatasetAccessModal from "../components/DatasetAccessModal";
 import { useToast } from "../components/Toast";
 import { getGroups, getGroupMembers } from "../api/groups";
 import { getWorkspaces, getWorkspaceMembers } from "../api/workspaces";
+import { EmptyState } from "../components/ui";
+import { IcLock, IcSearch, IcUser, IcUsers } from "../components/ui/icons";
 
 interface UserRow {
   id: string;
@@ -67,7 +69,7 @@ function SortIcon({ field, current, dir }: { field: SortField; current: SortFiel
   return <span style={{ color: "#7C3AED", fontSize: 10, marginLeft: 3 }}>{dir === "asc" ? "↑" : "↓"}</span>;
 }
 
-export default function AdminUsers() {
+export default function AdminUsers({ embedded = false }: { embedded?: boolean } = {}) {
   const { user: me, isAdmin } = useAuth();
   const navigate  = useNavigate();
   const qc        = useQueryClient();
@@ -255,11 +257,8 @@ export default function AdminUsers() {
   if (!canAccess) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh" }}>
-        <div className="empty">
-          <div className="empty-icon">🔒</div>
-          <h3>Sin acceso</h3>
-          <p>Accede desde un workspace en el que seas owner o admin_ws.</p>
-        </div>
+        <EmptyState icon={<IcLock size={24} />} title="Sin acceso"
+          subtitle="Accedé desde un workspace en el que seas owner o admin_ws." />
       </div>
     );
   }
@@ -274,9 +273,10 @@ export default function AdminUsers() {
 
   return (
     <>
-    <div style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
+    <div style={embedded ? {} : { minHeight: "100vh", background: "var(--color-bg)" }}>
 
-      {/* ── Header ── */}
+      {/* ── Header (oculto cuando va embebido en Personas) ── */}
+      {!embedded && (
       <header className="app-header">
         <button className="app-brand-btn" onClick={() => navigate("/")}>
           <div className="app-header-logo app-header-logo--img"><img src="/opsgrid-logo.svg" alt="OpsGrid" /></div>
@@ -289,15 +289,16 @@ export default function AdminUsers() {
         <div className="app-header-spacer" />
         <UserMenu />
       </header>
+      )}
 
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px" }}>
+      <div style={{ maxWidth: embedded ? "100%" : 1100, margin: "0 auto", padding: embedded ? 0 : "32px 24px" }}>
 
         {/* ── Page title + stats ── */}
         <div style={{ marginBottom: 28 }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 4 }}>
             <div>
               <h1 style={{ fontSize: 24, fontWeight: 800, color: "var(--color-text)", margin: 0 }}>
-                Usuarios
+                👥 Usuarios
               </h1>
               <p style={{ fontSize: 14, color: "var(--color-text-secondary)", margin: "4px 0 20px" }}>
                 Gestiona roles y acceso al sistema
@@ -589,9 +590,9 @@ export default function AdminUsers() {
               <div className="csv-loading-spinner" style={{ margin: "0 auto" }} />
             </div>
           ) : filtered.length === 0 ? (
-            <div style={{ padding: "56px 24px", textAlign: "center" }}>
-              <div style={{ fontSize: 36, marginBottom: 12 }}>
-                {hasFilters ? "🔍" : showInactive ? "👤" : "✓"}
+            <div style={{ padding: "44px 24px", textAlign: "center" }}>
+              <div className="dk-empty-icon" style={{ margin: "0 auto 10px" }}>
+                {hasFilters ? <IcSearch size={22} /> : showInactive ? <IcUser size={22} /> : <IcUsers size={22} />}
               </div>
               <div style={{ fontSize: 15, fontWeight: 600, color: "var(--color-text)", marginBottom: 6 }}>
                 {hasFilters ? "Sin resultados" : showInactive ? "No hay cuentas inactivas" : "No hay usuarios activos"}
@@ -648,7 +649,7 @@ export default function AdminUsers() {
                           border: "1px solid var(--color-primary)", borderRadius: 99,
                           cursor: "pointer",
                         }}>
-                        🔓 Datasets accesibles
+                        Datasets accesibles
                       </button>
                     </div>
                   </div>
@@ -717,8 +718,9 @@ export default function AdminUsers() {
                           color: "#7C3AED", border: `1px solid ${grpFilter === g ? "#A78BFA" : "#C4B5FD"}`,
                           cursor: "pointer", transition: "all 0.12s",
                           boxShadow: grpFilter === g ? "0 0 0 2px #C4B5FD" : "none",
+                          display: "inline-flex", alignItems: "center", gap: 4,
                         }}>
-                        👥 {g}
+                        <IcUsers size={11} /> {g}
                       </button>
                     ))}
                     {uws.length === 0 && ugs.length === 0 && (

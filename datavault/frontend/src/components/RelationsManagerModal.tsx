@@ -6,6 +6,8 @@ import { getDatasets, getColumns, updateColumn, createColumn, updateDataset, del
 import type { Dataset, ColumnDefinition } from "../types";
 import { useToast } from "./Toast";
 import { useEscapeKey } from "../utils/useEscapeKey";
+import { modalTh as th, modalTd as td } from "../utils/ui";
+import { IcLink, IcBridge } from "./ui/icons";
 import RelationScanModal from "./RelationScanModal";
 
 interface Props {
@@ -127,7 +129,7 @@ export default function RelationsManagerModal({ open, onClose, workspaceId }: Pr
         boxShadow: "0 20px 60px rgba(0,0,0,0.3)", gap: 14,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontSize: 22 }}>⚙️</div>
+          <div style={{ display: "flex", color: "var(--color-primary)" }}><IcLink size={20} /></div>
           <div>
             <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>Gestor de relaciones</h3>
             <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-muted)" }}>
@@ -137,7 +139,7 @@ export default function RelationsManagerModal({ open, onClose, workspaceId }: Pr
           <button className="btn btn-secondary"
             onClick={() => setShowScan(true)}
             style={{ marginLeft: "auto", fontSize: 13, borderColor: "#7C3AED", color: "#7C3AED" }}>
-            🔗 Detectar relaciones
+            Detectar relaciones
           </button>
           <button className="btn btn-ghost" onClick={onClose}
             style={{ padding: "4px 8px", fontSize: 18 }}>×</button>
@@ -149,9 +151,9 @@ export default function RelationsManagerModal({ open, onClose, workspaceId }: Pr
           paddingBottom: 0, marginBottom: -4,
         }}>
           {([
-            ["list", `📋 Relaciones activas (${relations.length})`],
-            ["bridges", `🌉 Tablas intermedias (${datasets.filter((d) => d.is_bridge).length})`],
-            ["create_nn", "➕ Tabla intermedia con atributos"],
+            ["list", `Relaciones activas (${relations.length})`],
+            ["bridges", `Tablas intermedias (${datasets.filter((d) => d.is_bridge).length})`],
+            ["create_nn", "Tabla intermedia con atributos"],
           ] as [Tab, string][]).map(([k, label]) => (
             <button key={k} onClick={() => setTab(k)}
               style={{
@@ -171,7 +173,7 @@ export default function RelationsManagerModal({ open, onClose, workspaceId }: Pr
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <input
                 type="text"
-                placeholder="🔍 Buscar por dataset, columna…"
+                placeholder="Buscar por dataset, columna…"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 style={{
@@ -202,7 +204,7 @@ export default function RelationsManagerModal({ open, onClose, workspaceId }: Pr
                 <div style={{ padding: 48, textAlign: "center", color: "var(--color-text-muted)" }}>
                   No hay relaciones confirmadas todavía.
                   <br />
-                  Usa "🔗 Detectar relaciones" para aplicar sugerencias.
+                  Usa "Detectar relaciones" para aplicar sugerencias.
                 </div>
               ) : filtered.length === 0 ? (
                 <div style={{ padding: 32, textAlign: "center", color: "var(--color-text-muted)", fontSize: 13 }}>
@@ -262,7 +264,7 @@ export default function RelationsManagerModal({ open, onClose, workspaceId }: Pr
                               }}
                               onMouseEnter={(e) => { if (!removing) (e.currentTarget as HTMLButtonElement).style.background = "#FEE2E2"; }}
                               onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#fff"; }}>
-                              {removing ? "Quitando…" : "🗑 Quitar"}
+                              {removing ? "Quitando…" : "Quitar"}
                             </button>
                           </td>
                         </tr>
@@ -442,7 +444,7 @@ function CreateNNRelation({
             <>
               <input
                 type="text"
-                placeholder="🔍 Buscar dataset…"
+                placeholder="Buscar dataset…"
                 value={dsAFilter}
                 onChange={(e) => setDsAFilter(e.target.value)}
                 style={{
@@ -475,7 +477,7 @@ function CreateNNRelation({
             <>
               <input
                 type="text"
-                placeholder="🔍 Buscar dataset…"
+                placeholder="Buscar dataset…"
                 value={dsBFilter}
                 onChange={(e) => setDsBFilter(e.target.value)}
                 style={{
@@ -531,7 +533,7 @@ function CreateNNRelation({
             disabled={creating || !effectiveName}
             onClick={handleCreate}
             style={{ alignSelf: "flex-start", padding: "8px 18px", fontSize: 13 }}>
-            {creating ? "Creando…" : "🪄 Crear tabla intermedia"}
+            {creating ? "Creando…" : "Crear tabla intermedia"}
           </button>
         </>
       )}
@@ -585,7 +587,7 @@ function BridgesList({
       <div style={{ padding: 48, textAlign: "center", color: "var(--color-text-muted)" }}>
         No hay tablas intermedias todavía.
         <br />
-        <span style={{ fontSize: 12 }}>Usa "➕ Crear relación N:N" para conectar 2 datasets con una tabla puente.</span>
+        <span style={{ fontSize: 12 }}>Usa "Crear relación N:N" para conectar 2 datasets con una tabla puente.</span>
       </div>
     );
   }
@@ -611,7 +613,7 @@ function BridgesList({
             <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 18 }}>🌉</span>
+                  <span style={{ display: "inline-flex", color: "var(--pm-violet-600)" }}><IcBridge size={16} /></span>
                   <Link to={`/datasets/${b.id}`}
                     style={{ fontSize: 15, fontWeight: 700, color: "var(--color-primary)" }}>
                     {b.name}
@@ -655,7 +657,7 @@ function BridgesList({
                     border: "1px solid #DC2626", background: "#fff",
                     color: "#DC2626", cursor: isWorking ? "wait" : "pointer", whiteSpace: "nowrap",
                   }}>
-                  🗑 Eliminar
+                  Eliminar
                 </button>
               </div>
             </div>
@@ -665,12 +667,3 @@ function BridgesList({
     </div>
   );
 }
-
-const th: React.CSSProperties = {
-  padding: "8px 12px", textAlign: "left", fontWeight: 600,
-  borderBottom: "1px solid var(--color-border)", color: "var(--color-text-muted)",
-  fontSize: 12, whiteSpace: "nowrap",
-};
-const td: React.CSSProperties = {
-  padding: "8px 12px", verticalAlign: "top",
-};

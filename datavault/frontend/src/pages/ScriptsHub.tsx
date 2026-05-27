@@ -236,15 +236,15 @@ export default function ScriptsHub() {
                     <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
                       {hasSources && (
                         <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
-                          📥 <strong>Fuentes:</strong> {sourceNames(ds.source_dataset_ids)}
+                          <strong>Fuentes:</strong> {sourceNames(ds.source_dataset_ids)}
                         </span>
                       )}
                       <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
-                        🕒 {timeAgo(ds.last_computed_at)}
+                        {timeAgo(ds.last_computed_at)}
                       </span>
                       {recCount !== null && ds.last_computed_at && (
                         <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
-                          📄 {recCount.toLocaleString()} registro{recCount !== 1 ? "s" : ""}
+                          {recCount.toLocaleString()} registro{recCount !== 1 ? "s" : ""}
                         </span>
                       )}
                     </div>
@@ -281,7 +281,7 @@ export default function ScriptsHub() {
                         onClick={() => navigate(`/datasets/${ds.id}`)}
                         title="Ver resultados"
                       >
-                        👁 Ver
+                        Ver
                       </button>
                     )}
 

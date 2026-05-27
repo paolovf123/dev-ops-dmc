@@ -32,3 +32,17 @@ export const updateMemberRole = (workspaceId: string, userId: string, role: stri
 
 export const removeWorkspaceMember = (workspaceId: string, userId: string) =>
   api.delete(`/workspaces/${workspaceId}/members/${userId}`);
+
+export interface AccessMatrixEntry {
+  dataset_id: string;
+  subject_id: string; // group_id (mode=groups) o user_id (mode=users)
+  role: string;
+}
+
+/** Matriz de accesos del workspace en una sola request (mode: "groups" | "users"). */
+export const getWorkspaceAccessMatrix = (workspaceId: string, mode: "groups" | "users") =>
+  api
+    .get<{ mode: string; entries: AccessMatrixEntry[] }>(
+      `/workspaces/${workspaceId}/access-matrix`, { params: { mode } },
+    )
+    .then((r) => r.data.entries);

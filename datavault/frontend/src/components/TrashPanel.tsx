@@ -3,6 +3,7 @@ import { getRecords, restoreRecord, bulkDelete } from "../api/datasets";
 import type { ColumnDefinition } from "../types";
 import { useState } from "react";
 import { useConfirm } from "./ConfirmDialog";
+import { IcTrash } from "./ui/icons";
 
 interface Props {
   datasetId: string;
@@ -54,7 +55,7 @@ export default function TrashPanel({ datasetId, columns }: Props) {
   if (deleted.length === 0) {
     return (
       <div className="trash-empty">
-        <span style={{ fontSize: 40 }}>🗑️</span>
+        <span style={{ display: "inline-flex", color: "var(--color-text-muted)", marginBottom: 6 }}><IcTrash size={34} /></span>
         <p>La papelera está vacía</p>
         <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>
           Los registros eliminados aparecerán aquí.
@@ -76,7 +77,7 @@ export default function TrashPanel({ datasetId, columns }: Props) {
             <button className="btn btn-secondary"
               onClick={() => bulkRestoreMut.mutate([...selected])}
               disabled={bulkRestoreMut.isPending}>
-              ♻ Restaurar ({selected.size})
+              Restaurar ({selected.size})
             </button>
             <button className="btn btn-danger-ghost"
               onClick={async () => {
@@ -128,7 +129,7 @@ export default function TrashPanel({ datasetId, columns }: Props) {
                     style={{ fontSize: 12, padding: "3px 10px", color: "var(--color-primary)" }}
                     onClick={() => restoreMut.mutate(rec.id)}
                     disabled={restoreMut.isPending}>
-                    ♻ Restaurar
+                    Restaurar
                   </button>
                 </td>
               </tr>

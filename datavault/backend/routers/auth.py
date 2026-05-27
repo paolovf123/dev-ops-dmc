@@ -12,7 +12,7 @@ from schemas import UserRegister, UserLogin, UserOut, UserUpdateRole, Token
 from auth import (
     verify_password, hash_password, create_access_token, create_ws_ticket,
     get_current_user, require_admin, count_users, effective_workspace_role,
-    effective_role, WS_ROLE_TO_DS_ROLE,
+    effective_role, WS_ROLE_TO_DS_ROLE, DS_ROLE_RANK,
     ACCESS_TOKEN_EXPIRE_HOURS, COOKIE_NAME, COOKIE_SAMESITE, COOKIE_SECURE,
     create_refresh_token, revoke_token, is_token_revoked, decode_token,
     REFRESH_COOKIE_NAME, REFRESH_TOKEN_EXPIRE_DAYS,
@@ -547,12 +547,17 @@ async def audit_log(
         .join(Record, ChangeHistory.record_id == Record.id)
         .join(Dataset, Record.dataset_id == Dataset.id)
     )
+    def _parse_uuid(val: str, field: str):
+        try:
+            return uuid.UUID(val)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"{field} inválido (no es un UUID)")
     if dataset_id:
-        stmt = stmt.where(Record.dataset_id == uuid.UUID(dataset_id))
+        stmt = stmt.where(Record.dataset_id == _parse_uuid(dataset_id, "dataset_id"))
     if workspace_id:
-        stmt = stmt.where(Dataset.workspace_id == uuid.UUID(workspace_id))
+        stmt = stmt.where(Dataset.workspace_id == _parse_uuid(workspace_id, "workspace_id"))
     if user_id:
-        stmt = stmt.where(ChangeHistory.user_id == uuid.UUID(user_id))
+        stmt = stmt.where(ChangeHistory.user_id == _parse_uuid(user_id, "user_id"))
     if action:
         stmt = stmt.where(ChangeHistory.action == action)
 
@@ -680,12 +685,11 @@ async def list_user_dataset_access(
         .join(UserGroupMember, UserGroupMember.group_id == UserGroup.id)
         .where(UserGroupMember.user_id == target.id)
     )
-    ROLE_RANK = {"admin": 3, "editor": 2, "viewer": 1, "none": 0}
     for perm, ds, grp in group_rows.all():
         if ds.id in out_by_ds and out_by_ds[ds.id].source == "direct":
             continue  # directo gana
         existing = out_by_ds.get(ds.id)
-        if existing is None or ROLE_RANK.get(perm.role, 0) > ROLE_RANK.get(existing.role, 0):
+        if existing is None or DS_ROLE_RANK.get(perm.role, 0) > DS_ROLE_RANK.get(existing.role, 0):
             out_by_ds[ds.id] = UserDatasetAccessOut(
                 dataset_id=ds.id, dataset_name=ds.name,
                 workspace_id=ds.workspace_id,

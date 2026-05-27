@@ -14,11 +14,10 @@ import CreateDataset from "./pages/CreateDataset";
 import Login from "./pages/Login";
 import SetPassword from "./pages/SetPassword";
 import Settings from "./pages/Settings";
-import AdminUsers from "./pages/AdminUsers";
 import AdminAudit from "./pages/AdminAudit";
-import AdminGroups from "./pages/AdminGroups";
 import AdminWorkspaces from "./pages/AdminWorkspaces";
-import AdminPermissions from "./pages/AdminPermissions";
+import AdminPeople from "./pages/AdminPeople";
+import Billing from "./pages/Billing";
 import ComputedDatasetEditor from "./pages/ComputedDatasetEditor";
 import ScriptsHub from "./pages/ScriptsHub";
 import "./index.css";
@@ -69,11 +68,16 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="/datasets/:datasetId/computed" element={<RequireAuth><ComputedDatasetEditor /></RequireAuth>} />
               <Route path="/computed/new" element={<RequireAuth><ComputedDatasetEditor /></RequireAuth>} />
               <Route path="/scripts" element={<RequireAuth><ScriptsHub /></RequireAuth>} />
-              <Route path="/admin/users" element={<RequireAuth><AdminUsers /></RequireAuth>} />
-              <Route path="/admin/audit" element={<RequireAuth><AdminAudit /></RequireAuth>} />
-              <Route path="/admin/groups" element={<RequireAuth><AdminGroups /></RequireAuth>} />
+              {/* Consolidación: identidad → Personas, autorización → Accesos */}
+              <Route path="/admin/personas" element={<RequireAuth><AdminPeople /></RequireAuth>} />
+              <Route path="/admin/accesos" element={<RequireAuth><AdminPeople initialTab="accesos" /></RequireAuth>} />
               <Route path="/admin/workspaces" element={<RequireAuth><AdminWorkspaces /></RequireAuth>} />
-              <Route path="/admin/permissions" element={<RequireAuth><AdminPermissions /></RequireAuth>} />
+              <Route path="/admin/audit" element={<RequireAuth><AdminAudit /></RequireAuth>} />
+              {/* Rutas viejas → redirigen a las consolidadas */}
+              <Route path="/admin/users" element={<Navigate to="/admin/personas" replace />} />
+              <Route path="/admin/groups" element={<Navigate to="/admin/personas" replace />} />
+              <Route path="/admin/permissions" element={<Navigate to="/admin/accesos" replace />} />
+              <Route path="/billing" element={<RequireAuth><Billing /></RequireAuth>} />
               <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
             </Routes>
           </BrowserRouter>

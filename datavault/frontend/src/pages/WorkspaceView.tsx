@@ -12,6 +12,7 @@ import { useWorkspace } from "../workspace/WorkspaceContext";
 import WorkspaceSwitcher from "../workspace/WorkspaceSwitcher";
 import UserMenu from "../components/UserMenu";
 import { useToast } from "../components/Toast";
+import { IcSearch, IcTable } from "../components/ui/icons";
 import type { ColumnDefinition } from "../types";
 import type { UseQueryResult } from "@tanstack/react-query";
 
@@ -331,7 +332,7 @@ export default function WorkspaceView() {
         {datasets.length > 0 && (
           <div style={{ maxWidth: "var(--page-max)", margin: "16px auto 0", position: "relative" }}>
             <div className="global-search-wrap">
-              <span className="search-icon">🔍</span>
+              <span className="search-icon" style={{ display: "inline-flex", alignItems: "center" }}><IcSearch size={15} /></span>
               <input
                 placeholder="Buscar en todos los datasets..."
                 value={globalSearch}
@@ -446,7 +447,7 @@ export default function WorkspaceView() {
           <div className="ds-grid">{[1, 2, 3].map((n) => <SkeletonCard key={n} />)}</div>
         ) : visibleDatasets.length === 0 ? (
           <div className="ds-empty" onClick={() => navigate("/create")}>
-            <div className="ds-empty-icon">🗄️</div>
+            <div className="ds-empty-icon" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-muted)" }}><IcTable size={30} /></div>
             <h3>{datasets.length === 0 ? "Sin datasets todavía" : "Solo hay tablas intermedias"}</h3>
             <p>{datasets.length === 0 ? "Haz clic para crear tu primer dataset" : "Marca el toggle de arriba para verlas"}</p>
           </div>
@@ -540,7 +541,7 @@ export default function WorkspaceView() {
               </span>
               <button className="btn btn-secondary" style={{ fontSize: 12, padding: "4px 12px" }}
                 onClick={() => setShowSchema(true)}>
-                Ver completo ↗
+                Ver completo 
               </button>
             </div>
             <SchemaPreview datasets={datasets} colQueries={colQueries} />

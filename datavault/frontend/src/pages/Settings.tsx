@@ -64,7 +64,7 @@ export default function Settings() {
         </p>
 
         <div style={{ display: "flex", borderBottom: "1.5px solid var(--color-border)", marginBottom: 18 }}>
-          {([["tokens", "🔑 API tokens"], ["webhooks", "🔔 Webhooks"]] as const).map(([k, label]) => (
+          {([["tokens", "API tokens"], ["webhooks", "Webhooks"]] as const).map(([k, label]) => (
             <button key={k}
               onClick={() => setTab(k)}
               style={{

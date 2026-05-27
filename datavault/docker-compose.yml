@@ -15,10 +15,14 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+    networks: [appnet]
 
   backend:
     build: ./backend
     env_file: .env
+    environment:
+      # Ejecutor de scripts local (reemplaza AWS Lambda en self-hosted)
+      EXECUTOR_URL: "http://executor:8000/run"
     ports:
       - "8000:8000"
     depends_on:
@@ -26,6 +30,7 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
+    networks: [appnet, execnet]
 
   frontend:
     build: ./frontend
@@ -36,6 +41,25 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+    networks: [appnet]
+
+  # Ejecutor de scripts aislado: corre el código del usuario en subproceso con
+  # límites de CPU/memoria/tiempo. SIN acceso a la base de datos ni a internet
+  # (solo en execnet, que es interna). Solo el backend puede alcanzarlo.
+  executor:
+    build: ./executor
+    restart: unless-stopped
+    environment:
+      EXECUTOR_MEM_MB: "768"        # límite de memoria por ejecución
+      EXECUTOR_CPU_SECONDS: "25"    # límite de CPU por ejecución
+      EXECUTOR_WALL_SECONDS: "30"   # timeout de pared
+    mem_limit: 1g                   # tope duro del contenedor
+    networks: [execnet]
 
 volumes:
   pgdata:
+
+networks:
+  appnet: {}
+  execnet:
+    internal: true   # sin salida a internet: el executor no puede llamar afuera

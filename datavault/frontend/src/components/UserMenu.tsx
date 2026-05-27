@@ -1,12 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../auth/AuthContext";
+import { getWorkspaces } from "../api/workspaces";
+import { IcUsers, IcList, IcSettings, IcCreditCard } from "./ui/icons";
 
 export default function UserMenu() {
   const { user, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  // Personas/Accesos también para owner/admin_ws (no solo admin global).
+  const { data: workspaces = [] } = useQuery({ queryKey: ["workspaces"], queryFn: getWorkspaces });
+  const isManager = isAdmin || workspaces.some((w) => w.my_role === "owner" || w.my_role === "admin_ws");
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -65,30 +72,39 @@ export default function UserMenu() {
 
           <div className="um-dropdown-divider" />
 
-          {/* Items */}
+          {/* Personas y accesos — para admin global y owner/admin_ws */}
+          {isManager && (
+            <button className="um-item" onClick={() => { setOpen(false); navigate("/admin/personas"); }}>
+              <span className="um-item-icon um-item-icon--violet" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--pm-violet-600)" }}><IcUsers size={15} /></span>
+              <div>
+                <div className="um-item-label">Personas y accesos</div>
+                <div className="um-item-sub">Usuarios, roles, miembros, grupos y permisos</div>
+              </div>
+            </button>
+          )}
+          {isManager && (
+            <button className="um-item" onClick={() => { setOpen(false); navigate("/billing"); }}>
+              <span className="um-item-icon" style={{ background:"#FFF3E8", display: "flex", alignItems: "center", justifyContent: "center", color: "#D96C10" }}><IcCreditCard size={15} /></span>
+              <div>
+                <div className="um-item-label">Planes y facturación</div>
+                <div className="um-item-sub">Plan del workspace, uso y pagos</div>
+              </div>
+            </button>
+          )}
           {isAdmin && (
-            <>
-              <button className="um-item" onClick={() => { setOpen(false); navigate("/admin/users"); }}>
-                <span className="um-item-icon um-item-icon--violet">👥</span>
-                <div>
-                  <div className="um-item-label">Gestión de usuarios</div>
-                  <div className="um-item-sub">Roles y acceso al sistema</div>
-                </div>
-              </button>
-              <button className="um-item" onClick={() => { setOpen(false); navigate("/admin/audit"); }}>
-                <span className="um-item-icon" style={{ background:"#EFF6FF" }}>📋</span>
-                <div>
-                  <div className="um-item-label">Registro de auditoría</div>
-                  <div className="um-item-sub">Historial de todos los cambios</div>
-                </div>
-              </button>
-            </>
+            <button className="um-item" onClick={() => { setOpen(false); navigate("/admin/audit"); }}>
+              <span className="um-item-icon" style={{ background:"#EFF6FF", display: "flex", alignItems: "center", justifyContent: "center", color: "#2563EB" }}><IcList size={15} /></span>
+              <div>
+                <div className="um-item-label">Registro de auditoría</div>
+                <div className="um-item-sub">Historial de todos los cambios</div>
+              </div>
+            </button>
           )}
 
           <div className="um-dropdown-divider" />
 
           <button className="um-item" onClick={() => { setOpen(false); navigate("/settings"); }}>
-            <span className="um-item-icon">⚙</span>
+            <span className="um-item-icon" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-secondary)" }}><IcSettings size={15} /></span>
             <div>
               <div className="um-item-label">Integraciones</div>
               <div className="um-item-sub">API tokens y webhooks</div>

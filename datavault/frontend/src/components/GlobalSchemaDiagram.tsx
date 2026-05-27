@@ -1,16 +1,12 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { getDatasets, getColumns } from "../api/datasets";
-import type { ColumnDefinition } from "../types";
+import type { ColumnDefinition, Dataset } from "../types";
 import RelationScanModal from "./RelationScanModal";
+import { datasetMatchesRef } from "../utils/relations";
+import { typeStyle, PALETTE, makeBoxH, downloadPng } from "../utils/diagram";
 
 interface Props { onClose: () => void; workspaceId?: string; workspaceName?: string }
-
-function normalize(s: string) { return s.toLowerCase().replace(/\s+/g, "_"); }
-function keyword(s: string) {
-  const parts = normalize(s).split("_");
-  return parts[parts.length - 1];
-}
 
 // ── Layout ────────────────────────────────────────────────────────────────────
 const BOX_W   = 252;
@@ -22,33 +18,7 @@ const ROW_GAP = 44;
 const MARGIN  = 52;
 const MAX_R   = 8;
 
-// ── Type styling ──────────────────────────────────────────────────────────────
-const TYPE_SHORT: Record<string, string> = {
-  text:"txt", long_text:"↕txt", url:"url", email:"mail", phone:"tel",
-  number:"num", currency:"$", percent:"%", rating:"★",
-  enum:"list", multiselect:"list+", boolean:"bool", date:"date", relation:"→",
-};
-const TYPE_FG: Record<string, string> = {
-  text:"#64748B", long_text:"#475569", url:"#0891B2", email:"#0284C7", phone:"#0369A1",
-  number:"#2563EB", currency:"#16A34A", percent:"#7C3AED", rating:"#D97706",
-  enum:"#B45309", multiselect:"#C2410C", boolean:"#059669", date:"#7C3AED", relation:"#DB2777",
-};
-const TYPE_BG: Record<string, string> = {
-  text:"#F1F5F9", long_text:"#F1F5F9", url:"#E0F2FE", email:"#E0F2FE", phone:"#DBEAFE",
-  number:"#DBEAFE", currency:"#DCFCE7", percent:"#EDE9FE", rating:"#FEF3C7",
-  enum:"#FEF9C3", multiselect:"#FEE2E2", boolean:"#DCFCE7", date:"#EDE9FE", relation:"#FCE7F3",
-};
-
-const PALETTE = [
-  "#0EA5E9","#3B82F6","#F5821F","#8B5CF6","#0EA5E9",
-  "#EC4899","#14B8A6","#F59E0B","#6366F1","#10B981",
-  "#EF4444","#06B6D4","#84CC16","#A855F7","#F97316",
-];
-
-function boxH(cols: ColumnDefinition[]) {
-  return HDR_H + Math.min(cols.length, MAX_R) * ROW_H + BOX_PAD
-    + (cols.length > MAX_R ? ROW_H : 0);
-}
+const boxH = makeBoxH({ HDR_H, ROW_H, BOX_PAD, MAX_ROWS: MAX_R });
 
 // ── Topological layering ──────────────────────────────────────────────────────
 function assignLayers(ids: string[], edges: { from: string; to: string }[]) {
@@ -117,9 +87,7 @@ function TableBox({ x, y, name, columns, accent }: {
         const ry = y + HDR_H + i * ROW_H;
         const cy = ry + ROW_H / 2 + 4;
         const isFk = col.field_key.startsWith("id_");
-        const tShort = TYPE_SHORT[col.data_type] ?? col.data_type.slice(0, 4);
-        const tFg = TYPE_FG[col.data_type] ?? "#64748B";
-        const tBg = TYPE_BG[col.data_type] ?? "#F1F5F9";
+        const { short: tShort, fg: tFg, bg: tBg } = typeStyle(col.data_type);
         const bw = Math.max(tShort.length * 6.8 + 10, 28);
 
         return (
@@ -222,39 +190,171 @@ function Arrow({ x1, y1, x2, y2, label, color, markerId, leftCard = "1", rightCa
   );
 }
 
-// ── PNG export ────────────────────────────────────────────────────────────────
-function downloadPng(svgEl: SVGSVGElement, name: string) {
-  const { width: W, height: H } = svgEl.viewBox.baseVal;
-  const scale = 2;
+// ── Construcción de aristas (FK directas + N:N virtuales vía bridge) ──────────
+type DiagramEdge = { from: string; to: string; fkKey: string; color: string; bridge?: string };
 
-  const clone = svgEl.cloneNode(true) as SVGSVGElement;
-  clone.setAttribute("width", String(W));
-  clone.setAttribute("height", String(H));
-  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-  clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+function buildEdges(
+  datasets: Dataset[],
+  allDatasets: Dataset[],
+  colsMap: Map<string, ColumnDefinition[]>,
+  bridgeIds: Set<string>,
+  showBridges: boolean,
+  accentMap: Map<string, string>,
+): DiagramEdge[] {
+  // Fuentes: (1) columnas relation con related_dataset_id; (2) columnas id_* cuyo
+  // sufijo coincide con el nombre de otro dataset (auto-detectadas).
+  const datasetById = new Map(datasets.map((d) => [d.id, d]));
+  const edges: DiagramEdge[] = [];
+  const seen = new Set<string>(); // dedupe por from+fkKey
+  datasets.forEach((ds) => {
+    for (const c of colsMap.get(ds.id) ?? []) {
+      let parentId: string | undefined;
+      if (c.data_type === "relation" && c.rules?.related_dataset_id) {
+        if (datasetById.has(c.rules.related_dataset_id)) parentId = c.rules.related_dataset_id;
+      } else if (c.field_key.startsWith("id_")) {
+        const refKw = c.field_key.slice(3);
+        parentId = datasets.find((d) => d.id !== ds.id && datasetMatchesRef(d.name, refKw))?.id;
+      }
+      if (parentId && parentId !== ds.id) {
+        const key = `${ds.id}:${c.field_key}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          edges.push({ from: ds.id, to: parentId, fkKey: c.field_key, color: accentMap.get(ds.id) ?? "#888" });
+        }
+      }
+    }
+  });
 
-  const canvas = document.createElement("canvas");
-  canvas.width = W * scale;
-  canvas.height = H * scale;
-  const ctx = canvas.getContext("2d")!;
-  ctx.fillStyle = "#EFF2F7";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.scale(scale, scale);
+  // Relaciones N:N virtuales: con bridge OCULTO, flecha directa entre los 2 datasets que conectaba.
+  if (!showBridges) {
+    const allById = new Map(allDatasets.map((d) => [d.id, d]));
+    for (const bridge of allDatasets) {
+      if (!bridge.is_bridge) continue;
+      const relTargets: string[] = [];
+      for (const c of colsMap.get(bridge.id) ?? []) {
+        if (c.data_type === "relation" && c.rules?.related_dataset_id) {
+          const tgt = c.rules.related_dataset_id;
+          if (allById.get(tgt) && !bridgeIds.has(tgt) && !relTargets.includes(tgt)) relTargets.push(tgt);
+        }
+      }
+      for (let i = 0; i < relTargets.length; i++) {
+        for (let j = i + 1; j < relTargets.length; j++) {
+          const a = relTargets[i], b = relTargets[j];
+          if (!datasetById.has(a) || !datasetById.has(b)) continue;
+          const key = `nn:${a}:${b}:${bridge.id}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          edges.push({ from: a, to: b, fkKey: `vía ${bridge.name}`, color: "#7C3AED", bridge: bridge.id });
+        }
+      }
+    }
+  }
+  return edges;
+}
 
-  const src = new XMLSerializer().serializeToString(clone);
-  const blob = new Blob([src], { type: "image/svg+xml;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const img = new Image();
-  img.onload = () => {
-    ctx.drawImage(img, 0, 0, W, H);
-    URL.revokeObjectURL(url);
-    const a = document.createElement("a");
-    a.download = `${name}-schema.png`;
-    a.href = canvas.toDataURL("image/png");
-    a.click();
-  };
-  img.onerror = () => URL.revokeObjectURL(url);
-  img.src = url;
+// ── Posicionamiento de cajas (grid sin relaciones / capas + banda de aislados) ──
+interface DiagramLayout {
+  posMap: Map<string, { x: number; y: number }>;
+  svgW: number;
+  svgH: number;
+  isolatedBandY: number | null; // Y del separador de la banda de aislados (o null)
+}
+
+function computeLayout(
+  datasets: Dataset[],
+  colsMap: Map<string, ColumnDefinition[]>,
+  isolatedDs: Dataset[],
+  byLayer: string[][],
+  maxLayer: number,
+  noRelations: boolean,
+): DiagramLayout {
+  const posMap = new Map<string, { x: number; y: number }>();
+  let svgW: number;
+  let svgH: number;
+  let isolatedBandY: number | null = null;
+
+  if (noRelations && datasets.length > 0) {
+    // Grid layout: evita una columna vertical larguísima cuando no hay FKs.
+    const gridCols = Math.min(4, Math.max(2, Math.ceil(Math.sqrt(datasets.length))));
+    const numRows = Math.ceil(datasets.length / gridCols);
+    const rowHeights: number[] = [];
+    for (let r = 0; r < numRows; r++) {
+      let maxH = 0;
+      for (let c = 0; c < gridCols; c++) {
+        const idx = r * gridCols + c;
+        if (idx >= datasets.length) break;
+        const h = boxH(colsMap.get(datasets[idx].id) ?? []);
+        if (h > maxH) maxH = h;
+      }
+      rowHeights.push(maxH);
+    }
+    const rowYs: number[] = [];
+    let curY = MARGIN;
+    for (const rh of rowHeights) {
+      rowYs.push(curY);
+      curY += rh + ROW_GAP;
+    }
+    datasets.forEach((ds, i) => {
+      posMap.set(ds.id, {
+        x: MARGIN + (i % gridCols) * (BOX_W + COL_GAP),
+        y: rowYs[Math.floor(i / gridCols)],
+      });
+    });
+    svgW = MARGIN * 2 + gridCols * (BOX_W + COL_GAP) - COL_GAP;
+    svgH = curY - ROW_GAP + MARGIN;
+    return { posMap, svgW, svgH, isolatedBandY };
+  }
+
+  // Layer layout: columnas por nivel (MASTER → DETALLE) solo con conectados
+  const layerContentH = byLayer.map((ids) =>
+    ids.reduce((s, id) => s + boxH(colsMap.get(id) ?? []) + ROW_GAP, -ROW_GAP)
+  );
+  const maxLayerH = Math.max(300, ...layerContentH);
+  const layeredH = maxLayerH + MARGIN + 30;
+
+  byLayer.forEach((ids, li) => {
+    let curY = MARGIN + 30 + Math.max(0, (maxLayerH - layerContentH[li]) / 2);
+    ids.forEach((id) => {
+      posMap.set(id, { x: MARGIN + li * (BOX_W + COL_GAP), y: curY });
+      curY += boxH(colsMap.get(id) ?? []) + ROW_GAP;
+    });
+  });
+
+  const layeredW = MARGIN * 2 + (maxLayer + 1) * (BOX_W + COL_GAP) - COL_GAP;
+
+  // Datasets aislados → grilla en banda inferior, separados visualmente
+  let isolatedH = 0;
+  if (isolatedDs.length > 0) {
+    const isoCols = Math.min(4, Math.max(2, Math.ceil(Math.sqrt(isolatedDs.length))));
+    const isoRows = Math.ceil(isolatedDs.length / isoCols);
+    const rowMaxH: number[] = [];
+    for (let r = 0; r < isoRows; r++) {
+      let mh = 0;
+      for (let c = 0; c < isoCols; c++) {
+        const idx = r * isoCols + c;
+        if (idx >= isolatedDs.length) break;
+        const h = boxH(colsMap.get(isolatedDs[idx].id) ?? []);
+        if (h > mh) mh = h;
+      }
+      rowMaxH.push(mh);
+    }
+    const ISOLATED_BAND_GAP = 80; // separación entre el grafo y la banda
+    const yStart = layeredH + ISOLATED_BAND_GAP;
+    isolatedBandY = layeredH + ISOLATED_BAND_GAP / 2;
+    const isoBandW = isoCols * (BOX_W + COL_GAP) - COL_GAP;
+    const xOffset = Math.max(MARGIN, MARGIN + (layeredW - MARGIN * 2 - isoBandW) / 2);
+    isolatedDs.forEach((ds, i) => {
+      const row = Math.floor(i / isoCols);
+      const rowY = yStart + rowMaxH.slice(0, row).reduce((s, h) => s + h + ROW_GAP, 0);
+      posMap.set(ds.id, { x: xOffset + (i % isoCols) * (BOX_W + COL_GAP), y: rowY });
+    });
+    isolatedH = ISOLATED_BAND_GAP + rowMaxH.reduce((s, h) => s + h + ROW_GAP, 0) - ROW_GAP;
+    svgW = Math.max(layeredW, MARGIN * 2 + isoBandW);
+  } else {
+    svgW = layeredW;
+  }
+  svgH = layeredH + isolatedH + MARGIN;
+  return { posMap, svgW, svgH, isolatedBandY };
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
@@ -291,77 +391,8 @@ export default function GlobalSchemaDiagram({ onClose, workspaceId, workspaceNam
     datasets.map((ds, i) => [ds.id, PALETTE[i % PALETTE.length]])
   );
 
-  // FK edges — fuentes:
-  //  1. Columnas con data_type === "relation" + rules.related_dataset_id (relaciones confirmadas)
-  //  2. Columnas id_* cuyo sufijo coincida con el nombre de otro dataset (auto-detectadas)
-  const datasetById = new Map(datasets.map((d) => [d.id, d]));
-  const edges: { from: string; to: string; fkKey: string; color: string; bridge?: string }[] = [];
-  const seen = new Set<string>(); // dedupe por from+fkKey
-  datasets.forEach((ds) => {
-    const cols = colsMap.get(ds.id) ?? [];
-    cols.forEach((c) => {
-      let parentId: string | undefined;
-
-      if (c.data_type === "relation" && c.rules?.related_dataset_id) {
-        if (datasetById.has(c.rules.related_dataset_id)) {
-          parentId = c.rules.related_dataset_id;
-        }
-      } else if (c.field_key.startsWith("id_")) {
-        const refKw = c.field_key.slice(3);
-        const parent = datasets.find((d) =>
-          d.id !== ds.id && (
-            keyword(d.name) === refKw || normalize(d.name) === refKw ||
-            normalize(d.name).endsWith(`_${refKw}`) || normalize(d.name).startsWith(`${refKw}_`)
-          )
-        );
-        parentId = parent?.id;
-      }
-
-      if (parentId && parentId !== ds.id) {
-        const key = `${ds.id}:${c.field_key}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          edges.push({ from: ds.id, to: parentId, fkKey: c.field_key, color: accentMap.get(ds.id) ?? "#888" });
-        }
-      }
-    });
-  });
-
-  // Relaciones N:N virtuales: cuando un bridge está OCULTO (showBridges=false),
-  // dibujamos una flecha directa entre los 2 datasets que conectaba.
-  if (!showBridges) {
-    const allById = new Map(allDatasets.map((d) => [d.id, d]));
-    for (const bridge of allDatasets) {
-      if (!bridge.is_bridge) continue;
-      const bridgeCols = colsMap.get(bridge.id) ?? [];
-      // Encontrar las columnas relation del bridge (típicamente 2)
-      const relTargets: string[] = [];
-      for (const c of bridgeCols) {
-        if (c.data_type === "relation" && c.rules?.related_dataset_id) {
-          const tgt = c.rules.related_dataset_id;
-          if (allById.get(tgt) && !bridgeIds.has(tgt)) {
-            if (!relTargets.includes(tgt)) relTargets.push(tgt);
-          }
-        }
-      }
-      // Para cada par único de targets visibles, dibujar una conexión N:N
-      for (let i = 0; i < relTargets.length; i++) {
-        for (let j = i + 1; j < relTargets.length; j++) {
-          const a = relTargets[i], b = relTargets[j];
-          if (!datasetById.has(a) || !datasetById.has(b)) continue;
-          const key = `nn:${a}:${b}:${bridge.id}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          edges.push({
-            from: a, to: b,
-            fkKey: `vía ${bridge.name}`,
-            color: "#7C3AED", // morado para N:N
-            bridge: bridge.id,
-          });
-        }
-      }
-    }
-  }
+  // Aristas (FK directas + N:N virtuales vía bridge oculto) — lógica pura extraída.
+  const edges = buildEdges(datasets, allDatasets, colsMap, bridgeIds, showBridges, accentMap);
 
   // Separar datasets conectados (participan en algún edge) vs aislados
   const connectedIds = new Set<string>();
@@ -377,101 +408,10 @@ export default function GlobalSchemaDiagram({ onClose, workspaceId, workspaceNam
   const byLayer: string[][] = Array.from({ length: maxLayer + 1 }, () => []);
   connectedDs.forEach((ds, i) => byLayer[layersConn[i]].push(ds.id));
 
-  const posMap = new Map<string, { x: number; y: number }>();
-  let svgW: number;
-  let svgH: number;
-  let isolatedBandY: number | null = null; // Y donde inicia la banda de aislados (para separador visual)
-
-  if (noRelations && datasets.length > 0) {
-    // Grid layout: evita columna vertical larguísima cuando no hay FKs.
-    // Calculamos cols deseadas (~raíz cuadrada, máx 4).
-    const gridCols = Math.min(4, Math.max(2, Math.ceil(Math.sqrt(datasets.length))));
-    const numRows = Math.ceil(datasets.length / gridCols);
-    const rowHeights: number[] = [];
-    for (let r = 0; r < numRows; r++) {
-      let maxH = 0;
-      for (let c = 0; c < gridCols; c++) {
-        const idx = r * gridCols + c;
-        if (idx >= datasets.length) break;
-        const h = boxH(colsMap.get(datasets[idx].id) ?? []);
-        if (h > maxH) maxH = h;
-      }
-      rowHeights.push(maxH);
-    }
-    const rowYs: number[] = [];
-    let curY = MARGIN;
-    for (const rh of rowHeights) {
-      rowYs.push(curY);
-      curY += rh + ROW_GAP;
-    }
-    datasets.forEach((ds, i) => {
-      const col = i % gridCols;
-      const row = Math.floor(i / gridCols);
-      posMap.set(ds.id, {
-        x: MARGIN + col * (BOX_W + COL_GAP),
-        y: rowYs[row],
-      });
-    });
-    svgW = MARGIN * 2 + gridCols * (BOX_W + COL_GAP) - COL_GAP;
-    svgH = curY - ROW_GAP + MARGIN;
-  } else {
-    // Layer layout: columnas por nivel (MASTER → DETALLE) solo con conectados
-    const layerContentH = byLayer.map((ids) =>
-      ids.reduce((s, id) => s + boxH(colsMap.get(id) ?? []) + ROW_GAP, -ROW_GAP)
-    );
-    const maxLayerH = Math.max(300, ...layerContentH);
-    const layeredH = maxLayerH + MARGIN + 30;
-
-    byLayer.forEach((ids, li) => {
-      const totalH = layerContentH[li];
-      let curY = MARGIN + 30 + Math.max(0, (maxLayerH - totalH) / 2);
-      ids.forEach((id) => {
-        posMap.set(id, { x: MARGIN + li * (BOX_W + COL_GAP), y: curY });
-        curY += boxH(colsMap.get(id) ?? []) + ROW_GAP;
-      });
-    });
-
-    const layeredW = MARGIN * 2 + (maxLayer + 1) * (BOX_W + COL_GAP) - COL_GAP;
-
-    // Datasets aislados → grilla en banda inferior, separados visualmente
-    let isolatedH = 0;
-    if (isolatedDs.length > 0) {
-      const isoCols = Math.min(4, Math.max(2, Math.ceil(Math.sqrt(isolatedDs.length))));
-      const isoRows = Math.ceil(isolatedDs.length / isoCols);
-      const rowMaxH: number[] = [];
-      for (let r = 0; r < isoRows; r++) {
-        let mh = 0;
-        for (let c = 0; c < isoCols; c++) {
-          const idx = r * isoCols + c;
-          if (idx >= isolatedDs.length) break;
-          const h = boxH(colsMap.get(isolatedDs[idx].id) ?? []);
-          if (h > mh) mh = h;
-        }
-        rowMaxH.push(mh);
-      }
-      const ISOLATED_BAND_GAP = 80; // separación entre el grafo y la banda
-      const yStart = layeredH + ISOLATED_BAND_GAP;
-      isolatedBandY = layeredH + ISOLATED_BAND_GAP / 2;
-      let curRowY = yStart;
-      // Centrar la grilla horizontalmente sobre el ancho del grafo conectado
-      const isoBandW = isoCols * (BOX_W + COL_GAP) - COL_GAP;
-      const xOffset = Math.max(MARGIN, MARGIN + (layeredW - MARGIN * 2 - isoBandW) / 2);
-      isolatedDs.forEach((ds, i) => {
-        const col = i % isoCols;
-        const row = Math.floor(i / isoCols);
-        const rowY = curRowY + rowMaxH.slice(0, row).reduce((s, h) => s + h + ROW_GAP, 0);
-        posMap.set(ds.id, {
-          x: xOffset + col * (BOX_W + COL_GAP),
-          y: rowY,
-        });
-      });
-      isolatedH = ISOLATED_BAND_GAP + rowMaxH.reduce((s, h) => s + h + ROW_GAP, 0) - ROW_GAP;
-      svgW = Math.max(layeredW, MARGIN * 2 + isoBandW);
-    } else {
-      svgW = layeredW;
-    }
-    svgH = layeredH + isolatedH + MARGIN;
-  }
+  // Posicionamiento de cajas — lógica pura extraída.
+  const { posMap, svgW, svgH, isolatedBandY } = computeLayout(
+    datasets, colsMap, isolatedDs, byLayer, maxLayer, noRelations,
+  );
 
   // Unique arrow colors for defs
   const arrowColors = [...new Set(edges.map((e) => e.color))];
@@ -517,11 +457,11 @@ export default function GlobalSchemaDiagram({ onClose, workspaceId, workspaceNam
             )}
             <button className="btn btn-secondary" style={{ fontSize: 13, borderColor: "#7C3AED", color: "#7C3AED" }}
               onClick={() => setShowRelationScan(true)}>
-              🔗 Detectar relaciones
+              Detectar relaciones
             </button>
             <button className="btn btn-secondary" style={{ fontSize: 13 }}
               onClick={() => svgRef.current && downloadPng(svgRef.current, workspaceName ?? "schema")}>
-              ⬇ Descargar PNG
+              Descargar PNG
             </button>
             <button className="btn btn-ghost" onClick={onClose}
               style={{ fontSize: 20, padding: "2px 8px", lineHeight: 1 }}>×</button>

@@ -5,7 +5,8 @@ import json
 import logging
 import unicodedata
 import uuid
-import boto3
+from dataclasses import dataclass
+from collections import defaultdict
 from datetime import datetime, timezone, date as date_type
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +17,10 @@ from schemas import DatasetCreate, DatasetUpdate, DatasetOut, ComputeResult, Col
 from auth import get_current_user, require_admin, ds_require_editor, ds_require_viewer, effective_workspace_role, effective_role
 from limiter import limiter
 from templates import TEMPLATES, find_template
+from billing_plans import assert_can
+from lambda_executor import (
+    run_executor, LambdaNotConfigured, LambdaInvocationError, LambdaExecutionError,
+)
 
 logger = logging.getLogger("datavault.datasets")
 
@@ -45,21 +50,39 @@ async def list_datasets(
            editores/admins). Antes eran visibles a todos.
     """
     ws_filter = Dataset.workspace_id == workspace_id if workspace_id else True
+    result = await db.execute(
+        select(Dataset)
+        .where(and_(accessible_datasets_filter(current_user), ws_filter))
+        .order_by(Dataset.created_at.desc())
+    )
+    return result.scalars().all()
 
-    if current_user.role == "admin":
-        result = await db.execute(select(Dataset).where(ws_filter).order_by(Dataset.created_at.desc()))
-        return result.scalars().all()
 
-    # Subqueries reutilizables
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def accessible_datasets_filter(user: User):
+    """Expresión SQL booleana de visibilidad de datasets para `user`.
+
+    Mismo orden de prioridad que `effective_role`:
+      1. permiso directo (role != 'none') gana sobre todo; role == 'none' oculta.
+      2. sin permiso directo → permiso de grupo decide igual.
+      3. sin permisos directos ni de grupo → membresía de workspace.
+
+    Para admin global devuelve `True` (ve todos). Usar combinado con el filtro de
+    workspace: `select(Dataset).where(and_(accessible_datasets_filter(u), ws_filter))`.
+    """
+    if user.role == "admin":
+        return True
+
     direct_perm_any = select(DatasetPermission.dataset_id).where(
-        DatasetPermission.user_id == current_user.id,
+        DatasetPermission.user_id == user.id,
     )
     direct_perm_granted = select(DatasetPermission.dataset_id).where(
-        DatasetPermission.user_id == current_user.id,
+        DatasetPermission.user_id == user.id,
         DatasetPermission.role != "none",
     )
     user_group_ids = select(UserGroupMember.group_id).where(
-        UserGroupMember.user_id == current_user.id,
+        UserGroupMember.user_id == user.id,
     )
     group_perm_any = select(DatasetGroupPermission.dataset_id).where(
         DatasetGroupPermission.group_id.in_(user_group_ids),
@@ -69,31 +92,18 @@ async def list_datasets(
         DatasetGroupPermission.role != "none",
     )
     user_workspace_ids = select(WorkspaceMember.workspace_id).where(
-        WorkspaceMember.user_id == current_user.id,
+        WorkspaceMember.user_id == user.id,
     )
 
-    has_direct       = Dataset.id.in_(direct_perm_any)
-    granted_direct   = Dataset.id.in_(direct_perm_granted)
-    has_group        = Dataset.id.in_(group_perm_any)
-    granted_group    = Dataset.id.in_(group_perm_granted)
-    in_user_ws       = Dataset.workspace_id.in_(user_workspace_ids)
-
-    # Capa 1: permiso directo decide (gana sobre todo lo demás)
-    layer_direct = granted_direct  # role != 'none'
-    # Capa 2: sin permiso directo, permiso de grupo decide
-    layer_group  = and_(not_(has_direct), granted_group)
-    # Capa 3: sin permisos directos ni de grupo → workspace membership
-    layer_ws     = and_(not_(has_direct), not_(has_group), in_user_ws)
-
-    visible = or_(layer_direct, layer_group, layer_ws)
-
-    result = await db.execute(
-        select(Dataset).where(and_(visible, ws_filter)).order_by(Dataset.created_at.desc())
+    has_direct = Dataset.id.in_(direct_perm_any)
+    has_group  = Dataset.id.in_(group_perm_any)
+    return or_(
+        Dataset.id.in_(direct_perm_granted),                                  # capa 1
+        and_(not_(has_direct), Dataset.id.in_(group_perm_granted)),           # capa 2
+        and_(not_(has_direct), not_(has_group),                               # capa 3
+             Dataset.workspace_id.in_(user_workspace_ids)),
     )
-    return result.scalars().all()
 
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
 
 async def _require_ws_manager(user: User, workspace_id: uuid.UUID | None, db: AsyncSession):
     """Permite admin global, o owner/admin_ws del workspace."""
@@ -152,6 +162,11 @@ async def create_dataset(
     db: AsyncSession = Depends(get_db),
 ):
     await _require_ws_manager(current_user, body.workspace_id, db)
+
+    # Límites del plan: cantidad de datasets + feature de scripts (computed)
+    await assert_can(body.workspace_id, "dataset", db)
+    if body.is_computed:
+        await assert_can(body.workspace_id, "script", db)
 
     # Validar source_dataset_ids (computed): existencia + acceso + no auto-referencia
     if body.is_computed and body.source_dataset_ids:
@@ -230,6 +245,7 @@ async def compute_dataset(
         raise HTTPException(status_code=404, detail="Dataset no encontrado")
     if not dataset.is_computed:
         raise HTTPException(status_code=400, detail="Este dataset no es calculado")
+    await assert_can(dataset.workspace_id, "script", db)  # feature de plan
     if not dataset.source_code or not dataset.source_code.strip():
         raise HTTPException(status_code=400, detail="El dataset no tiene código fuente")
     if not dataset.source_dataset_ids:
@@ -257,37 +273,15 @@ async def compute_dataset(
         df_name = "".join(c if c.isalnum() or c == "_" else "_" for c in df_name)
         dataframes[df_name] = [{"__id__": str(r.id), **r.data} for r in records]
 
-    lambda_arn = os.getenv("LAMBDA_EXECUTOR_ARN")
-    if not lambda_arn:
-        raise HTTPException(
-            status_code=503,
-            detail="Lambda executor no configurado. Define la variable de entorno LAMBDA_EXECUTOR_ARN.",
-        )
-
     try:
-        client = boto3.client("lambda", region_name=os.getenv("AWS_REGION", "us-east-1"))
-        response = client.invoke(
-            FunctionName=lambda_arn,
-            InvocationType="RequestResponse",
-            Payload=json.dumps({"code": dataset.source_code, "dataframes": dataframes}),
-        )
-        payload_bytes = response["Payload"].read()
-        result = json.loads(payload_bytes)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Error invocando Lambda: {str(e)}")
-
-    if response.get("FunctionError"):
-        detail = result.get("errorMessage", str(result))
-        raise HTTPException(status_code=422, detail=f"Error en Lambda: {detail}")
-
-    if result.get("error"):
-        raise HTTPException(
-            status_code=422,
-            detail={"error": result["error"], "traceback": result.get("traceback", "")},
-        )
-
-    columns_data: list[dict] = result.get("columns", [])
-    records_data: list[dict] = result.get("records", [])
+        columns_data, records_data = run_executor(dataset.source_code, dataframes)
+    except LambdaNotConfigured as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except LambdaInvocationError as e:
+        raise HTTPException(status_code=502, detail=f"Error invocando Lambda: {e}")
+    except LambdaExecutionError as e:
+        detail = {"error": e.message, "traceback": e.traceback} if e.traceback else f"Error en Lambda: {e.message}"
+        raise HTTPException(status_code=422, detail=detail)
 
     await db.execute(delete(ColumnDefinition).where(ColumnDefinition.dataset_id == dataset_id))
     await db.execute(delete(Record).where(Record.dataset_id == dataset_id))
@@ -612,7 +606,10 @@ async def import_datasets_from_excel_multi(
         raise HTTPException(status_code=400, detail="payload no es JSON válido")
 
     ws_id_raw = spec.get("workspace_id")
-    workspace_id = uuid.UUID(ws_id_raw) if ws_id_raw else None
+    try:
+        workspace_id = uuid.UUID(ws_id_raw) if ws_id_raw else None
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="workspace_id inválido (no es un UUID)")
     sheets_spec = spec.get("sheets") or []
     if not isinstance(sheets_spec, list) or not sheets_spec:
         raise HTTPException(status_code=400, detail="Debe enviar al menos una hoja en sheets[]")
@@ -764,87 +761,51 @@ def _name_matches(keyword: str, dataset_name: str) -> bool:
     return False
 
 
-@router.get("/relationships/scan")
-@limiter.limit("10/minute")
-async def scan_relationships(
-    request: Request,
-    workspace_id: uuid.UUID | None = Query(None),
-    sample_size: int = Query(2000, ge=10, le=10000),
-    min_content_ratio: float = Query(0.1, ge=0.0, le=1.0),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Escanea datasets accesibles del workspace en busca de relaciones candidatas.
+# Tope alto para valores únicos por columna candidata (cubre tablas reales sin OOM)
+_SCAN_DISTINCT_LIMIT = 50000
+# Penalización para datasets que parezcan respaldos / copias / versiones antiguas —
+# un humano espera vincular contra el dataset principal, no contra su backup.
+_BACKUP_HINTS = ("backup", "_bak", "_old", "copy", "_copia", "draft", "_v0", "_v1", "archivo", "_archived")
 
-    Escanea TODAS las columnas (no solo las que se llaman id_*) y verifica
-    matching por contenido contra:
-      - `__id__` (id de fila) de cada otra tabla
-      - columnas "tipo clave" (alta cardinalidad, sin repetidos) de cada otra tabla
 
-    Si una columna tiene mucho match de contenido pero no su nombre no sugiere FK,
-    igual se reporta. El score combina coincidencia por nombre + por contenido.
+def _backup_penalty(name: str) -> float:
+    return -0.15 if any(h in name.lower() for h in _BACKUP_HINTS) else 0.0
+
+
+@dataclass
+class _ScanData:
+    """Datos pre-cargados por dataset que alimentan la construcción de candidatos."""
+    cols_by_ds: dict[uuid.UUID, list[ColumnDefinition]]
+    ids_by_ds: dict[uuid.UUID, set[str]]
+    # field_key → set de valores normalizados (para matching por contenido)
+    col_values_by_ds: dict[uuid.UUID, dict[str, set[str]]]
+    # columnas "tipo clave" (alta cardinalidad / casi únicas en el sample)
+    key_cols_by_ds: dict[uuid.UUID, list[str]]
+    # field_key → {normalized → {original → count}} para detectar variantes sucias
+    variants_by_ds: dict[uuid.UUID, dict[str, dict[str, dict[str, int]]]]
+
+
+async def _load_scan_data(datasets, db: AsyncSession, sample_size: int) -> _ScanData:
+    """Carga columnas, muestras de valores y columnas-clave de cada dataset.
+
+    Las columnas de TODOS los datasets se cargan en una sola query (evita N+1);
+    las muestras de registros se cargan por dataset porque el `LIMIT` de muestreo
+    es por tabla.
     """
-    # Datasets accesibles (misma lógica que list_datasets)
-    ws_filter = Dataset.workspace_id == workspace_id if workspace_id else True
-    if current_user.role == "admin":
-        ds_q = select(Dataset).where(ws_filter)
-    else:
-        direct_perm_any = select(DatasetPermission.dataset_id).where(
-            DatasetPermission.user_id == current_user.id,
-        )
-        direct_perm_granted = select(DatasetPermission.dataset_id).where(
-            DatasetPermission.user_id == current_user.id,
-            DatasetPermission.role != "none",
-        )
-        user_group_ids = select(UserGroupMember.group_id).where(
-            UserGroupMember.user_id == current_user.id,
-        )
-        group_perm_any = select(DatasetGroupPermission.dataset_id).where(
-            DatasetGroupPermission.group_id.in_(user_group_ids),
-        )
-        group_perm_granted = select(DatasetGroupPermission.dataset_id).where(
-            DatasetGroupPermission.group_id.in_(user_group_ids),
-            DatasetGroupPermission.role != "none",
-        )
-        user_workspace_ids = select(WorkspaceMember.workspace_id).where(
-            WorkspaceMember.user_id == current_user.id,
-        )
-        visible = or_(
-            Dataset.id.in_(direct_perm_granted),
-            and_(not_(Dataset.id.in_(direct_perm_any)), Dataset.id.in_(group_perm_granted)),
-            and_(
-                not_(Dataset.id.in_(direct_perm_any)),
-                not_(Dataset.id.in_(group_perm_any)),
-                Dataset.workspace_id.in_(user_workspace_ids),
-            ),
-        )
-        ds_q = select(Dataset).where(and_(visible, ws_filter))
+    ds_ids = [ds.id for ds in datasets]
+    cols_by_ds: dict[uuid.UUID, list[ColumnDefinition]] = {ds.id: [] for ds in datasets}
+    cols_res = await db.execute(
+        select(ColumnDefinition).where(ColumnDefinition.dataset_id.in_(ds_ids))
+    )
+    for col in cols_res.scalars().all():
+        cols_by_ds[col.dataset_id].append(col)
 
-    datasets = (await db.execute(ds_q)).scalars().all()
-    if len(datasets) < 2:
-        return {"scanned": len(datasets), "candidates": []}
-
-    # ── Pre-cargar columnas y muestras por dataset ───────────────────────────
-    cols_by_ds: dict[uuid.UUID, list[ColumnDefinition]] = {}
     ids_by_ds: dict[uuid.UUID, set[str]] = {}
     col_values_by_ds: dict[uuid.UUID, dict[str, set[str]]] = {}
-    # Columnas "tipo clave" por dataset: aquellas que en el sample son únicas o casi únicas
     key_cols_by_ds: dict[uuid.UUID, list[str]] = {}
-
-    # Tope alto para valores únicos por columna candidata (cubre tablas reales sin OOM)
-    DISTINCT_LIMIT = 50000
-
-    # Para detectar variantes (= candidatos de limpieza), guardamos por columna
-    # un mapeo normalized → dict(original → count). Si hay 2+ originales, son
-    # duplicados por mayúsculas/acentos/espacios. La canonical es la más común.
     variants_by_ds: dict[uuid.UUID, dict[str, dict[str, dict[str, int]]]] = {}
 
     for ds in datasets:
-        cols_res = await db.execute(
-            select(ColumnDefinition).where(ColumnDefinition.dataset_id == ds.id)
-        )
-        cols_by_ds[ds.id] = list(cols_res.scalars().all())
-
         rec_res = await db.execute(
             select(Record.id, Record.data)
             .where(Record.dataset_id == ds.id)
@@ -852,9 +813,9 @@ async def scan_relationships(
         )
         rec_rows = rec_res.all()
 
-        # Recolectamos por columna: lista normalizada (para matching) + variantes con conteo.
-        # _iter_cell_values maneja tanto valores escalares como arrays (relation N:N).
-        per_col_raw: dict[str, list[str]] = {fk: [] for fk in (c.field_key for c in cols_by_ds[ds.id])}
+        # Por columna: lista normalizada (matching) + variantes con conteo.
+        # _iter_cell_values maneja escalares y arrays (relation N:N).
+        per_col_raw: dict[str, list[str]] = {c.field_key: [] for c in cols_by_ds[ds.id]}
         per_col_variants: dict[str, dict[str, dict[str, int]]] = {fk: {} for fk in per_col_raw}
         for _rec_id, data in rec_rows:
             if not isinstance(data, dict):
@@ -879,9 +840,8 @@ async def scan_relationships(
             if len(raw_vals) >= 3 and uniq and len(uniq) / len(raw_vals) >= 0.8:
                 key_cols.append(fk)
 
-        # Carga completa de key cols vía SQL. data->>fk devuelve el JSON serializado
-        # cuando la columna es un array (relation N:N). Detectamos ese caso y expandimos
-        # cada item; para escalares se usa el valor tal cual.
+        # Carga completa de key cols vía SQL. data->>fk serializa el JSON cuando la
+        # columna es un array (relation N:N): detectamos ese caso y expandimos cada item.
         for fk in key_cols:
             full_res = await db.execute(
                 text(
@@ -890,13 +850,12 @@ async def scan_relationships(
                     "WHERE dataset_id = :dsid AND data->>:fk IS NOT NULL "
                     "LIMIT :lim"
                 ),
-                {"fk": fk, "dsid": str(ds.id), "lim": DISTINCT_LIMIT},
+                {"fk": fk, "dsid": str(ds.id), "lim": _SCAN_DISTINCT_LIMIT},
             )
             full_vals: set[str] = set()
             for (v,) in full_res.all():
                 if v is None:
                     continue
-                # Si parece JSON array (relation N:N), expandir cada elemento.
                 items: list[str] = []
                 if isinstance(v, str) and v.startswith("[") and v.endswith("]"):
                     try:
@@ -921,29 +880,26 @@ async def scan_relationships(
                 per_col[fk] = full_vals
 
         id_res = await db.execute(
-            select(Record.id).where(Record.dataset_id == ds.id).limit(DISTINCT_LIMIT)
+            select(Record.id).where(Record.dataset_id == ds.id).limit(_SCAN_DISTINCT_LIMIT)
         )
         ids_by_ds[ds.id] = {str(r[0]) for r in id_res.all()}
-
         col_values_by_ds[ds.id] = per_col
         key_cols_by_ds[ds.id] = key_cols
         variants_by_ds[ds.id] = per_col_variants
 
-    # Penalización para datasets que parezcan respaldos / copias / versiones
-    # antiguas — un usuario humano espera vincular contra el dataset principal.
-    _BACKUP_HINTS = ("backup", "_bak", "_old", "copy", "_copia", "draft", "_v0", "_v1", "archivo", "_archived")
-    def _backup_penalty(name: str) -> float:
-        n = name.lower()
-        return -0.15 if any(h in n for h in _BACKUP_HINTS) else 0.0
+    return _ScanData(cols_by_ds, ids_by_ds, col_values_by_ds, key_cols_by_ds, variants_by_ds)
 
-    # ── Construcción de candidatos ───────────────────────────────────────────
+
+def _build_relation_candidates(datasets, sd: _ScanData, min_content_ratio: float) -> list[dict]:
+    """Cruza cada columna de cada dataset contra las columnas de los demás
+    (y self-FK) y emite candidatos de relación con score nombre+contenido."""
     candidates: list[dict] = []
 
-    # Heurística: ¿la columna parece "código/PK" del target? Útil cuando no hay
-    # match por contenido pero sí por nombre — sugerimos esa columna en vez de __id__.
     def _code_like_field(tgt_obj, target_keyword: str | None) -> str | None:
+        """Columna 'código/PK' del target — útil cuando hay match por nombre pero
+        no por contenido (sugerimos esa columna en vez de __id__)."""
         cands = []
-        for tc in cols_by_ds[tgt_obj.id]:
+        for tc in sd.cols_by_ds[tgt_obj.id]:
             fk_low = tc.field_key.lower()
             score = 0
             if any(tok in fk_low for tok in ("codigo", "código", "_code", "code_", "cod_", "_cod")):
@@ -952,10 +908,9 @@ async def scan_relationships(
                 score += 2
             if target_keyword and _name_matches(fk_low, target_keyword):
                 score += 2
-            # PK natural: primera columna del dataset (position=0)
-            if tc.position == 0:
+            if tc.position == 0:  # PK natural: primera columna
                 score += 1
-            if score > 0 and tc.field_key in key_cols_by_ds[tgt_obj.id]:
+            if score > 0 and tc.field_key in sd.key_cols_by_ds[tgt_obj.id]:
                 cands.append((score, tc.field_key))
         if not cands:
             return None
@@ -963,43 +918,33 @@ async def scan_relationships(
         return cands[0][1]
 
     for src in datasets:
-        for col in cols_by_ds[src.id]:
-            src_vals = col_values_by_ds[src.id].get(col.field_key, set())
+        for col in sd.cols_by_ds[src.id]:
+            src_vals = sd.col_values_by_ds[src.id].get(col.field_key, set())
             if not src_vals:
                 continue
             keyword = _extract_target_keyword(col.field_key)
 
             for tgt in datasets:
                 # Self-FK permitido (ej. Operaciones.prestamo_origen → Operaciones).
-                # Solo evitamos comparar la columna consigo misma.
                 is_self = tgt.id == src.id
 
-                # name match
-                name_match = False
-                if keyword and _name_matches(keyword, tgt.name):
-                    name_match = True
-                elif _name_matches(col.field_key, tgt.name):
-                    name_match = True
+                name_match = bool(
+                    (keyword and _name_matches(keyword, tgt.name))
+                    or _name_matches(col.field_key, tgt.name)
+                )
 
-                # Self-FK: aceptamos sin name_match si el contenido es muy alto
-                # (un 50%+ de overlap entre columnas distintas del mismo dataset
-                # es evidencia razonable de auto-referencia). Sin esto, columnas
-                # como "prestamo_de_origen" nunca se detectarían porque no
-                # contienen el nombre del dataset.
+                # Self-FK sin name_match: aceptar solo si hay overlap de contenido fuerte
+                # (50%+) contra otra key_col del mismo dataset (auto-referencia real).
                 if is_self and not name_match:
-                    # Pre-check rápido: ver si alguna otra key_col del dataset
-                    # tiene overlap significativo con esta columna
                     self_match_max = 0.0
-                    for tgt_col in key_cols_by_ds[tgt.id]:
+                    for tgt_col in sd.key_cols_by_ds[tgt.id]:
                         if tgt_col == col.field_key:
                             continue
-                        tgt_vals_pre = col_values_by_ds[tgt.id].get(tgt_col, set())
+                        tgt_vals_pre = sd.col_values_by_ds[tgt.id].get(tgt_col, set())
                         if not tgt_vals_pre:
                             continue
-                        m = sum(1 for v in src_vals if v in tgt_vals_pre)
-                        r = m / len(src_vals)
-                        if r > self_match_max:
-                            self_match_max = r
+                        r = sum(1 for v in src_vals if v in tgt_vals_pre) / len(src_vals)
+                        self_match_max = max(self_match_max, r)
                     if self_match_max < 0.5:
                         continue
 
@@ -1007,50 +952,37 @@ async def scan_relationships(
                 best_matched = 0
                 best_field = "__id__"
 
-                target_ids = ids_by_ds[tgt.id]
-                # Para self-FK no tiene sentido comparar contra __id__ del mismo dataset
+                target_ids = sd.ids_by_ds[tgt.id]
                 if target_ids and not is_self:
                     matched_id = sum(1 for v in src_vals if v in target_ids)
                     ratio_id = matched_id / len(src_vals)
                     if ratio_id > best_ratio:
-                        best_ratio = ratio_id
-                        best_matched = matched_id
-                        best_field = "__id__"
+                        best_ratio, best_matched, best_field = ratio_id, matched_id, "__id__"
 
-                # Iterar sobre TODAS las columnas del target (no solo key_cols).
-                # Esto permite detectar catálogos: target tiene pocos valores
-                # únicos pero el source apunta a ellos repetidamente.
-                tgt_key_set = set(key_cols_by_ds[tgt.id])
-                for tgt_col_obj in cols_by_ds[tgt.id]:
+                # Iterar TODAS las columnas del target (no solo key_cols) detecta catálogos.
+                tgt_key_set = set(sd.key_cols_by_ds[tgt.id])
+                for tgt_col_obj in sd.cols_by_ds[tgt.id]:
                     tgt_col = tgt_col_obj.field_key
                     if is_self and tgt_col == col.field_key:
                         continue
-                    tgt_vals = col_values_by_ds[tgt.id].get(tgt_col, set())
+                    tgt_vals = sd.col_values_by_ds[tgt.id].get(tgt_col, set())
                     if len(tgt_vals) < 3:
                         continue
                     matched = sum(1 for v in src_vals if v in tgt_vals)
                     if matched == 0:
                         continue
-                    # Doble métrica:
-                    #  - ratio_src = matched / |src|  (FK clásica: source ⊆ target)
-                    #  - ratio_min = matched / min(|src|, |tgt|)  (catálogos: target pequeño)
-                    # Usar la más favorable resuelve ambos casos sin inflar mucho falsos positivos.
-                    ratio_src = matched / len(src_vals)
-                    ratio_min = matched / min(len(src_vals), len(tgt_vals))
-                    ratio = max(ratio_src, ratio_min)
+                    # ratio_src (FK clásica: source ⊆ target) vs ratio_min (catálogo pequeño).
+                    ratio = max(matched / len(src_vals), matched / min(len(src_vals), len(tgt_vals)))
                     eff = ratio + (0.02 if tgt_col in tgt_key_set else 0.0)
                     if eff > best_ratio:
-                        best_ratio = ratio
-                        best_matched = matched
-                        best_field = tgt_col
+                        best_ratio, best_matched, best_field = ratio, matched, tgt_col
 
-                # Si hay nombre pero no overlap: sugerir code-like en lugar de __id__
+                # Nombre fuerte pero sin overlap: sugerir code-like en vez de __id__
                 if name_match and best_ratio == 0.0 and best_field == "__id__":
                     fallback = _code_like_field(tgt, keyword)
                     if fallback:
                         best_field = fallback
 
-                # Filtro de emisión: nombre fuerte ó contenido suficiente
                 if not name_match and best_ratio < min_content_ratio:
                     continue
 
@@ -1078,71 +1010,94 @@ async def scan_relationships(
                     "sample_values": list(src_vals)[:3],
                 })
 
-    # Agrupar candidatos por (src_dataset, src_column) y quedarnos con los TOP-3 por score.
-    # Esto permite al usuario elegir entre alternativas cuando hay varias tablas que matchean
-    # (ej. dataset principal vs su backup, o catálogo vs duplicado).
-    by_src: dict[tuple[str, str], list[dict]] = {}
+    return candidates
+
+
+def _dedupe_top_candidates(candidates: list[dict]) -> list[dict]:
+    """Agrupa por (src_dataset, src_column), conserva TOP-3 por score y ordena global."""
+    by_src: dict[tuple[str, str], list[dict]] = defaultdict(list)
     for c in candidates:
-        key = (c["from_dataset_id"], c["from_column"])
-        by_src.setdefault(key, []).append(c)
+        by_src[(c["from_dataset_id"], c["from_column"])].append(c)
 
     result: list[dict] = []
     for cs in by_src.values():
         cs.sort(key=lambda x: x["score"], reverse=True)
         result.extend(cs[:3])
-
     result.sort(key=lambda x: x["score"], reverse=True)
+    return result
 
-    # ── Sugerencias de limpieza ──────────────────────────────────────────────
-    # Una columna necesita limpieza si tiene valores que solo difieren por
-    # mayúsculas/tildes/espacios. Ej: "Comercio", "COMERCIO", "comercio".
-    # Antes de detectar más relaciones, conviene unificarlos.
-    cleanup_suggestions: list[dict] = []
-    cols_by_id: dict[uuid.UUID, ColumnDefinition] = {}
-    for ds in datasets:
-        for c in cols_by_ds[ds.id]:
-            cols_by_id[c.id] = c
+
+def _build_cleanup_suggestions(datasets, sd: _ScanData) -> list[dict]:
+    """Una columna necesita limpieza si tiene valores que solo difieren por
+    mayúsculas/tildes/espacios (ej. "Comercio" / "COMERCIO" / "comercio")."""
+    suggestions: list[dict] = []
+
+    def _example(n: str, counts: dict[str, int]) -> dict:
+        canonical = max(counts.items(), key=lambda kv: kv[1])[0]
+        ordered = sorted(counts.items(), key=lambda kv: -kv[1])
+        return {"normalized": n, "variants": [v for v, _ in ordered], "canonical": canonical}
 
     for ds in datasets:
-        per_col_variants = variants_by_ds[ds.id]
+        per_col_variants = sd.variants_by_ds[ds.id]
         for fk, variants in per_col_variants.items():
-            # Grupos donde un mismo valor normalizado tiene 2+ formas originales
-            dirty_groups = {n: orig_counts for n, orig_counts in variants.items() if len(orig_counts) > 1}
+            dirty_groups = {n: oc for n, oc in variants.items() if len(oc) > 1}
             if not dirty_groups:
                 continue
-            col_obj = next((c for c in cols_by_ds[ds.id] if c.field_key == fk), None)
+            col_obj = next((c for c in sd.cols_by_ds[ds.id] if c.field_key == fk), None)
             if col_obj is None:
                 continue
-            total_raw_unique = sum(len(o) for o in variants.values())
-            normalized_unique = len(variants)
-            # Top 5 ejemplos: por cantidad de variantes, mostrando la canonical (más común)
-            def _example(n: str, counts: dict[str, int]) -> dict:
-                canonical = max(counts.items(), key=lambda kv: kv[1])[0]
-                # Variantes ordenadas por frecuencia, sin repetir la canonical primero
-                ordered = sorted(counts.items(), key=lambda kv: -kv[1])
-                return {
-                    "normalized": n,
-                    "variants": [v for v, _ in ordered],
-                    "canonical": canonical,
-                }
             examples = sorted(
                 (_example(n, oc) for n, oc in dirty_groups.items()),
                 key=lambda x: -len(x["variants"]),
             )[:5]
-            cleanup_suggestions.append({
+            suggestions.append({
                 "dataset_id": str(ds.id),
                 "dataset_name": ds.name,
                 "column_id": str(col_obj.id),
                 "column": fk,
                 "column_label": col_obj.name,
-                "raw_unique": total_raw_unique,
-                "normalized_unique": normalized_unique,
+                "raw_unique": sum(len(o) for o in variants.values()),
+                "normalized_unique": len(variants),
                 "dirty_groups": len(dirty_groups),
                 "examples": examples,
             })
 
-    # Ordenar por impacto (más grupos sucios primero)
-    cleanup_suggestions.sort(key=lambda x: -x["dirty_groups"])
+    suggestions.sort(key=lambda x: -x["dirty_groups"])
+    return suggestions
+
+
+@router.get("/relationships/scan")
+@limiter.limit("10/minute")
+async def scan_relationships(
+    request: Request,
+    workspace_id: uuid.UUID | None = Query(None),
+    sample_size: int = Query(2000, ge=10, le=10000),
+    min_content_ratio: float = Query(0.1, ge=0.0, le=1.0),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Escanea datasets accesibles del workspace en busca de relaciones candidatas.
+
+    Escanea TODAS las columnas (no solo las que se llaman id_*) y verifica
+    matching por contenido contra:
+      - `__id__` (id de fila) de cada otra tabla
+      - columnas "tipo clave" (alta cardinalidad, sin repetidos) de cada otra tabla
+
+    Si una columna tiene mucho match de contenido pero no su nombre no sugiere FK,
+    igual se reporta. El score combina coincidencia por nombre + por contenido.
+    """
+    # Datasets accesibles (misma lógica que list_datasets)
+    ws_filter = Dataset.workspace_id == workspace_id if workspace_id else True
+    ds_q = select(Dataset).where(and_(accessible_datasets_filter(current_user), ws_filter))
+
+    datasets = (await db.execute(ds_q)).scalars().all()
+    if len(datasets) < 2:
+        return {"scanned": len(datasets), "candidates": []}
+
+    sd = await _load_scan_data(datasets, db, sample_size)
+    candidates = _build_relation_candidates(datasets, sd, min_content_ratio)
+    result = _dedupe_top_candidates(candidates)
+    cleanup_suggestions = _build_cleanup_suggestions(datasets, sd)
 
     return {
         "scanned": len(datasets),

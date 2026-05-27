@@ -2,6 +2,8 @@ import { useRef } from "react";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { getDatasets, getColumns } from "../api/datasets";
 import type { ColumnDefinition } from "../types";
+import { keyword, detectParentRelations, detectChildRelations } from "../utils/relations";
+import { typeStyle, makeBoxH, downloadPng } from "../utils/diagram";
 
 interface Props {
   currentDatasetId: string;
@@ -9,12 +11,6 @@ interface Props {
   currentColumns: ColumnDefinition[];
   workspaceId?: string;
   onClose: () => void;
-}
-
-function normalize(name: string) { return name.toLowerCase().replace(/\s+/g, "_"); }
-function keyword(name: string) {
-  const parts = normalize(name).split("_");
-  return parts[parts.length - 1];
 }
 
 // ── Layout ────────────────────────────────────────────────────────────────────
@@ -27,27 +23,7 @@ const COL_GAP  = 188;
 const MARGIN   = 52;
 const MAX_ROWS = 10;
 
-// ── Type styling ──────────────────────────────────────────────────────────────
-const TYPE_SHORT: Record<string, string> = {
-  text:"txt", long_text:"↕txt", url:"url", email:"mail", phone:"tel",
-  number:"num", currency:"$", percent:"%", rating:"★",
-  enum:"list", multiselect:"list+", boolean:"bool", date:"date", relation:"→",
-};
-const TYPE_FG: Record<string, string> = {
-  text:"#64748B", long_text:"#475569", url:"#0891B2", email:"#0284C7", phone:"#0369A1",
-  number:"#2563EB", currency:"#16A34A", percent:"#7C3AED", rating:"#D97706",
-  enum:"#B45309", multiselect:"#C2410C", boolean:"#059669", date:"#7C3AED", relation:"#DB2777",
-};
-const TYPE_BG: Record<string, string> = {
-  text:"#F1F5F9", long_text:"#F1F5F9", url:"#E0F2FE", email:"#E0F2FE", phone:"#DBEAFE",
-  number:"#DBEAFE", currency:"#DCFCE7", percent:"#EDE9FE", rating:"#FEF3C7",
-  enum:"#FEF9C3", multiselect:"#FEE2E2", boolean:"#DCFCE7", date:"#EDE9FE", relation:"#FCE7F3",
-};
-
-function boxH(cols: ColumnDefinition[]) {
-  return HDR_H + Math.min(cols.length, MAX_ROWS) * ROW_H + BOX_PAD
-    + (cols.length > MAX_ROWS ? ROW_H : 0);
-}
+const boxH = makeBoxH({ HDR_H, ROW_H, BOX_PAD, MAX_ROWS });
 
 // ── Table box ─────────────────────────────────────────────────────────────────
 function TableBox({ x, y, name, columns, accent, isCurrent }: {
@@ -98,9 +74,7 @@ function TableBox({ x, y, name, columns, accent, isCurrent }: {
         const ry = y + HDR_H + i * ROW_H;
         const cy = ry + ROW_H / 2 + 4;
         const isFk = col.field_key.startsWith("id_");
-        const tShort = TYPE_SHORT[col.data_type] ?? col.data_type.slice(0, 4);
-        const tFg = TYPE_FG[col.data_type] ?? "#64748B";
-        const tBg = TYPE_BG[col.data_type] ?? "#F1F5F9";
+        const { short: tShort, fg: tFg, bg: tBg } = typeStyle(col.data_type);
         const badgeW = Math.max(tShort.length * 7 + 10, 32);
 
         return (
@@ -185,42 +159,6 @@ function Connection({
   );
 }
 
-// ── PNG export ────────────────────────────────────────────────────────────────
-function downloadPng(svgEl: SVGSVGElement, name: string) {
-  const { width: W, height: H } = svgEl.viewBox.baseVal;
-  const scale = 2;
-
-  // Clone and stamp explicit dimensions so the image renderer uses the full viewBox
-  const clone = svgEl.cloneNode(true) as SVGSVGElement;
-  clone.setAttribute("width", String(W));
-  clone.setAttribute("height", String(H));
-  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-  clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
-
-  const canvas = document.createElement("canvas");
-  canvas.width = W * scale;
-  canvas.height = H * scale;
-  const ctx = canvas.getContext("2d")!;
-  ctx.fillStyle = "#EFF2F7";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.scale(scale, scale);
-
-  const src = new XMLSerializer().serializeToString(clone);
-  const blob = new Blob([src], { type: "image/svg+xml;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const img = new Image();
-  img.onload = () => {
-    ctx.drawImage(img, 0, 0, W, H);
-    URL.revokeObjectURL(url);
-    const a = document.createElement("a");
-    a.download = `${name}-schema.png`;
-    a.href = canvas.toDataURL("image/png");
-    a.click();
-  };
-  img.onerror = () => URL.revokeObjectURL(url);
-  img.src = url;
-}
-
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function SchemaDiagram({
   currentDatasetId, currentDatasetName, currentColumns, workspaceId, onClose,
@@ -242,41 +180,17 @@ export default function SchemaDiagram({
     })),
   });
 
-  // FK detection — incluye:
-  //  1. Columnas data_type=relation con rules.related_dataset_id (confirmadas)
-  //  2. Columnas id_* matching por nombre (auto-detectadas)
-  const otherById = new Map(otherDatasets.map((d) => [d.id, d]));
+  // FK detection centralizada en utils/relations.ts (relation confirmada + heurístico anclado)
+  const parentRels = detectParentRelations(currentColumns, otherDatasets);
+  const colsByDs = new Map(otherDatasets.map((ds, i) => [ds.id, colQueries[i]?.data ?? []]));
+  const childRels = detectChildRelations(
+    currentDatasetId, currentDatasetName, otherDatasets,
+    (dsId) => colsByDs.get(dsId) ?? [],
+  );
 
-  const parentRels = currentColumns
-    .map((c) => {
-      let ds: { id: string; name: string } | undefined;
-      if (c.data_type === "relation" && c.rules?.related_dataset_id) {
-        ds = otherById.get(c.rules.related_dataset_id);
-      } else if (c.field_key.startsWith("id_")) {
-        const refKw = c.field_key.slice(3);
-        ds = otherDatasets.find((d) =>
-          keyword(d.name) === refKw || normalize(d.name) === refKw ||
-          normalize(d.name).endsWith(`_${refKw}`) || normalize(d.name).startsWith(`${refKw}_`)
-        );
-      }
-      return ds ? { ds, fkKey: c.field_key } : null;
-    })
-    .filter(Boolean) as { ds: { id: string; name: string }; fkKey: string }[];
-
-  const childRels = otherDatasets
-    .map((ds, i) => {
-      const cols = colQueries[i]?.data ?? [];
-      const fkCol = cols.find((c) => {
-        // 1. relation explícita apuntando al dataset actual
-        if (c.data_type === "relation" && c.rules?.related_dataset_id === currentDatasetId) return true;
-        // 2. id_<curKw> auto-detectado
-        return c.field_key === `id_${curKw}` || c.field_key.includes(curKw);
-      });
-      return fkCol ? { ds, fkKey: fkCol.field_key } : null;
-    })
-    .filter(Boolean) as { ds: { id: string; name: string }; fkKey: string }[];
-
-  const relatedIds = [...parentRels.map((r) => r.ds.id), ...childRels.map((r) => r.ds.id)];
+  // Dedup: un dataset puede ser padre Y aparecer en otra detección. Sin dedup,
+  // el Map colapsaría índices y desalinearía las columnas mostradas.
+  const relatedIds = [...new Set([...parentRels.map((r) => r.ds.id), ...childRels.map((r) => r.ds.id)])];
   const relColQueries = useQueries({
     queries: relatedIds.map((id) => ({
       queryKey: ["columns", id],
@@ -350,7 +264,7 @@ export default function SchemaDiagram({
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn-secondary" style={{ fontSize: 13 }}
               onClick={() => svgRef.current && downloadPng(svgRef.current, currentDatasetName)}>
-              ⬇ Descargar PNG
+              Descargar PNG
             </button>
             <button className="btn btn-ghost" onClick={onClose}
               style={{ fontSize: 20, padding: "2px 8px", lineHeight: 1 }}>×</button>

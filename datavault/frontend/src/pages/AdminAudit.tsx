@@ -5,6 +5,8 @@ import api from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import UserMenu from "../components/UserMenu";
 import AuditTimeline from "../components/AuditTimeline";
+import { EmptyState } from "../components/ui";
+import { IcLock, IcList, IcFile, IcDownload } from "../components/ui/icons";
 
 interface AuditEntry {
   id: string;
@@ -238,10 +240,8 @@ export default function AdminAudit() {
 
   if (!isAdmin) return (
     <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh" }}>
-      <div style={{ textAlign:"center" }}>
-        <div style={{ fontSize:40, marginBottom:12 }}>🔒</div>
-        <p style={{ color:"var(--color-text-muted)" }}>Solo administradores.</p>
-      </div>
+      <EmptyState icon={<IcLock size={24} />} title="Solo administradores"
+        subtitle="Esta sección requiere rol de administrador global." />
     </div>
   );
 
@@ -268,9 +268,8 @@ export default function AdminAudit() {
         <div className="app-header-spacer"/>
         <nav style={{ display:"flex", gap:2 }}>
           {([
+            { title:"Personas y accesos", path:"/admin/personas", icon:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg> },
             { title:"Workspaces", path:"/admin/workspaces", icon:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg> },
-            { title:"Grupos",     path:"/admin/groups",     icon:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6"/><circle cx="16" cy="8" r="3"/><path d="M22 20c0-3.3-2.7-6-6-6"/><path d="M9 14c0 0 1.5-.5 3-.5s3 .5 3 .5"/></svg> },
-            { title:"Usuarios",   path:"/admin/users",      icon:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg> },
           ] as { title: string; path: string; icon: React.ReactNode }[]).map(({ title, path, icon }) => (
             <button key={path} onClick={() => navigate(path)} style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 10px", height:34, borderRadius:7, background:"transparent", border:"1.5px solid transparent", cursor:"pointer", color:"var(--color-text-secondary)", fontSize:12.5, fontWeight:600, transition:"all 0.14s", whiteSpace:"nowrap" }}
               onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.background="var(--color-border-light)"; el.style.borderColor="var(--color-border)"; el.style.color="var(--color-text)"; }}
@@ -288,7 +287,7 @@ export default function AdminAudit() {
         {/* ── Título + stat cards + export ── */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:24, gap:20, flexWrap:"wrap" }}>
           <div>
-            <h1 style={{ margin:0, fontSize:22, fontWeight:800, letterSpacing:-0.5 }}>Registro de auditoría</h1>
+            <h1 style={{ margin:0, fontSize:22, fontWeight:800, letterSpacing:-0.5 }}>📋 Registro de auditoría</h1>
             <p style={{ margin:"4px 0 0", fontSize:13, color:"var(--color-text-muted)" }}>
               Historial completo de cambios · {total.toLocaleString()} entradas
             </p>
@@ -374,15 +373,15 @@ export default function AdminAudit() {
                     </p>
                   </div>
                   {[
-                    { label:"CSV", sub:"Compatible con cualquier app", icon:"📄", fn: exportCSV },
-                    { label:"Excel (.xls)", sub:"Abre directo en Excel", icon:"📊", fn: exportExcel },
+                    { label:"CSV", sub:"Compatible con cualquier app", icon:<IcFile size={18} />, fn: exportCSV },
+                    { label:"Excel (.xls)", sub:"Abre directo en Excel", icon:<IcDownload size={18} />, fn: exportExcel },
                   ].map(({ label, sub, icon, fn }) => (
                     <button key={label} onClick={fn}
                       style={{ width:"100%", padding:"10px 14px", background:"transparent", border:"none", cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:10, transition:"background 0.1s" }}
                       onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background="var(--color-border-light)"; }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background="transparent"; }}
                     >
-                      <span style={{ fontSize:18, lineHeight:1 }}>{icon}</span>
+                      <span style={{ display:"inline-flex", color:"var(--color-text-secondary)", lineHeight:1 }}>{icon}</span>
                       <div>
                         <div style={{ fontSize:13, fontWeight:600, color:"var(--color-text)" }}>{label}</div>
                         <div style={{ fontSize:11, color:"var(--color-text-muted)" }}>{sub}</div>
@@ -536,11 +535,8 @@ export default function AdminAudit() {
               <span style={{ fontSize:13 }}>Cargando registros…</span>
             </div>
           ) : items.length === 0 ? (
-            <div style={{ padding:"72px 0", textAlign:"center", color:"var(--color-text-muted)" }}>
-              <div style={{ fontSize:36, marginBottom:12, opacity:0.5 }}>📋</div>
-              <p style={{ fontSize:15, margin:0, fontWeight:700, color:"var(--color-text)" }}>Sin registros</p>
-              <p style={{ fontSize:13, margin:"6px 0 0" }}>{hasFilters ? "Prueba ajustando los filtros" : "Aún no hay actividad registrada"}</p>
-            </div>
+            <EmptyState icon={<IcList size={22} />} title="Sin registros"
+              subtitle={hasFilters ? "Probá ajustando los filtros." : "Aún no hay actividad registrada."} />
           ) : view === "timeline" ? (
             <AuditTimeline items={items} loading={isLoading} />
           ) : (

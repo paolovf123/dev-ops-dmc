@@ -15,6 +15,7 @@ import { useWorkspace } from "../workspace/WorkspaceContext";
 import WorkspaceSwitcher from "../workspace/WorkspaceSwitcher";
 import UserMenu from "../components/UserMenu";
 import { useToast } from "../components/Toast";
+import { IcBuilding, IcSearch, IcTable } from "../components/ui/icons";
 import type { ColumnDefinition } from "../types";
 import type { UseQueryResult } from "@tanstack/react-query";
 
@@ -246,8 +247,8 @@ export default function DatasetList() {
           <div style={{
             width: 72, height: 72, borderRadius: 20, background: "var(--color-surface)",
             border: "1.5px dashed var(--color-border)", display: "flex", alignItems: "center",
-            justifyContent: "center", margin: "0 auto 20px", fontSize: 32,
-          }}>🏢</div>
+            justifyContent: "center", margin: "0 auto 20px", color: "var(--color-text-muted)",
+          }}><IcBuilding size={30} /></div>
           <h2 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 700 }}>Sin workspace asignado</h2>
           <p style={{ color: "var(--color-text-muted)", fontSize: 14 }}>
             Aún no perteneces a ningún workspace. Pide a un administrador que te agregue a uno.
@@ -335,7 +336,7 @@ export default function DatasetList() {
         {datasets.length > 0 && (
           <div style={{ maxWidth: "var(--page-max)", margin: "16px auto 0", position: "relative" }}>
             <div className="global-search-wrap">
-              <span className="search-icon">🔍</span>
+              <span className="search-icon" style={{ display: "inline-flex", alignItems: "center" }}><IcSearch size={15} /></span>
               <input
                 placeholder="Buscar en todos los datasets..."
                 value={globalSearch}
@@ -481,7 +482,7 @@ export default function DatasetList() {
           </div>
         ) : visibleDatasets.length === 0 ? (
           <div className="ds-empty" onClick={() => navigate("/create")}>
-            <div className="ds-empty-icon">🗄️</div>
+            <div className="ds-empty-icon" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-muted)" }}><IcTable size={30} /></div>
             <h3>{datasets.length === 0 ? "Sin datasets todavía" : "Solo hay tablas intermedias"}</h3>
             <p>{datasets.length === 0 ? "Haz clic para crear tu primer dataset" : "Marca el toggle de arriba para verlas"}</p>
           </div>
@@ -630,7 +631,7 @@ export default function DatasetList() {
               </span>
               <button className="btn btn-secondary" style={{ fontSize: 12, padding: "4px 12px" }}
                 onClick={() => setShowSchema(true)}>
-                Ver completo ↗
+                Ver completo 
               </button>
             </div>
             <SchemaPreview datasets={datasets} colQueries={colQueries} />
@@ -712,32 +713,21 @@ function AppHeader({
       {isAdmin && (
         <nav style={{ display: "flex", gap: 2, alignItems: "center" }}>
           <NavIconBtn
+            title="Personas y accesos"
+            onClick={() => navigate("/admin/personas")}
+            icon={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+              </svg>
+            }
+          />
+          <NavIconBtn
             title="Workspaces"
             onClick={() => navigate("/admin/workspaces")}
             icon={
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
                 <rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
-              </svg>
-            }
-          />
-          <NavIconBtn
-            title="Grupos"
-            onClick={() => navigate("/admin/groups")}
-            icon={
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6"/>
-                <circle cx="16" cy="8" r="3"/><path d="M22 20c0-3.3-2.7-6-6-6"/>
-                <path d="M9 14c0 0 1.5-.5 3-.5s3 .5 3 .5"/>
-              </svg>
-            }
-          />
-          <NavIconBtn
-            title="Usuarios"
-            onClick={() => navigate("/admin/users")}
-            icon={
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
               </svg>
             }
           />

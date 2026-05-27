@@ -7,6 +7,7 @@ import {
 } from "../api/datasets";
 import type { ExcelPreview } from "../api/datasets";
 import { useEscapeKey } from "../utils/useEscapeKey";
+import { IcUpload, IcFile } from "./ui/icons";
 
 const TYPE_COLORS: Record<string, string> = {
   text: "#64748B", long_text: "#475569", url: "#0891B2", email: "#0284C7", phone: "#0369A1",
@@ -197,7 +198,7 @@ export default function ImportExcelModal({ open, onClose, workspaceId, onSuccess
       }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontSize: 22 }}>📊</div>
+          <div style={{ display: "flex", color: "var(--color-primary)" }}><IcUpload size={20} /></div>
           <div>
             <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>Importar desde Excel</h3>
             <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-muted)" }}>
@@ -231,7 +232,7 @@ export default function ImportExcelModal({ open, onClose, workspaceId, onSuccess
               <p style={{ margin: 0, color: "var(--color-text-muted)", fontSize: 14 }}>Analizando archivo…</p>
             ) : (
               <>
-                <p style={{ margin: "0 0 6px", fontSize: 32 }}>📁</p>
+                <div style={{ display: "flex", justifyContent: "center", marginBottom: 8, color: "var(--color-text-muted)" }}><IcUpload size={28} /></div>
                 <p style={{ margin: "0 0 4px", fontWeight: 600, fontSize: 14 }}>Arrastra tu archivo Excel aquí</p>
                 <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-muted)" }}>o haz clic para seleccionar</p>
               </>
@@ -252,7 +253,7 @@ export default function ImportExcelModal({ open, onClose, workspaceId, onSuccess
             {/* File info + change */}
             <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px",
               background: "var(--color-bg)", borderRadius: 8, border: "1px solid var(--color-border)" }}>
-              <span style={{ fontSize: 18 }}>📊</span>
+              <span style={{ display: "inline-flex", color: "var(--color-text-secondary)" }}><IcFile size={16} /></span>
               <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{preview.filename}</span>
               <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
                 {preview.sheets.length} hoja{preview.sheets.length !== 1 ? "s" : ""}

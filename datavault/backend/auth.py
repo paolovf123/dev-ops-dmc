@@ -80,6 +80,11 @@ COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
+# Ranking de roles. Mantener UNA sola fuente de verdad.
+# DS_ROLE_RANK: roles asignables a un dataset (DatasetPermission / DatasetGroupPermission).
+# ROLE_RANK: superset que incluye roles de workspace (member/admin_ws/owner) para comparaciones
+#            generales. Para elegir "mejor permiso de grupo" usar SIEMPRE DS_ROLE_RANK.
+DS_ROLE_RANK = {"none": 0, "viewer": 1, "editor": 2, "admin": 3}
 ROLE_RANK = {"none": 0, "viewer": 1, "editor": 2, "member": 2, "admin_ws": 3, "owner": 4, "admin": 5}
 
 WS_ROLE_TO_DS_ROLE = {
@@ -197,10 +202,11 @@ async def get_current_user(
         user_id: str = payload.get("sub")
         if not user_id:
             raise exc
-    except JWTError:
+        user_uuid = uuid.UUID(user_id)  # sub manipulado/legacy → ValueError → 401
+    except (JWTError, ValueError):
         raise exc
 
-    result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+    result = await db.execute(select(User).where(User.id == user_uuid))
     user = result.scalar_one_or_none()
     if not user or not user.is_active:
         raise exc
@@ -242,7 +248,7 @@ async def effective_role(user: User, dataset_id: uuid.UUID | None, db: AsyncSess
     )
     group_perms = group_perms_result.scalars().all()
     if group_perms:
-        best = max(group_perms, key=lambda p: ROLE_RANK.get(p.role, 0))
+        best = max(group_perms, key=lambda p: DS_ROLE_RANK.get(p.role, 0))
         return best.role
 
     ds_result = await db.execute(select(Dataset).where(Dataset.id == dataset_id))
@@ -337,7 +343,7 @@ async def effective_role_in_workspace(
         )
         group_perms = group_perms_result.scalars().all()
         if group_perms:
-            best = max(group_perms, key=lambda p: ROLE_RANK.get(p.role, 0))
+            best = max(group_perms, key=lambda p: DS_ROLE_RANK.get(p.role, 0))
             return best.role
     return user.role
 

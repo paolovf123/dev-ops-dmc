@@ -525,9 +525,9 @@
             </div>
             <div>
                 <ul class="checklist">
-                    <li><span class="dot done"></span><code>/admin/workspaces</code> reorganizado: 5 tabs (Equipo · Grupos · Datasets · Permisos · Configuración)</li>
-                    <li><span class="dot done"></span>Edición de permisos inline desde el modal del grupo (cambiar rol, agregar/quitar dataset)</li>
-                    <li><span class="dot done"></span><code>/admin/permissions</code> nuevo (solo admin global) con 4 vistas cross-workspace</li>
+                    <li><span class="dot done"></span>Admin consolidado en <strong>2 páginas</strong>: <code>/admin/personas</code> (Personas y accesos) + <code>/admin/workspaces</code> (equipos)</li>
+                    <li><span class="dot done"></span><strong>Matriz de accesos editable</strong>: elegí grupo → control segmentado por dataset (Sin acceso · Ver · Editar · Admin), un click, guardado optimista</li>
+                    <li><span class="dot done"></span>Endpoint batch <code>/workspaces/{id}/access-matrix</code> (toda la matriz en 1 request, sin N+1)</li>
                     <li><span class="dot done"></span>Origen del permiso visible: <code>direct</code> / <code>group:X</code> / <code>workspace:rol</code> / <code>global_admin</code></li>
                     <li><span class="dot done"></span>Audit log de cambios de permisos con timestamps</li>
                 </ul>
@@ -810,11 +810,11 @@
             <table>
                 <tr><th>Ruta</th><th>Página</th></tr>
                 <tr><td><code>/ws/:workspaceId</code></td><td>WorkspaceView</td></tr>
-                <tr><td><code>/admin/workspaces</code></td><td><strong>AdminWorkspaces</strong> — hub workspace-centric (5 tabs)</td></tr>
-                <tr><td><code>/admin/permissions</code></td><td><strong>AdminPermissions</strong> — centro de permisos (solo admin global)</td></tr>
-                <tr><td><code>/admin/users</code></td><td>AdminUsers — catálogo global + matriz invertida</td></tr>
-                <tr><td><code>/admin/audit</code></td><td>AdminAudit</td></tr>
-                <tr><td><code>/admin/groups</code></td><td><em>(deprecado — redirige al hub)</em></td></tr>
+                <tr><td><code>/admin/personas</code></td><td><strong>AdminPeople</strong> — Personas y accesos (Usuarios · Miembros · Grupos · Accesos)</td></tr>
+                <tr><td><code>/admin/accesos</code></td><td>= AdminPeople, abre en la tab Accesos (matriz editable)</td></tr>
+                <tr><td><code>/admin/workspaces</code></td><td><strong>AdminWorkspaces</strong> — crear equipos + Datasets · Configuración</td></tr>
+                <tr><td><code>/admin/audit</code></td><td>AdminAudit (solo admin global)</td></tr>
+                <tr><td><code>/admin/users · /groups · /permissions</code></td><td><em>(legacy — redirigen a Personas/Accesos)</em></td></tr>
             </table>
         </div>
     </div>

@@ -254,8 +254,8 @@ export default function AdminDashboard() {
       {/* Resumen global */}
       <div style={{ display: "flex", gap: 16, marginBottom: 32, flexWrap: "wrap" }}>
         {[
-          { icon: "🏢", label: "Workspaces", value: workspaces.length, color: "#6366F1" },
-          { icon: "🗄️", label: "Datasets totales", value: totalDatasets, color: "#0EA5E9" },
+          { icon: "", label: "Workspaces", value: workspaces.length, color: "#6366F1" },
+          { icon: "", label: "Datasets totales", value: totalDatasets, color: "#0EA5E9" },
         ].map((s, i) => (
           <div key={i} style={{
             flex: "1 1 160px", background: "var(--color-surface)",

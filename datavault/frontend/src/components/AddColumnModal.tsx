@@ -26,8 +26,8 @@ const TYPE_OPTIONS: TypeOption[] = [
   { value: "text",       label: "Texto",        icon: "Aa", desc: "Nombres, descripciones cortas",      color: "#64748B", group: "Texto" },
   { value: "long_text",  label: "Texto largo",  icon: "¶",  desc: "Párrafos, notas, comentarios",       color: "#475569", group: "Texto" },
   { value: "url",        label: "Enlace",        icon: "⎋",  desc: "Dirección web (https://...)",        color: "#0891B2", group: "Texto" },
-  { value: "email",      label: "Email",         icon: "✉",  desc: "Dirección de correo electrónico",    color: "#0284C7", group: "Texto" },
-  { value: "phone",      label: "Teléfono",      icon: "☎",  desc: "Número de teléfono",                 color: "#0369A1", group: "Texto" },
+  { value: "email",      label: "Email",         icon: "",  desc: "Dirección de correo electrónico",    color: "#0284C7", group: "Texto" },
+  { value: "phone",      label: "Teléfono",      icon: "",  desc: "Número de teléfono",                 color: "#0369A1", group: "Texto" },
   // Número
   { value: "number",     label: "Número",        icon: "#",  desc: "Cantidades, decimales",              color: "#2563EB", group: "Número" },
   { value: "currency",   label: "Moneda",        icon: "$",  desc: "Importes con símbolo de moneda",     color: "#16A34A", group: "Número" },

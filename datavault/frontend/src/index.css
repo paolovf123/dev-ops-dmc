@@ -2782,3 +2782,324 @@ td.cell-invalid {
   color: var(--color-text-muted);
   margin-top: 1px;
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   DESIGN KIT (dk-*)  ·  Estilo limpio profesional (ref: Linear / Stripe)
+   Primitivas reutilizables: page, tabs, card, toolbar, table, badge, empty.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* — Page shell — */
+.dk-page {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: 28px 28px 64px;
+}
+.dk-page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+.dk-page-title {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.dk-page-title svg { color: var(--color-text-secondary); }
+.dk-page-sub {
+  margin: 5px 0 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  max-width: 70ch;
+  line-height: 1.5;
+}
+.dk-page-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+/* — Tabs (underline) — */
+.dk-tabs {
+  display: flex;
+  gap: 24px;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 22px;
+}
+.dk-tab {
+  position: relative;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 10px 1px 12px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: color 0.15s;
+}
+.dk-tab svg { width: 15px; height: 15px; }
+.dk-tab:hover { color: var(--color-text-secondary); }
+.dk-tab--active { color: var(--color-text); font-weight: 600; }
+.dk-tab--active::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 2px;
+  background: var(--color-primary);
+  border-radius: 2px 2px 0 0;
+}
+
+/* — Card / surface — */
+.dk-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+}
+.dk-card--flush { overflow: hidden; }
+.dk-card-pad { padding: 16px 18px; }
+
+/* — Toolbar / filter bar — */
+.dk-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+}
+.dk-toolbar--bordered {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.dk-toolbar-spacer { flex: 1; }
+
+/* — Search input with leading icon — */
+.dk-search { position: relative; display: inline-flex; align-items: center; }
+.dk-search svg {
+  position: absolute;
+  left: 10px;
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+.dk-search input {
+  padding: 7px 10px 7px 32px;
+  font-size: 13px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  min-width: 220px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.dk-search input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(14,165,233,0.12);
+}
+
+/* — Select (styled) — */
+.dk-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 7px 30px 7px 11px;
+  font-size: 13px;
+  font-family: var(--font);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface)
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23A0AEC0' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>")
+    no-repeat right 9px center;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.dk-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(14,165,233,0.12);
+}
+
+/* — Count chip — */
+.dk-count {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* — Data table — */
+.dk-table-wrap {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.dk-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.dk-table thead th {
+  text-align: left;
+  padding: 11px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+.dk-table tbody td {
+  padding: 12px 16px;
+  vertical-align: middle;
+  border-top: 1px solid var(--color-border-light);
+  color: var(--color-text-secondary);
+}
+.dk-table tbody tr:first-child td { border-top: none; }
+.dk-table tbody tr { transition: background 0.12s; }
+.dk-table tbody tr:hover { background: var(--color-bg); }
+.dk-table .dk-td-primary { color: var(--color-text); font-weight: 600; }
+.dk-table .dk-td-right { text-align: right; }
+.dk-table .dk-td-muted { color: var(--color-text-muted); }
+
+/* — Badge — */
+.dk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.dk-badge--neutral { background: #F1F5F9; color: #64748B; }
+.dk-badge--primary { background: var(--pm-green-50); color: var(--pm-green-700); }
+.dk-badge--violet  { background: var(--pm-violet-50); color: var(--pm-violet-600); }
+.dk-badge--danger  { background: #FEE2E2; color: #DC2626; }
+.dk-badge--warn    { background: #FEF3C7; color: #B45309; }
+.dk-badge--success { background: #DCFCE7; color: #15803D; }
+.dk-badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+/* — Empty state — */
+.dk-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--color-text-muted);
+  gap: 4px;
+}
+.dk-empty-icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; border-radius: 12px;
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  margin-bottom: 8px;
+}
+.dk-empty-title { font-size: 14px; font-weight: 600; color: var(--color-text-secondary); }
+.dk-empty-sub { font-size: 13px; color: var(--color-text-muted); max-width: 42ch; line-height: 1.5; }
+
+/* — Small ghost/link action used in table rows — */
+.dk-row-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 11px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.dk-row-action:hover {
+  background: var(--color-bg);
+  border-color: var(--color-text-muted);
+  color: var(--color-text);
+}
+.dk-row-action svg { width: 14px; height: 14px; }
+.dk-row-action--primary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+.dk-row-action--primary:hover {
+  background: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
+  color: #fff;
+}
+
+/* — Segmented control (asignar rol de acceso) — */
+.dk-seg {
+  display: inline-flex;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--color-surface);
+  flex-shrink: 0;
+}
+.dk-seg-btn {
+  padding: 6px 13px;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  border-left: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+.dk-seg-btn:first-child { border-left: none; }
+.dk-seg-btn:hover:not([data-active="true"]) { background: var(--color-bg); color: var(--color-text-secondary); }
+.dk-seg-btn:disabled { cursor: default; opacity: 0.6; }
+
+/* — Subject chip (grupo/persona seleccionable) — */
+.dk-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+.dk-chip:hover { border-color: var(--color-text-muted); }
+.dk-chip[data-active="true"] {
+  border-color: var(--color-primary);
+  background: var(--color-primary-bg);
+  color: var(--color-primary-dark);
+}
+.dk-chip-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.dk-chip-count {
+  font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px;
+  background: var(--color-bg); color: var(--color-text-muted);
+}
+.dk-chip[data-active="true"] .dk-chip-count { background: #fff; color: var(--color-primary-dark); }
+
+/* — Access row (dataset + segmented) — */
+.dk-access-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--color-border-light);
+}
+.dk-access-row:first-child { border-top: none; }
+.dk-access-row:hover { background: var(--color-bg); }

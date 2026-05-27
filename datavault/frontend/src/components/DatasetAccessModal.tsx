@@ -8,6 +8,7 @@ import {
 } from "../api/datasets";
 import type { GroupDatasetAccess, UserDatasetAccess } from "../api/datasets";
 import { useEscapeKey } from "../utils/useEscapeKey";
+import { DS_ROLE_STYLE as ROLE_STYLE, modalTh as th, modalTd as td } from "../utils/ui";
 import { useToast } from "./Toast";
 
 interface Props {
@@ -18,13 +19,6 @@ interface Props {
   /** Workspace al que pertenece el grupo (necesario para listar candidatos al agregar). */
   workspaceId?: string;
 }
-
-const ROLE_STYLE: Record<string, { bg: string; fg: string; label: string }> = {
-  admin:  { bg: "#FEE2E2", fg: "#DC2626", label: "Admin"      },
-  editor: { bg: "#FEF3C7", fg: "#D97706", label: "Editor"     },
-  viewer: { bg: "#DBEAFE", fg: "#2563EB", label: "Visualizar" },
-  none:   { bg: "#F3F4F6", fg: "#6B7280", label: "Sin acceso" },
-};
 
 export default function DatasetAccessModal({ open, onClose, subject, workspaceId }: Props) {
   const qc = useQueryClient();
@@ -135,7 +129,7 @@ export default function DatasetAccessModal({ open, onClose, subject, workspaceId
         boxShadow: "0 20px 60px rgba(0,0,0,0.3)", gap: 14,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontSize: 22 }}>{isGroup ? "👥" : "👤"}</div>
+          <div style={{ fontSize: 22 }}>{isGroup ? "" : ""}</div>
           <div>
             <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>
               Datasets accesibles · {subject.name}
@@ -153,7 +147,7 @@ export default function DatasetAccessModal({ open, onClose, subject, workspaceId
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <input
             type="text"
-            placeholder="🔍 Buscar dataset o workspace…"
+            placeholder="Buscar dataset o workspace…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             style={{
@@ -280,7 +274,7 @@ export default function DatasetAccessModal({ open, onClose, subject, workspaceId
                                 border: "1px solid #DC2626", background: "#fff",
                                 color: "#DC2626", cursor: "pointer",
                               }}>
-                              🗑 Quitar
+                              Quitar
                             </button>
                           )}
                         </div>
@@ -319,7 +313,7 @@ export default function DatasetAccessModal({ open, onClose, subject, workspaceId
                   <>
                     <input
                       type="text"
-                      placeholder="🔍 Buscar dataset…"
+                      placeholder="Buscar dataset…"
                       value={pickerFilter}
                       onChange={(e) => setPickerFilter(e.target.value)}
                       style={{
@@ -423,15 +417,6 @@ function sourceLabel(source: string): string {
   if (source.startsWith("workspace:")) return `Workspace (${source.slice(10)})`;
   return source;
 }
-
-const th: React.CSSProperties = {
-  padding: "8px 12px", textAlign: "left", fontWeight: 600,
-  borderBottom: "1px solid var(--color-border)", color: "var(--color-text-muted)",
-  fontSize: 12, whiteSpace: "nowrap",
-};
-const td: React.CSSProperties = {
-  padding: "8px 12px", verticalAlign: "top",
-};
 
 // Type guard ya implícito en sourceLabel — los grupos no tienen source
 // pero TS necesita el cast en la celda condicional. Ya manejado arriba.

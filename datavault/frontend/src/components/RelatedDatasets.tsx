@@ -2,18 +2,14 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { getDatasets, getColumns, getRecords } from "../api/datasets";
 import type { ColumnDefinition } from "../types";
+import { detectParentRelations, detectChildRelations } from "../utils/relations";
+import { IcLink, IcTable } from "./ui/icons";
 
 interface Props {
   currentDatasetId: string;
   currentDatasetName: string;
   currentColumns: ColumnDefinition[];
   workspaceId?: string;
-}
-
-function normalize(name: string) { return name.toLowerCase().replace(/\s+/g, "_"); }
-function keyword(name: string) {
-  const parts = normalize(name).split("_");
-  return parts[parts.length - 1];
 }
 
 function RelCard({
@@ -26,7 +22,7 @@ function RelCard({
     <div className="related-card" onClick={onClick} role="button" tabIndex={0}
       onKeyDown={(e) => e.key === "Enter" && onClick()}>
       <div className={`related-card-icon ${direction === "parent" ? "related-card-icon--parent" : ""}`}>
-        {direction === "parent" ? "⬆" : "⬇"}
+        {direction === "parent" ? "↑" : "↓"}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <p className="related-card-name">{name}</p>
@@ -48,7 +44,6 @@ function RelCard({
 
 export default function RelatedDatasets({ currentDatasetId, currentDatasetName, currentColumns, workspaceId }: Props) {
   const navigate = useNavigate();
-  const curKw = keyword(currentDatasetName);
 
   const { data: allDatasets = [] } = useQuery({
     queryKey: ["datasets", workspaceId ?? "all"],
@@ -67,41 +62,13 @@ export default function RelatedDatasets({ currentDatasetId, currentDatasetName, 
 
   const isLoadingCols = colQueries.some((q) => q.isLoading);
 
-  // ── PARENTS: a quién apunta el dataset actual ─────────────────────────────
-  //   1. Columnas data_type=relation con rules.related_dataset_id (confirmadas)
-  //   2. Columnas id_<kw> que matchean el nombre de otro dataset (heurístico)
-  const otherById = new Map(otherDatasets.map((d) => [d.id, d]));
-  const parentRels = currentColumns
-    .map((c) => {
-      let ds: (typeof allDatasets)[0] | undefined;
-      if (c.data_type === "relation" && c.rules?.related_dataset_id) {
-        ds = otherById.get(c.rules.related_dataset_id);
-      } else if (c.field_key.startsWith("id_")) {
-        const refKw = c.field_key.slice(3);
-        ds = otherDatasets.find((d) =>
-          keyword(d.name) === refKw ||
-          normalize(d.name) === refKw ||
-          normalize(d.name).endsWith(`_${refKw}`) ||
-          normalize(d.name).startsWith(`${refKw}_`)
-        );
-      }
-      return ds ? { ds, fkKey: c.field_key } : null;
-    })
-    .filter(Boolean) as { ds: (typeof allDatasets)[0]; fkKey: string }[];
-
-  // ── CHILDREN: quién apunta al dataset actual ──────────────────────────────
-  const childRels = otherDatasets
-    .map((ds, i) => {
-      const cols = colQueries[i]?.data ?? [];
-      const fkCol = cols.find((c) => {
-        // 1. relation explícita apuntando al dataset actual
-        if (c.data_type === "relation" && c.rules?.related_dataset_id === currentDatasetId) return true;
-        // 2. heurístico id_<curKw>
-        return c.field_key === `id_${curKw}` || c.field_key.includes(curKw);
-      });
-      return fkCol ? { ds, fkKey: fkCol.field_key } : null;
-    })
-    .filter(Boolean) as { ds: (typeof allDatasets)[0]; fkKey: string }[];
+  // Detección de relaciones centralizada en utils/relations.ts
+  const parentRels = detectParentRelations(currentColumns, otherDatasets) as { ds: (typeof allDatasets)[0]; fkKey: string }[];
+  const colsByDs = new Map(otherDatasets.map((ds, i) => [ds.id, colQueries[i]?.data ?? []]));
+  const childRels = detectChildRelations(
+    currentDatasetId, currentDatasetName, otherDatasets,
+    (dsId) => colsByDs.get(dsId) ?? [],
+  ) as { ds: (typeof allDatasets)[0]; fkKey: string }[];
 
   // Fetch record counts for all related datasets
   const allRelated = [
@@ -126,7 +93,7 @@ export default function RelatedDatasets({ currentDatasetId, currentDatasetName, 
     <section className="related-section">
       <div className="related-section-header">
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div className="related-section-icon">🔗</div>
+          <div className="related-section-icon" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}><IcLink size={16} /></div>
           <div>
             <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: "var(--color-text)" }}>
               Tablas relacionadas
@@ -158,7 +125,7 @@ export default function RelatedDatasets({ currentDatasetId, currentDatasetName, 
         </div>
       ) : totalRelated === 0 ? (
         <div className="related-empty" onClick={handleCreate}>
-          <span style={{ fontSize: 32 }}>🗄️</span>
+          <span style={{ display: "inline-flex", color: "var(--color-text-muted)", marginBottom: 4 }}><IcTable size={28} /></span>
           <p style={{ margin: "10px 0 4px", fontWeight: 600, fontSize: 14, color: "var(--color-text-secondary)" }}>
             Ninguna tabla vinculada a <em style={{ fontStyle: "normal", color: "var(--color-primary)" }}>{currentDatasetName}</em>
           </p>
@@ -172,7 +139,7 @@ export default function RelatedDatasets({ currentDatasetId, currentDatasetName, 
           {parentRels.length > 0 && (
             <div>
               <div className="related-dir-label">
-                <span className="related-dir-arrow related-dir-arrow--up">⬆</span>
+                <span className="related-dir-arrow related-dir-arrow--up">↑</span>
                 Este dataset referencia a
               </div>
               <div className="related-grid">
@@ -191,7 +158,7 @@ export default function RelatedDatasets({ currentDatasetId, currentDatasetName, 
           {childRels.length > 0 && (
             <div>
               <div className="related-dir-label">
-                <span className="related-dir-arrow related-dir-arrow--down">⬇</span>
+                <span className="related-dir-arrow related-dir-arrow--down">↓</span>
                 Referencian a este dataset
               </div>
               <div className="related-grid">

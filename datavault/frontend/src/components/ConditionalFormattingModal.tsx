@@ -90,7 +90,7 @@ export default function ConditionalFormattingModal({ columns, rules, onChange, o
           overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
         }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-          <h3 style={{ margin: 0 }}>🎨 Formato condicional</h3>
+          <h3 style={{ margin: 0 }}>Formato condicional</h3>
           <button className="btn btn-ghost" onClick={onClose} style={{ padding: "2px 8px" }}>✕</button>
         </div>
         <p style={{ color: "var(--color-text-muted)", fontSize: 12, margin: "0 0 14px" }}>

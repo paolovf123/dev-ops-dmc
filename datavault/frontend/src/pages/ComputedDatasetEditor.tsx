@@ -396,7 +396,7 @@ export default function ComputedDatasetEditor() {
                   style={{ width: "100%", fontSize: 12 }}
                   onClick={generateTemplate}
                 >
-                  ✨ Generar plantilla
+                  Generar plantilla
                 </button>
               </div>
             )}

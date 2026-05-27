@@ -5,6 +5,8 @@ import { scanRelationships, updateColumn, normalizeColumnValues } from "../api/d
 import type { RelationCandidate, CleanupSuggestion } from "../api/datasets";
 import { useToast } from "./Toast";
 import { useEscapeKey } from "../utils/useEscapeKey";
+import { modalTh as th, modalTd as td } from "../utils/ui";
+import { IcSearch } from "./ui/icons";
 
 interface Props {
   open: boolean;
@@ -123,7 +125,7 @@ export default function RelationScanModal({ open, onClose, workspaceId }: Props)
         boxShadow: "0 20px 60px rgba(0,0,0,0.3)", gap: 16,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontSize: 22 }}>🔗</div>
+          <div style={{ display: "flex", color: "var(--pm-violet-600)" }}><IcSearch size={20} /></div>
           <div>
             <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>Detectar relaciones</h3>
             <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-muted)" }}>
@@ -154,8 +156,8 @@ export default function RelationScanModal({ open, onClose, workspaceId }: Props)
               paddingBottom: 0, marginBottom: -8,
             }}>
               {([
-                ["relations", `🔗 Relaciones (${scanMut.data.candidates.length})`],
-                ["cleanup", `🧹 Limpieza sugerida (${scanMut.data.cleanup_suggestions?.length ?? 0})`],
+                ["relations", `Relaciones (${scanMut.data.candidates.length})`],
+                ["cleanup", `Limpieza sugerida (${scanMut.data.cleanup_suggestions?.length ?? 0})`],
               ] as [Tab, string][]).map(([k, label]) => (
                 <button key={k} onClick={() => setTab(k)}
                   style={{
@@ -337,7 +339,7 @@ function CleanupTab({
   if (suggestions.length === 0) {
     return (
       <div style={{ padding: 48, textAlign: "center", color: "var(--color-text-muted)", fontSize: 13 }}>
-        🎉 No detectamos columnas con variantes por mayúsculas, tildes o espacios.
+        No detectamos columnas con variantes por mayúsculas, tildes o espacios.
         Los datos están razonablemente limpios.
       </div>
     );
@@ -415,7 +417,7 @@ function CleanupTab({
                         color: "#fff", cursor: isPending ? "wait" : "pointer", whiteSpace: "nowrap",
                         opacity: isPending ? 0.6 : 1,
                       }}>
-                      {isPending ? "Normalizando…" : "🧹 Normalizar"}
+                      {isPending ? "Normalizando…" : "Normalizar"}
                     </button>
                   )}
                 </div>
@@ -431,16 +433,6 @@ function CleanupTab({
     </>
   );
 }
-
-const th: React.CSSProperties = {
-  padding: "8px 12px", textAlign: "left", fontWeight: 600,
-  borderBottom: "1px solid var(--color-border)", color: "var(--color-text-muted)",
-  fontSize: 12, whiteSpace: "nowrap",
-};
-
-const td: React.CSSProperties = {
-  padding: "8px 12px", verticalAlign: "top",
-};
 
 function Badge({ color, children }: { color: string; children: React.ReactNode }) {
   return (

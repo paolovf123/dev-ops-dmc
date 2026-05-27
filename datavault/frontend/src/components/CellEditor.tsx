@@ -451,7 +451,7 @@ function RelationCellEditor({ column, value, onCommit, onCancel }: Props) {
             fontSize: 11.5, fontWeight: 600, padding: "2px 4px 2px 8px", borderRadius: 99,
             background: "#FCE7F3", color: "#DB2777", border: "1px solid #FBCFE8",
           }}>
-            🔗 <span style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <span style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {labelFor(it)}
             </span>
             <button onClick={() => removeItem(it)}

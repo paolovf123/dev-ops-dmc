@@ -9,8 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from database import get_db
-from models import Workspace, WorkspaceMember, User
-from auth import get_current_user, require_admin, effective_workspace_role, ws_require_owner
+from models import (
+    Workspace, WorkspaceMember, User, Dataset, UserGroup,
+    DatasetPermission, DatasetGroupPermission, UserGroupMember,
+)
+from auth import (
+    get_current_user, require_admin, effective_workspace_role, ws_require_owner,
+    WS_ROLE_TO_DS_ROLE, DS_ROLE_RANK,
+)
+from billing_plans import assert_can
 
 logger = logging.getLogger("datavault.workspaces")
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
@@ -239,6 +246,8 @@ async def add_member(
     if body.role not in ("owner", "admin_ws", "member"):
         raise HTTPException(status_code=400, detail="Rol inválido. Usa: owner, admin_ws, member")
 
+    await assert_can(workspace_id, "member", db)  # límite de asientos del plan
+
     member = WorkspaceMember(
         workspace_id=workspace_id,
         user_id=body.user_id,
@@ -320,6 +329,106 @@ async def remove_member(
     await db.delete(member)
     await db.commit()
     logger.info("ws_member_removed ws=%s user=%s by=%s", workspace_id, user_id, current_user.id)
+
+
+# ── Matriz de accesos (batch) ──────────────────────────────────────────────────
+
+class AccessMatrixEntry(BaseModel):
+    dataset_id: uuid.UUID
+    subject_id: uuid.UUID  # group_id (mode=groups) o user_id (mode=users)
+    role: str              # admin/editor/viewer
+
+
+class AccessMatrixOut(BaseModel):
+    mode: str
+    entries: list[AccessMatrixEntry]
+
+
+@router.get("/{workspace_id}/access-matrix", response_model=AccessMatrixOut)
+async def workspace_access_matrix(
+    workspace_id: uuid.UUID,
+    mode: str = "groups",
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Matriz de accesos del workspace en UNA sola request (reemplaza el N+1 que
+    pedía el acceso de cada grupo/miembro por separado).
+
+    - mode=groups → permisos explícitos de cada grupo del workspace.
+    - mode=users  → rol efectivo de cada miembro (directo > grupo > workspace).
+
+    Solo se incluyen roles con acceso (se omite 'none', que en la matriz = celda vacía).
+    """
+    await _get_or_404(workspace_id, db)
+    if current_user.role != "admin":
+        ws_role = await effective_workspace_role(current_user, workspace_id, db)
+        if ws_role not in ("owner", "admin_ws"):
+            raise HTTPException(status_code=403, detail="Requiere owner o admin_ws del workspace")
+
+    if mode not in ("groups", "users"):
+        raise HTTPException(status_code=400, detail="mode debe ser 'groups' o 'users'")
+
+    entries: list[AccessMatrixEntry] = []
+
+    if mode == "groups":
+        # Permisos explícitos de todos los grupos del workspace — 1 query.
+        group_ids = select(UserGroup.id).where(UserGroup.workspace_id == workspace_id)
+        rows = await db.execute(
+            select(DatasetGroupPermission.dataset_id, DatasetGroupPermission.group_id, DatasetGroupPermission.role)
+            .where(DatasetGroupPermission.group_id.in_(group_ids))
+        )
+        for dataset_id, group_id, role in rows.all():
+            if role and role != "none":
+                entries.append(AccessMatrixEntry(dataset_id=dataset_id, subject_id=group_id, role=role))
+        return AccessMatrixOut(mode=mode, entries=entries)
+
+    # mode == "users": rol efectivo por miembro × dataset del workspace.
+    members = (await db.execute(
+        select(WorkspaceMember.user_id, WorkspaceMember.role).where(WorkspaceMember.workspace_id == workspace_id)
+    )).all()
+    ws_dataset_ids = [r[0] for r in (await db.execute(
+        select(Dataset.id).where(Dataset.workspace_id == workspace_id)
+    )).all()]
+    if not members or not ws_dataset_ids:
+        return AccessMatrixOut(mode=mode, entries=entries)
+
+    member_ids = [m[0] for m in members]
+    ds_id_set = set(ws_dataset_ids)
+
+    # Permisos directos de esos miembros sobre datasets del workspace
+    direct_rows = (await db.execute(
+        select(DatasetPermission.user_id, DatasetPermission.dataset_id, DatasetPermission.role)
+        .where(DatasetPermission.user_id.in_(member_ids), DatasetPermission.dataset_id.in_(ws_dataset_ids))
+    )).all()
+    direct: dict[tuple[uuid.UUID, uuid.UUID], str] = {(u, d): r for u, d, r in direct_rows}
+
+    # Mejor permiso de grupo por (miembro, dataset)
+    group_rows = (await db.execute(
+        select(UserGroupMember.user_id, DatasetGroupPermission.dataset_id, DatasetGroupPermission.role)
+        .join(DatasetGroupPermission, DatasetGroupPermission.group_id == UserGroupMember.group_id)
+        .where(UserGroupMember.user_id.in_(member_ids), DatasetGroupPermission.dataset_id.in_(ws_dataset_ids))
+    )).all()
+    best_group: dict[tuple[uuid.UUID, uuid.UUID], str] = {}
+    for u, d, r in group_rows:
+        key = (u, d)
+        if key not in best_group or DS_ROLE_RANK.get(r, 0) > DS_ROLE_RANK.get(best_group[key], 0):
+            best_group[key] = r
+
+    # Combinar con prioridad directo > grupo > workspace para cada miembro × dataset.
+    for user_id, ws_member_role in members:
+        ws_default = WS_ROLE_TO_DS_ROLE.get(ws_member_role, "viewer")
+        for ds_id in ds_id_set:
+            key = (user_id, ds_id)
+            if key in direct:
+                role = direct[key]          # directo gana (incluido 'none' = bloqueo)
+            elif key in best_group:
+                role = best_group[key]      # mejor permiso de grupo
+            else:
+                role = ws_default           # fallback por rol de workspace
+            if role and role != "none":
+                entries.append(AccessMatrixEntry(dataset_id=ds_id, subject_id=user_id, role=role))
+
+    return AccessMatrixOut(mode=mode, entries=entries)
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────

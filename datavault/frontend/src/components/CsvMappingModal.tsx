@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ColumnDefinition } from "../types";
 import { parseCsv } from "../utils/csvImport";
 import { useEscapeKey } from "../utils/useEscapeKey";
+import { IcUpload, IcCheck } from "./ui/icons";
 
 interface Props {
   file: File;
@@ -51,8 +52,8 @@ export default function CsvMappingModal({ file, columns, onConfirm, onClose }: P
 
         <div className="modal-header">
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div className="modal-header-icon" style={{ background: "#E0F2FE", color: "#0EA5E9", fontSize: 18 }}>
-              ⬆
+            <div className="modal-header-icon" style={{ background: "#E0F2FE", color: "#0EA5E9", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <IcUpload size={18} />
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Importar CSV</h3>
@@ -81,7 +82,7 @@ export default function CsvMappingModal({ file, columns, onConfirm, onClose }: P
                 <div style={{ display: "flex", alignItems: "center", gap: 8,
                   padding: "10px 20px", background: "var(--pm-green-50)",
                   borderBottom: "1px solid var(--color-primary-border)" }}>
-                  <span style={{ fontSize: 14 }}>✅</span>
+                  <span style={{ display: "inline-flex", color: "var(--pm-green-600)" }}><IcCheck size={14} /></span>
                   <span style={{ fontSize: 12.5, color: "var(--pm-green-600)" }}>
                     <strong>{autoMapped}</strong> columna{autoMapped !== 1 ? "s" : ""} mapeada{autoMapped !== 1 ? "s" : ""} automáticamente
                   </span>

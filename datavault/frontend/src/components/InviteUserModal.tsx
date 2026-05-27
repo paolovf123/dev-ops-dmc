@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "../api/client";
 import { useToast } from "./Toast";
 import { useEscapeKey } from "../utils/useEscapeKey";
+import { IcMail } from "./ui/icons";
 
 interface Props {
   open: boolean;
@@ -78,7 +79,7 @@ export default function InviteUserModal({ open, onClose }: Props) {
         boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontSize: 22 }}>📨</div>
+          <div style={{ display: "flex", color: "var(--color-primary)" }}><IcMail size={20} /></div>
           <div>
             <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>Invitar usuario</h3>
             <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-muted)" }}>

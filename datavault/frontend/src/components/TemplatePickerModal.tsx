@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { listDatasetTemplates, createDatasetFromTemplate } from "../api/datasets";
 import type { DatasetTemplate } from "../api/datasets";
 import { useToast } from "./Toast";
+import { IcGrid } from "./ui/icons";
 import { useEscapeKey } from "../utils/useEscapeKey";
 
 interface Props {
@@ -60,7 +61,7 @@ export default function TemplatePickerModal({ open, onClose, workspaceId, onCrea
         boxShadow: "0 20px 60px rgba(0,0,0,0.3)", gap: 16,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontSize: 22 }}>🧩</div>
+          <div style={{ display: "flex", color: "var(--color-primary)" }}><IcGrid size={20} /></div>
           <div>
             <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>Plantillas</h3>
             <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-muted)" }}>

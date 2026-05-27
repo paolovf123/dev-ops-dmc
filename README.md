@@ -117,7 +117,7 @@ Secretos (DATABASE_URL, SECRET_KEY, ALLOWED_ORIGINS)
 - **Grupos de trabajo** por workspace con permisos a múltiples datasets
 - **Effective_role** con prioridad: admin global > directo > grupo > workspace
 - **Vista invertida**: ver "qué datasets puede ver Juan" (no solo "quién puede ver el dataset X")
-- **Centro de permisos** (solo admin global) con vista cross-workspace
+- **Centro unificado Personas y accesos** (`/admin/personas`): usuarios, miembros, grupos y asignación de accesos con matriz editable (control segmentado Sin acceso/Ver/Editar/Admin)
 
 ---
 
@@ -226,16 +226,21 @@ column_definitions  records ─────────────────�
 - Un usuario puede pertenecer a **múltiples workspaces** con roles distintos.
 - Cada workspace tiene sus propios **datasets** y **grupos** (los grupos son scoped a un workspace, no cruzan).
 - Los grupos permiten asignar permisos por conjunto de usuarios sobre datasets específicos.
-- Flujo de incorporación: admin/owner agrega al usuario en `/admin/workspaces` → tab **Equipo** del workspace → owner/admin_ws lo agrega a grupos en el tab **Grupos** del mismo workspace.
+- Flujo de incorporación: en **Personas y accesos** (`/admin/personas`) → tab **Miembros** se agrega al usuario al workspace con su rol → tab **Grupos** se crean grupos → tab **Accesos** se otorga acceso a datasets.
 
-### Información Architecture admin (role-based)
+### Information Architecture admin (consolidada, role-based)
+
+La administración se unificó en **2 páginas** (más Auditoría), eliminando el solapamiento previo:
 
 | Página | Rol mínimo | Qué hace |
 |---|---|---|
-| `/admin/workspaces` | owner / admin_ws / admin global | **Hub workspace-centric** con sidebar y 5 tabs por workspace: Equipo · Grupos · Datasets · Permisos (matriz) · Configuración. Cada owner/admin_ws ve solo SUS workspaces. |
-| `/admin/permissions` | **solo admin global** | **Centro de permisos cross-workspace** con 4 vistas: Por workspace · Por grupo · Por usuario · Por dataset. Visión de seguridad/auditoría. |
-| `/admin/users` | admin global / owner / admin_ws | Catálogo global de usuarios + chip "🔓 Datasets accesibles" en cada uno. |
+| `/admin/personas` (= `/admin/accesos`) | admin global / owner / admin_ws | **Centro unificado de Personas y accesos** con 4 tabs: **Usuarios del sistema** (solo admin) · **Miembros** del workspace · **Grupos** · **Accesos**. Selector de workspace arriba (admin ve todos; owner/admin_ws solo los suyos, preseleccionados). |
+| `/admin/workspaces` | owner / admin_ws / admin global | **Hub de workspaces**: crear/editar/eliminar equipos + panel por workspace con tabs **Datasets** y **Configuración** (preselecciona el primero). |
 | `/admin/audit` | admin global | Log de cambios con filtros. |
+
+**Asignar accesos** (tab Accesos, role-aware y editable): se elige un **grupo** (chips) y, por cada dataset, se asigna el nivel con un control segmentado **Sin acceso · Ver · Editar · Admin** (un click, guardado optimista). La vista **Por miembro** muestra el rol efectivo (solo lectura). El admin_ws no puede asignar rol `owner`.
+
+> Rutas legacy `/admin/users`, `/admin/groups` → redirigen a `/admin/personas`; `/admin/permissions` → `/admin/accesos`.
 
 **Effective role** se calcula en este orden de prioridad:
 1. **Admin global** del sistema → admin de todo
@@ -518,10 +523,15 @@ GET    /datasets/{id}/permissions/groups
 PUT    /datasets/{id}/permissions/groups         {group_id, role}
 DELETE /datasets/{id}/permissions/groups/{group_id}
 
+# Matriz de accesos (alimenta la tab Accesos en 1 sola request — evita N+1)
+GET    /workspaces/{id}/access-matrix?mode=groups|users
+                                          groups: permisos explícitos por grupo · users: rol efectivo por miembro
+GET    /groups/{id}/dataset-access        datasets accesibles por un grupo
+GET    /auth/users/{id}/dataset-access    rol efectivo del usuario por dataset (con source)
+
 # Relaciones — Scanner avanzado + matriz invertida
 GET    /datasets/relationships/scan?workspace_id=&min_content_ratio=
                                           devuelve candidates + cleanup_suggestions
-GET    /auth/users/{id}/dataset-access    rol efectivo del usuario por dataset (con source)
 
 # Templates
 GET    /datasets/templates/catalog        lista plantillas pre-armadas (Inventario, CRM, Tickets, Tareas)

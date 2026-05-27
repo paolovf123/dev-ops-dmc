@@ -40,9 +40,9 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   };
 
   const VARIANT_STYLES = {
-    danger:  { icon: "🗑", iconBg: "#FEE2E2", iconColor: "#EF4444", btnClass: "btn-danger" },
+    danger:  { icon: "", iconBg: "#FEE2E2", iconColor: "#EF4444", btnClass: "btn-danger" },
     warning: { icon: "⚠️", iconBg: "#FEF3C7", iconColor: "#D97706", btnClass: "btn-warning" },
-    default: { icon: "❓", iconBg: "var(--color-border-light)", iconColor: "var(--color-text-secondary)", btnClass: "btn-primary" },
+    default: { icon: "", iconBg: "var(--color-border-light)", iconColor: "var(--color-text-secondary)", btnClass: "btn-primary" },
   };
 
   const v = VARIANT_STYLES[dialog?.variant ?? "default"];

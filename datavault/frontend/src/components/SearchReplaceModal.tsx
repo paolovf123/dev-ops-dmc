@@ -100,7 +100,7 @@ export default function SearchReplaceModal({ columns, records, onApply, onClose 
           boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
         }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-          <h3 style={{ margin: 0 }}>🔍 Buscar y reemplazar</h3>
+          <h3 style={{ margin: 0 }}>Buscar y reemplazar</h3>
           <button className="btn btn-ghost" onClick={onClose} style={{ padding: "2px 8px" }}>✕</button>
         </div>
 
