@@ -5,7 +5,10 @@ import { getDatasets, getRecords, deleteDataset, computeDataset, createDataset }
 import { useConfirm } from "../components/ConfirmDialog";
 import { useToast } from "../components/Toast";
 import { useAuth } from "../auth/AuthContext";
-import UserMenu from "../components/UserMenu";
+import AppShell from "../components/chrome/AppShell";
+import {
+  FunctionSquare, Zap, Plus, Play, Pencil, Trash2, ExternalLink, Hand, Loader2,
+} from "lucide-react";
 import type { Dataset } from "../types";
 
 function timeAgo(iso: string | null) {
@@ -98,44 +101,39 @@ export default function ScriptsHub() {
 
   const sourceDatasets = allDatasets.filter((d) => !d.is_computed);
 
-  function sourceNames(ids: string[]) {
-    return ids
-      .map((id) => sourceDatasets.find((d) => d.id === id)?.name ?? id.slice(0, 8))
-      .join(", ");
+  function sourceName(id: string) {
+    return sourceDatasets.find((d) => d.id === id)?.name ?? id.slice(0, 8);
+  }
+
+  async function onDelete(ds: Dataset) {
+    const ok = await confirm({
+      title: `Eliminar script "${ds.name}"`,
+      message: "Se eliminarán el script y todos sus resultados. Los datasets fuente no se modifican.",
+      confirmLabel: "Eliminar",
+      variant: "danger",
+    });
+    if (ok) deleteMut.mutate(ds.id);
   }
 
   return (
-    <>
-      <header className="app-header">
-        <button className="btn btn-ghost" onClick={() => navigate("/")} style={{ padding: "5px 8px", fontSize: 18 }}>←</button>
-        <button className="app-brand-btn" onClick={() => navigate("/")}>
-          <div className="app-header-logo" style={{ width: 28, height: 28, fontSize: 13, borderRadius: "var(--radius-xs)" }}><img src="/opsgrid-logo.svg" alt="OpsGrid" style={{ width: "100%", height: "100%" }} /></div>
-          <span className="app-header-name">Ops<em>Grid</em></span>
-        </button>
-        <div style={{ width: 1, height: 20, background: "var(--color-border)", margin: "0 6px" }} />
-        <span style={{ fontWeight: 600, fontSize: 15 }}>Scripts Python</span>
-        <span style={{
-          fontSize: 11, padding: "2px 10px", borderRadius: 99, marginLeft: 8,
-          background: "#7C3AED18", color: "#7C3AED", border: "1px solid #7C3AED40", fontWeight: 700,
-        }}>⚡ Lambda</span>
-        <div className="app-header-spacer" />
-        <UserMenu />
-      </header>
+    <AppShell active="scripts">
+      <main className="page" style={{ paddingTop: 28, maxWidth: 1080, overflowY: "auto", width: "100%" }}>
 
-      <main className="page" style={{ paddingTop: 28, maxWidth: 860 }}>
-
-        {/* Header row */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        {/* Page header */}
+        <div className="page-header">
           <div>
-            <h2 style={{ margin: 0 }}>Scripts calculados</h2>
-            <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--color-text-muted)" }}>
-              Cada script produce su propio dataset independiente. Re-ejecutar un script solo reemplaza sus propios resultados.
+            <h1>Scripts calculados</h1>
+            <p>
+              Cada script produce su propio dataset independiente. Re-ejecutar un
+              script solo reemplaza sus propios resultados; no afecta a los demás.
             </p>
           </div>
           {isAdmin && (
-            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
-              + Nuevo script
-            </button>
+            <div className="page-header__actions">
+              <button className="btn btn--primary" onClick={() => setShowCreate(true)}>
+                <Plus /> Nuevo script
+              </button>
+            </div>
           )}
         </div>
 
@@ -163,11 +161,11 @@ export default function ScriptsHub() {
               </div>
             </div>
             <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-              <button className="btn btn-primary" disabled={!newName.trim() || createMut.isPending}
+              <button className="btn btn--primary" disabled={!newName.trim() || createMut.isPending}
                 onClick={() => createMut.mutate()}>
                 {createMut.isPending ? "Creando..." : "Crear y abrir editor"}
               </button>
-              <button className="btn btn-secondary" onClick={() => { setShowCreate(false); setNewName(""); setNewDesc(""); }}>
+              <button className="btn btn--secondary" onClick={() => { setShowCreate(false); setNewName(""); setNewDesc(""); }}>
                 Cancelar
               </button>
             </div>
@@ -176,131 +174,116 @@ export default function ScriptsHub() {
 
         {/* Scripts list */}
         {isLoading ? (
-          <p style={{ color: "var(--color-text-muted)" }}>Cargando...</p>
+          <p style={{ color: "var(--text-soft)" }}>Cargando...</p>
         ) : scripts.length === 0 ? (
-          <div style={{
-            textAlign: "center", padding: "60px 20px",
-            border: "2px dashed var(--color-border-light)", borderRadius: 12,
-          }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>⚡</div>
-            <h3 style={{ margin: "0 0 8px" }}>Sin scripts todavía</h3>
-            <p style={{ color: "var(--color-text-muted)", margin: "0 0 20px" }}>
-              Crea tu primer script para transformar y calcular datos con Python.
-            </p>
+          <div className="empty">
+            <div className="empty__art"><Zap size={28} /></div>
+            <h4>Sin scripts todavía</h4>
+            <p>Crea tu primer script para transformar y calcular datos con Python.</p>
             {isAdmin && (
-              <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
-                + Nuevo script
+              <button className="btn btn--primary" onClick={() => setShowCreate(true)}>
+                <Plus /> Nuevo script
               </button>
             )}
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div className="scripts-list">
+            <div className="scripts-head">
+              <span></span>
+              <span>Script</span>
+              <span>Fuentes</span>
+              <span>Programación</span>
+              <span style={{ textAlign: "right" }}>Última corrida</span>
+              <span></span>
+            </div>
+
             {scripts.map((ds, i) => {
               const recCount = recQueries[i]?.data ?? null;
               const isRunning = runningId === ds.id;
               const hasCode = !!ds.source_code?.trim();
               const hasSources = ds.source_dataset_ids.length > 0;
+              const ran = !!ds.last_computed_at;
 
               return (
-                <div key={ds.id} className="card" style={{
-                  padding: "16px 20px",
-                  display: "grid",
-                  gridTemplateColumns: "1fr auto",
-                  gap: 16,
-                  alignItems: "center",
-                  opacity: isRunning ? 0.8 : 1,
-                }}>
+                <div
+                  key={ds.id}
+                  className="script-row"
+                  style={{ opacity: isRunning ? 0.7 : 1 }}
+                  onClick={() => navigate(`/datasets/${ds.id}/computed`)}
+                >
+                  <span className="script-row__icon">
+                    {hasCode ? <FunctionSquare /> : <Zap />}
+                  </span>
+
                   <div style={{ minWidth: 0 }}>
-                    {/* Name + status badges */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                      <span style={{ fontWeight: 700, fontSize: 15 }}>⚡ {ds.name}</span>
+                    <div className="script-row__name">
+                      {ds.name}
                       {!hasCode && (
-                        <span style={{
-                          fontSize: 10, fontWeight: 700, padding: "1px 7px", borderRadius: 99,
-                          background: "#FEF3C7", color: "#92400E", border: "1px solid #FDE68A",
-                        }}>Sin código</span>
+                        <span className="badge badge--danger" style={{ marginLeft: 6 }}>SIN CÓDIGO</span>
                       )}
-                      {!hasSources && hasCode && (
-                        <span style={{
-                          fontSize: 10, fontWeight: 700, padding: "1px 7px", borderRadius: 99,
-                          background: "#FEF3C7", color: "#92400E", border: "1px solid #FDE68A",
-                        }}>Sin fuentes</span>
+                      {hasCode && !hasSources && (
+                        <span className="badge badge--danger" style={{ marginLeft: 6 }}>SIN FUENTES</span>
                       )}
                     </div>
-
                     {ds.description && (
-                      <p style={{ margin: "0 0 6px", fontSize: 12, color: "var(--color-text-muted)" }}>{ds.description}</p>
+                      <div className="script-row__desc">{ds.description}</div>
                     )}
-
-                    {/* Metadata row */}
-                    <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-                      {hasSources && (
-                        <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
-                          <strong>Fuentes:</strong> {sourceNames(ds.source_dataset_ids)}
-                        </span>
-                      )}
-                      <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
-                        {timeAgo(ds.last_computed_at)}
-                      </span>
-                      {recCount !== null && ds.last_computed_at && (
-                        <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
-                          {recCount.toLocaleString()} registro{recCount !== 1 ? "s" : ""}
-                        </span>
-                      )}
-                    </div>
                   </div>
 
-                  {/* Action buttons */}
-                  <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-                    {/* Run */}
+                  <div className="script-row__sources">
+                    {hasSources
+                      ? ds.source_dataset_ids.map((id) => (
+                          <span key={id} className="script-row__src">{sourceName(id)}</span>
+                        ))
+                      : <span style={{ fontSize: 11, color: "var(--text-mute)" }}>—</span>}
+                  </div>
+
+                  <div className="script-row__schedule">
+                    <Hand style={{ width: 11, height: 11, verticalAlign: -1 }} /> Manual
+                  </div>
+
+                  <div className="script-row__meta" style={{ textAlign: "right" }}>
+                    {ran ? (
+                      <>
+                        <b>{timeAgo(ds.last_computed_at)}</b>
+                        {recCount !== null && (
+                          <> · {recCount.toLocaleString()} reg.</>
+                        )}
+                      </>
+                    ) : (
+                      "Nunca"
+                    )}
+                  </div>
+
+                  <div className="script-row__actions" onClick={(e) => e.stopPropagation()}>
                     <button
-                      className="btn btn-primary"
-                      style={{ fontSize: 12, padding: "6px 14px", minWidth: 90 }}
-                      disabled={isRunning || !hasCode || !hasSources}
                       title={!hasCode ? "Agrega código primero" : !hasSources ? "Selecciona datasets fuente" : `Ejecutar "${ds.name}"`}
+                      disabled={isRunning || !hasCode || !hasSources}
                       onClick={() => runScript(ds)}
                     >
-                      {isRunning ? "⏳ Ejecutando..." : "▶ Ejecutar"}
+                      {isRunning ? <Loader2 style={{ animation: "spin 0.7s linear infinite" }} /> : <Play />}
                     </button>
-
-                    {/* Edit code */}
                     <button
-                      className="btn btn-secondary"
-                      style={{ fontSize: 12, padding: "6px 12px" }}
-                      onClick={() => navigate(`/datasets/${ds.id}/computed`)}
                       title="Editar código y fuentes"
+                      onClick={() => navigate(`/datasets/${ds.id}/computed`)}
                     >
-                      ✏️ Editar
+                      <Pencil />
                     </button>
-
-                    {/* View results */}
-                    {ds.last_computed_at && (
+                    {ran && (
                       <button
-                        className="btn btn-secondary"
-                        style={{ fontSize: 12, padding: "6px 12px" }}
-                        onClick={() => navigate(`/datasets/${ds.id}`)}
                         title="Ver resultados"
+                        onClick={() => navigate(`/datasets/${ds.id}`)}
                       >
-                        Ver
+                        <ExternalLink />
                       </button>
                     )}
-
-                    {/* Delete */}
                     {isAdmin && (
                       <button
-                        className="btn btn-danger-ghost"
-                        style={{ fontSize: 13, padding: "6px 10px" }}
                         title="Eliminar script y sus datos"
-                        onClick={async () => {
-                          const ok = await confirm({
-                            title: `Eliminar script "${ds.name}"`,
-                            message: "Se eliminarán el script y todos sus resultados. Los datasets fuente no se modifican.",
-                            confirmLabel: "Eliminar",
-                            variant: "danger",
-                          });
-                          if (ok) deleteMut.mutate(ds.id);
-                        }}
-                      >×</button>
+                        onClick={() => onDelete(ds)}
+                      >
+                        <Trash2 />
+                      </button>
                     )}
                   </div>
                 </div>
@@ -308,13 +291,7 @@ export default function ScriptsHub() {
             })}
           </div>
         )}
-
-        {scripts.length > 0 && (
-          <p style={{ marginTop: 20, fontSize: 12, color: "var(--color-text-muted)", textAlign: "center" }}>
-            Cada script es independiente — ejecutar uno no afecta los resultados de los demás.
-          </p>
-        )}
       </main>
-    </>
+    </AppShell>
   );
 }

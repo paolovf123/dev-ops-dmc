@@ -12,6 +12,10 @@ import {
 import DataGrid, { type ExtraColumn } from "../components/DataGrid";
 import { buildExtraColumn } from "../components/datagridJoins";
 import { IcSearch, IcLink, IcTable, IcBridge, IcPalette } from "../components/ui/icons";
+import {
+  Table2, Kanban, BarChart3, Trash2, Pencil, Search as IconSearch,
+  Filter, Columns3, Upload, Download, MoreHorizontal, Plus, Network,
+} from "lucide-react";
 import AddColumnModal from "../components/AddColumnModal";
 import ColumnPanel from "../components/ColumnPanel";
 import RelatedDatasets from "../components/RelatedDatasets";
@@ -31,6 +35,7 @@ import { useConfirm } from "../components/ConfirmDialog";
 import type { ColumnDefinition, JoinedColDef, FormulaColDef } from "../types";
 import { exportCsv, exportExcel, printDataset } from "../utils/export";
 import { useUndoRedo } from "../utils/useUndoRedo";
+import AppShell from "../components/chrome/AppShell";
 
 type ViewMode = "table" | "kanban" | "chart" | "trash";
 
@@ -249,6 +254,38 @@ export default function DatasetView() {
     });
   }, [joinedCols, sourceQueries, uniqueSourceIds, bridgeQueries, uniqueBridgeIds]);
 
+  // ── Datos del dataset relacionado para el hover-card V5 (columnas data_type=relation) ──
+  const relationCols = useMemo(
+    () => columns.filter((c) => c.data_type === "relation" && c.rules?.related_dataset_id),
+    [columns]
+  );
+  const relTargetIds = useMemo(
+    () => [...new Set(relationCols.map((c) => c.rules.related_dataset_id as string))],
+    [relationCols]
+  );
+  const relColQueries = useQueries({
+    queries: relTargetIds.map((id) => ({
+      queryKey: ["columns", id],
+      queryFn: () => getColumns(id),
+      staleTime: 120_000,
+    })),
+  });
+  const relationData = useMemo(() => {
+    const out: Record<string, import("../components/DataGrid").RelationLookup> = {};
+    for (const col of relationCols) {
+      const tid = col.rules.related_dataset_id as string;
+      const ti = relTargetIds.indexOf(tid);
+      const tcols = relColQueries[ti]?.data ?? [];
+      const displayField = (col.rules.display_field as string) || tcols[0]?.field_key || "__id__";
+      out[col.field_key] = {
+        targetId: tid,
+        datasetName: datasets.find((d) => d.id === tid)?.name,
+        displayField, cols: tcols,
+      };
+    }
+    return out;
+  }, [relationCols, relTargetIds, relColQueries, datasets]);
+
   const filteredRecords = useMemo(() => {
     const activeFilters = Object.entries(columnFilters).filter(([, v]) => v);
     if (activeFilters.length === 0) return records;
@@ -433,16 +470,17 @@ export default function DatasetView() {
   const panelBadge = joinedCols.length + formulaCols.length;
 
   const VIEW_MODES: { key: ViewMode; label: string; icon: React.ReactNode }[] = [
-    { key: "table",  label: "Tabla",    icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg> },
-    { key: "kanban", label: "Kanban",   icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="3" width="6" height="18" rx="1"/><rect x="9" y="3" width="6" height="12" rx="1"/><rect x="16" y="3" width="6" height="15" rx="1"/></svg> },
-    { key: "chart",  label: "Gráficos", icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> },
-    { key: "trash",  label: "Papelera", icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg> },
+    { key: "table",  label: "Tabla",    icon: <Table2 size={14} /> },
+    { key: "kanban", label: "Kanban",   icon: <Kanban size={14} /> },
+    { key: "chart",  label: "Gráficos", icon: <BarChart3 size={14} /> },
+    { key: "trash",  label: "Papelera", icon: <Trash2 size={14} /> },
   ];
 
   return (
     <>
-      {/* ── Header ── */}
-      <header className="app-header">
+      <AppShell active={undefined}>
+      {/* ── Header legacy (oculto: el topbar lo provee AppShell) ── */}
+      <header className="app-header" style={{ display: "none" }}>
         <button className="btn btn-ghost" onClick={() => navigate("/")}
           style={{ padding: "5px 8px", fontSize: 18 }} title="Volver">←</button>
         <button className="app-brand-btn" onClick={() => navigate("/")}>
@@ -520,7 +558,7 @@ export default function DatasetView() {
 
       {/* ── Dataset info bar ── */}
       {currentDataset && (
-        <div className="ds-info-bar">
+        <div className="ds-info-bar" style={{ display: "none" }}>
           <div className="ds-info-bar-inner">
             {currentDataset.description && (
               <span className="ds-info-desc">{currentDataset.description}</span>
@@ -554,7 +592,54 @@ export default function DatasetView() {
       )}
 
       {/* ── Main ── */}
-      <main className="page">
+      <main className="page" style={{ overflowY: "auto", maxWidth: "none", width: "100%" }}>
+        {currentDataset && (
+          <section className="dv-header" style={{ margin: "0 0 16px", padding: 0, background: "transparent", border: 0 }}>
+            <div className="dv-header__top">
+              <div>
+                <div className="dv-header__title-row">
+                  <h1>{currentDataset.name}</h1>
+                  {effectiveIsAdmin && (
+                    <button className="dv-header__title-edit" title="Editar nombre y descripción" onClick={() => setEditingDataset(true)}>
+                      <Pencil size={13} />
+                    </button>
+                  )}
+                  {wsConnected && <span className="dv-live">Live</span>}
+                </div>
+                <div className="dv-header__meta">
+                  <span><b>{visibleColumns.length}</b> columnas</span>
+                  <span className="dot" />
+                  <span><b>{filteredRecords.length}</b> filas</span>
+                  {formulaCols.length > 0 && <>
+                    <span className="dot" />
+                    <span><b>{formulaCols.length}</b> ƒ</span>
+                  </>}
+                  {joinedCols.length > 0 && <>
+                    <span className="dot" />
+                    <span><b>{joinedCols.length}</b> vínculos</span>
+                  </>}
+                </div>
+              </div>
+              <div className="dv-header__right">
+                <button className="btn btn--secondary btn--sm" onClick={() => setShowSchema(true)}
+                  disabled={columns.length === 0} title="Ver diagrama de relaciones">
+                  <Network size={14} /> Diagrama
+                </button>
+              </div>
+            </div>
+            <div className="dv-header__tabs">
+              <div className="tabs">
+                {VIEW_MODES.map((vm) => (
+                  <span key={vm.key}
+                    className={`tab${viewMode === vm.key ? " is-active" : ""}`}
+                    onClick={() => setViewMode(vm.key)}>
+                    {vm.icon} {vm.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
         {/* Banner: sugerencia automática "esto parece tabla intermedia" */}
         {(() => {
           if (!currentDataset || currentDataset.is_bridge) return null;
@@ -606,76 +691,55 @@ export default function DatasetView() {
           );
         })()}
 
-        {/* View mode tabs */}
-        <div className="view-tabs">
-          {VIEW_MODES.map((vm) => (
-            <button key={vm.key}
-              className={`view-tab${viewMode === vm.key ? " active" : ""}`}
-              onClick={() => setViewMode(vm.key)}>
-              <span style={{ marginRight: 5 }}>{vm.icon}</span>{vm.label}
-              {vm.key === "trash" && <span className="view-tab-badge" />}
-            </button>
-          ))}
-        </div>
-
         {/* Toolbar (only for table view) */}
         {viewMode === "table" && (
           <>
-            <div className="toolbar">
+            <div className="dv-toolbar-wrap">
+            <div className="dv-toolbar">
               {/* Search */}
-              <div style={{ position: "relative", flex: "1 1 180px", maxWidth: 280 }}>
-                <svg style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
-                  width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2">
-                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-                </svg>
+              <span className="dv-search">
+                <IconSearch />
                 <input placeholder="Buscar..."
-                  value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-                  style={{ paddingLeft: 30 }} />
-              </div>
+                  value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} />
+              </span>
+
+              <span className="dv-toolbar__sep" />
 
               {/* Filter toggle */}
-              <button className="btn btn-secondary" onClick={toggleFilters}
-                style={{
-                  background: showFilterRow ? "var(--color-primary-bg)" : undefined,
-                  borderColor: showFilterRow ? "var(--color-primary-border)" : undefined,
-                  color: showFilterRow ? "var(--pm-green-600)" : undefined,
-                }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+              <button className="tb-btn" onClick={toggleFilters}
+                style={showFilterRow ? { background: "var(--accent-pri-soft)", color: "var(--accent-pri)" } : undefined}>
+                <Filter />
                 Filtros
-                {activeFilterCount > 0 && <span className="btn-badge">{activeFilterCount}</span>}
+                {activeFilterCount > 0 && <span className="tb-btn__count">{activeFilterCount}</span>}
               </button>
 
               {/* Column panel toggle */}
-              <button className="btn btn-secondary" onClick={() => setShowColPanel((v) => !v)}
+              <button className="tb-btn" onClick={() => setShowColPanel((v) => !v)}
                 title="Columnas, vínculos y fórmulas"
-                style={{
-                  background: showColPanel ? "var(--color-primary-bg)" : undefined,
-                  borderColor: showColPanel ? "var(--color-primary-border)" : undefined,
-                  color: showColPanel ? "var(--pm-green-600)" : undefined,
-                }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="18"/><rect x="14" y="3" width="7" height="18"/></svg>
+                style={showColPanel ? { background: "var(--accent-pri-soft)", color: "var(--accent-pri)" } : undefined}>
+                <Columns3 />
                 Columnas
                 {columns.length > 0 && (
-                  <span style={{ fontSize: 11, color: "var(--color-text-muted)", fontWeight: 400 }}>
+                  <span style={{ fontSize: 11, color: "var(--text-mute)", fontWeight: 400 }}>
                     {columns.length - hiddenCount}/{columns.length}
                   </span>
                 )}
-                {panelBadge > 0 && <span className="btn-badge">{panelBadge}</span>}
+                {panelBadge > 0 && <span className="tb-btn__count">{panelBadge}</span>}
               </button>
 
-              <div style={{ flex: 1 }} />
+              <span className="dv-toolbar__grow" />
 
               {/* Selection actions — only visible when rows are selected */}
               {selectedIds.size === 1 && (
-                <button className="btn btn-secondary"
-                  style={{ borderColor: "var(--pm-violet-100)", color: "var(--pm-violet-600)" }}
+                <button className="tb-btn"
+                  style={{ color: "var(--accent-calc)" }}
                   onClick={() => setRelatedPanelRecordId([...selectedIds][0])}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                   Relacionados
                 </button>
               )}
               {selectedIds.size > 0 && effectiveIsEditor && (
-                <button className="btn btn-danger-ghost"
+                <button className="tb-btn" style={{ color: "var(--danger)" }}
                   onClick={async () => {
                     const ok = await confirm({
                       title: `Eliminar ${selectedIds.size} registro${selectedIds.size !== 1 ? "s" : ""}`,
@@ -695,21 +759,21 @@ export default function DatasetView() {
               <input ref={csvInputRef} type="file" accept=".csv,.xlsx,.xls" style={{ display: "none" }}
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCsvFile(f); e.target.value = ""; }} />
               {effectiveIsEditor && (
-                <button className="btn btn-secondary"
+                <button className="tb-btn"
                   onClick={() => csvInputRef.current?.click()}
                   disabled={csvImporting || columns.length === 0}
                   title="Importar CSV o Excel">
                   {csvImporting
                     ? <><span className="csv-loading-spinner" style={{ width: 11, height: 11 }} /> Importando…</>
-                    : <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Importar</>
+                    : <><Upload /> Importar</>
                   }
                 </button>
               )}
 
               {/* Export dropdown */}
               <div style={{ position: "relative" }} ref={exportRef}>
-                <button className="btn btn-secondary" onClick={() => setShowExportMenu((v) => !v)}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <button className="tb-btn" onClick={() => setShowExportMenu((v) => !v)}>
+                  <Download />
                   Exportar
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>
                 </button>
@@ -745,11 +809,11 @@ export default function DatasetView() {
 
               {/* ⋯ Más — vistas, diagrama, vincular */}
               <div style={{ position: "relative" }} ref={moreMenuRef}>
-                <button className="btn btn-secondary" onClick={() => setShowMoreMenu((v) => !v)}
+                <button className="tb-btn" onClick={() => setShowMoreMenu((v) => !v)}
                   title="Más opciones"
-                  style={{ background: showMoreMenu ? "var(--color-primary-bg)" : undefined, borderColor: showMoreMenu ? "var(--color-primary-border)" : undefined }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
-                  {(savedViews.length > 0) && <span className="btn-badge">{savedViews.length}</span>}
+                  style={showMoreMenu ? { background: "var(--accent-pri-soft)", color: "var(--accent-pri)" } : undefined}>
+                  <MoreHorizontal />
+                  {(savedViews.length > 0) && <span className="tb-btn__count">{savedViews.length}</span>}
                 </button>
                 {showMoreMenu && (
                   <div className="export-menu" style={{ minWidth: 240, right: 0, left: "auto" }}>
@@ -838,25 +902,26 @@ export default function DatasetView() {
                 )}
               </div>
 
-              <div className="toolbar-sep" />
+              <span className="dv-toolbar__sep" />
 
               {/* Admin: add column */}
               {effectiveIsAdmin && (
-                <button className="btn btn-secondary" onClick={() => setShowAddCol(true)}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <button className="btn btn--secondary btn--sm" onClick={() => setShowAddCol(true)}>
+                  <Plus size={14} />
                   Columna
                 </button>
               )}
 
               {/* Editor+: new record */}
               {effectiveIsEditor && (
-                <button className="btn btn-primary"
+                <button className="btn btn--primary btn--sm"
                   onClick={() => navigate(`/datasets/${datasetId}/new`)}
                   disabled={columns.length === 0}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  <Plus size={14} />
                   Nuevo registro
                 </button>
               )}
+            </div>
             </div>
 
             {/* CSV import result */}
@@ -954,6 +1019,7 @@ export default function DatasetView() {
               conditionalRules={conditionalRules}
               onOpenSearchReplace={() => setShowSearchReplace(true)}
               sheetMode={sheetMode}
+              relationData={relationData}
             />
           )
         )}
@@ -1014,6 +1080,7 @@ export default function DatasetView() {
           />
         )}
       </main>
+      </AppShell>
 
       {showAddCol && (
         <AddColumnModal onSave={(col) => addColMut.mutate(col)} onClose={() => setShowAddCol(false)} />

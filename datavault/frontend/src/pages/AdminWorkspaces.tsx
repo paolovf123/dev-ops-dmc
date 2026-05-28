@@ -10,6 +10,7 @@ import WsTabDatasets from "../components/admin/WsTabDatasets";
 import WsTabConfig from "../components/admin/WsTabConfig";
 import { Tabs, EmptyState } from "../components/ui";
 import { IcUsers, IcBuilding, IcExternalLink } from "../components/ui/icons";
+import AppShell from "../components/chrome/AppShell";
 import type { Workspace } from "../workspace/WorkspaceContext";
 
 // Hub de WORKSPACES: crear/configurar equipos y ver sus datasets.
@@ -114,7 +115,7 @@ export default function AdminWorkspaces() {
 
   return (
     <>
-      <header className="app-header">
+      <header className="app-header" style={{ display: "none" }}>
         <button className="app-brand-btn" onClick={() => navigate("/")}>
           <div className="app-header-logo app-header-logo--img"><img src="/opsgrid-logo.svg" alt="OpsGrid" /></div>
           <span className="app-header-name">Ops<em>Grid</em></span>
@@ -131,6 +132,14 @@ export default function AdminWorkspaces() {
         <UserMenu />
       </header>
 
+      <AppShell active="workspaces">
+      <main className="page" style={{ overflowY: "auto", maxWidth: "none", width: "100%" }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+        <button className="btn btn-ghost" style={{ fontSize: 13, gap: 6 }} onClick={() => navigate("/admin/personas")}
+          title="Usuarios, miembros, grupos y accesos">
+          <IcUsers size={15} /> Personas y accesos
+        </button>
+      </div>
       <div style={{ maxWidth: 1300, margin: "0 auto", padding: "28px 24px 48px", display: "flex", gap: 24, alignItems: "flex-start" }}>
 
         {/* ── Sidebar: lista + crear/editar workspaces ── */}
@@ -299,6 +308,8 @@ export default function AdminWorkspaces() {
           )}
         </div>
       </div>
+      </main>
+      </AppShell>
     </>
   );
 }

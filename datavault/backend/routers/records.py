@@ -241,7 +241,9 @@ async def create_record(
 ):
     from main import manager  # import here to avoid circular
     columns = await _get_columns(dataset_id, db)
-    errors = await _validate(body.data, columns, db, dataset_id, skip_required=True)
+    # `required` se exige solo cuando se envían datos (formulario / import). Un payload
+    # vacío {} es la "fila en blanco" del grid (botón +), que sí se permite crear.
+    errors = await _validate(body.data, columns, db, dataset_id, skip_required=not body.data)
     if errors:
         raise HTTPException(status_code=422, detail=errors)
 

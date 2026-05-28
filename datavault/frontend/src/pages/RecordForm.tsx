@@ -1,9 +1,35 @@
 import { useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  ArrowLeft, Plus, Circle, Link2, Hash, CircleDollarSign, Percent,
+  Calendar, ChevronDown, FileText, Type, ToggleLeft, Mail, Phone, Link, Star, Check,
+} from "lucide-react";
 import { getDatasets, getColumns, getRecords, createRecord, deleteRecord } from "../api/datasets";
 import type { ColumnDefinition, Record as DRecord } from "../types";
 import { useWorkspace } from "../workspace/WorkspaceContext";
+import AppShell from "../components/chrome/AppShell";
+
+// ─── Type metadata (icon + label for the field "ty" badge) ─────────────────────
+const TYPE_META: Record<
+  ColumnDefinition["data_type"],
+  { Icon: typeof Hash; label: string }
+> = {
+  text:        { Icon: Type,             label: "texto" },
+  long_text:   { Icon: FileText,         label: "texto largo" },
+  number:      { Icon: Hash,             label: "número" },
+  currency:    { Icon: CircleDollarSign, label: "moneda" },
+  percent:     { Icon: Percent,          label: "porcentaje" },
+  rating:      { Icon: Star,             label: "calificación" },
+  date:        { Icon: Calendar,         label: "fecha" },
+  enum:        { Icon: ChevronDown,      label: "lista" },
+  multiselect: { Icon: ChevronDown,      label: "multi-lista" },
+  boolean:     { Icon: ToggleLeft,       label: "sí / no" },
+  email:       { Icon: Mail,             label: "email" },
+  phone:       { Icon: Phone,            label: "teléfono" },
+  url:         { Icon: Link,             label: "enlace" },
+  relation:    { Icon: Link2,            label: "relación" },
+};
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -347,7 +373,7 @@ export default function RecordForm() {
 
         {/* Dropdown mode */}
         {!inCreateMode && (
-          <select value={value} onChange={(e) => onChange(e.target.value)} style={baseStyle}>
+          <select className="input" value={value} onChange={(e) => onChange(e.target.value)} style={baseStyle}>
             <option value="">— Seleccionar —</option>
             {relRecords.map((r) => (
               <option key={r.id} value={r.id}>
@@ -422,7 +448,7 @@ export default function RecordForm() {
     }
     if (col.data_type === "enum") {
       return (
-        <select value={value} onChange={(e) => onChange(e.target.value)} style={baseStyle}>
+        <select className="input" value={value} onChange={(e) => onChange(e.target.value)} style={baseStyle}>
           <option value="">— Seleccionar —</option>
           {(col.rules.options ?? []).map((o) => (
             <option key={o} value={o}>{o}</option>
@@ -432,16 +458,29 @@ export default function RecordForm() {
     }
     if (col.data_type === "boolean") {
       return (
-        <select value={value} onChange={(e) => onChange(e.target.value)} style={baseStyle}>
+        <select className="input" value={value} onChange={(e) => onChange(e.target.value)} style={baseStyle}>
           <option value="">— Seleccionar —</option>
           <option value="true">Sí</option>
           <option value="false">No</option>
         </select>
       );
     }
+    if (col.data_type === "long_text") {
+      return (
+        <textarea
+          className="input"
+          rows={3}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={col.rules.required ? "Requerido" : "Opcional"}
+          style={baseStyle}
+        />
+      );
+    }
     const type = col.data_type === "number" ? "number" : col.data_type === "date" ? "date" : "text";
     return (
       <input
+        className="input"
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -456,6 +495,37 @@ export default function RecordForm() {
 
   const inputFor = (col: ColumnDefinition) =>
     renderInputByType(col, formData[col.field_key] ?? "", (v) => setValue(col.field_key, v), !!errors[col.field_key]);
+
+  // Renders one column as a `.form-field` row (label column + control column),
+  // reusing inputFor() for the actual control markup.
+  const renderField = (col: ColumnDefinition) => {
+    const meta = TYPE_META[col.data_type];
+    const TyIcon = meta.Icon;
+    return (
+      <div key={col.id} className="form-field">
+        <div className="form-field__lbl">
+          <span className="name">
+            {col.name}
+            {col.rules.required && <span className="req"> *</span>}
+          </span>
+          <span className="ty"><TyIcon /> {meta.label}</span>
+          {col.data_type === "number" && (col.rules.min !== undefined || col.rules.max !== undefined) && (
+            <span className="help">
+              Rango: {col.rules.min ?? "—"} a {col.rules.max ?? "—"}
+            </span>
+          )}
+        </div>
+        <div className="form-field__ctrl">
+          {inputFor(col)}
+          {errors[col.field_key] && (
+            <span style={{ fontSize: 12, color: "var(--accent-rel)", marginTop: 4, display: "block" }}>
+              {errors[col.field_key]}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const renderChildForm = (
     cols: ColumnDefinition[],
@@ -481,106 +551,75 @@ export default function RecordForm() {
   // ── Loading ──────────────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <div style={{ padding: 40, color: "var(--color-text-muted)", textAlign: "center" }}>
-        Cargando campos...
-      </div>
+      <AppShell>
+        <main className="form-main">
+          <div className="form-shell" style={{ padding: 40, color: "var(--text-mute)", textAlign: "center" }}>
+            Cargando campos…
+          </div>
+        </main>
+      </AppShell>
     );
   }
 
-  const requiredCols = columns.filter((c) => c.rules.required);
-  const optionalCols = columns.filter((c) => !c.rules.required);
+  const nativeCols   = columns.filter((c) => c.data_type !== "relation");
+  const relationFields = columns.filter((c) => c.data_type === "relation");
+  const dsName = dataset?.name ?? "Dataset";
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <>
-      <header className="app-header">
-        <button className="btn btn-ghost" onClick={() => navigate(`/datasets/${datasetId}`)}
-          style={{ padding: "5px 8px", fontSize: 18 }} title="Volver">←</button>
-        <button className="app-brand-btn" onClick={() => navigate("/")}>
-          <div className="app-header-logo" style={{ width: 28, height: 28, fontSize: 13, borderRadius: "var(--radius-xs)" }}><img src="/opsgrid-logo.svg" alt="OpsGrid" style={{ width: "100%", height: "100%" }} /></div>
-          <span className="app-header-name">Ops<em>Grid</em></span>
-        </button>
-        <div style={{ width: 1, height: 20, background: "var(--color-border)", margin: "0 6px" }} />
-        <span style={{ fontSize: 14, color: "var(--color-text-secondary)" }}>{dataset?.name ?? "Dataset"}</span>
-        <span style={{ fontSize: 14, color: "var(--color-text-muted)", margin: "0 6px" }}>›</span>
-        <span style={{ fontWeight: 600, fontSize: 15 }}>Nuevo registro</span>
-      </header>
+    <AppShell>
+      <main className="form-main">
+        <div className="form-shell">
 
-      <main className="page" style={{ maxWidth: 720 }}>
-        {/* ── Parent form ─────────────────────────────────────────────── */}
-        <div className="card" style={{ padding: "28px 32px" }}>
-          <div style={{ marginBottom: 24 }}>
-            <h2 style={{ marginBottom: 4 }}>Nuevo registro</h2>
-            <p style={{ color: "var(--color-text-muted)", fontSize: 13 }}>
-              Los campos marcados con <span style={{ color: "var(--pm-red-500)" }}>*</span> son obligatorios.
-              Los campos tipo <span style={{ color: "#DB2777", fontWeight: 600 }}>⇢ Relación</span> permiten
-              seleccionar un registro existente o crear uno nuevo al instante.
-            </p>
+          <a
+            href={`/datasets/${datasetId}`}
+            className="form-back"
+            onClick={(e) => { e.preventDefault(); navigate(`/datasets/${datasetId}`); }}
+          >
+            <ArrowLeft /> Volver a {dsName}
+          </a>
+
+          <div className="form-head">
+            <div>
+              <h1>Nuevo registro · {dsName}</h1>
+              <p className="form-head__sub">
+                Crea una fila nueva en <b>{dsName}</b>. Los campos marcados con <span className="req">*</span> son obligatorios.
+              </p>
+            </div>
+            <span className="form-head__pill"><Plus /> Nuevo</span>
           </div>
 
-          {requiredCols.length > 0 && (
-            <>
-              <p className="section-title" style={{ marginBottom: 16 }}>Campos requeridos</p>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "0 24px" }}>
-                {requiredCols.map((col) => (
-                  <div key={col.id} className="form-group">
-                    <label className="form-label">
-                      {col.name}
-                      <span style={{ color: "var(--pm-red-500)", marginLeft: 2 }}>*</span>
-                      <span style={{ fontWeight: 400, color: col.data_type === "relation" ? "#DB2777" : "var(--color-text-muted)", marginLeft: 6, textTransform: "none", letterSpacing: 0 }}>
-                        {col.data_type}
-                      </span>
-                    </label>
-                    {inputFor(col)}
-                    {errors[col.field_key] && (
-                      <span style={{ fontSize: 12, color: "var(--pm-red-500)", marginTop: 2 }}>
-                        {errors[col.field_key]}
-                      </span>
-                    )}
-                  </div>
-                ))}
+          {/* ── Campos nativos ─────────────────────────────────────────── */}
+          {nativeCols.length > 0 && (
+            <section className="form-section">
+              <div className="form-section__head">
+                <span className="form-section__label is-native">
+                  <Circle /> {dsName} · {nativeCols.length} {nativeCols.length === 1 ? "campo" : "campos"}
+                </span>
+                <span className="form-section__count">propios de esta tabla</span>
               </div>
-            </>
+              {nativeCols.map(renderField)}
+            </section>
           )}
 
-          {optionalCols.length > 0 && (
-            <>
-              <div style={{ height: 1, background: "var(--color-border-light)", margin: "24px 0" }} />
-              <p className="section-title" style={{ marginBottom: 16 }}>Campos opcionales</p>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "0 24px" }}>
-                {optionalCols.map((col) => (
-                  <div key={col.id} className="form-group">
-                    <label className="form-label">
-                      {col.name}
-                      <span style={{ fontWeight: 400, color: col.data_type === "relation" ? "#DB2777" : "var(--color-text-muted)", marginLeft: 6, textTransform: "none", letterSpacing: 0 }}>
-                        {col.data_type}
-                      </span>
-                    </label>
-                    {inputFor(col)}
-                  </div>
-                ))}
+          {/* ── Relaciones ─────────────────────────────────────────────── */}
+          {relationFields.length > 0 && (
+            <section className="form-section">
+              <div className="form-section__head">
+                <span className="form-section__label is-rel">
+                  <Link2 /> Relaciones · {relationFields.length} {relationFields.length === 1 ? "campo" : "campos"}
+                </span>
+                <span className="form-section__count">apuntan a otras tablas</span>
               </div>
-            </>
+              {relationFields.map(renderField)}
+            </section>
           )}
-
-          <div style={{
-            display: "flex", gap: 10, justifyContent: "flex-end",
-            marginTop: 28, paddingTop: 20, borderTop: "1px solid var(--color-border-light)",
-          }}>
-            <button className="btn btn-secondary" onClick={() => navigate(`/datasets/${datasetId}`)}>
-              Cancelar
-            </button>
-            <button className="btn btn-primary" onClick={() => createMut.mutate()} disabled={createMut.isPending}>
-              {createMut.isPending ? "Guardando..." : "Guardar registro"}
-            </button>
-          </div>
 
           {saveError && (
-            <p style={{ marginTop: 12, color: "var(--pm-red-500)", fontSize: 13, textAlign: "right" }}>
+            <p style={{ marginTop: 16, color: "var(--accent-rel)", fontSize: 13, textAlign: "right" }}>
               {saveError}
             </p>
           )}
-        </div>
 
         {/* ── Child dataset sections ───────────────────────────────────── */}
         {childDatasets.length > 0 && (
@@ -654,7 +693,24 @@ export default function RecordForm() {
             })}
           </div>
         )}
+
+          {/* ── Footer de acciones ───────────────────────────────────── */}
+          <div className="form-foot">
+            <div className="form-foot__meta">
+              Guardando en <b>{dsName}</b> · cambios sin guardar
+            </div>
+            <div className="form-foot__actions">
+              <button className="btn btn--secondary" onClick={() => navigate(`/datasets/${datasetId}`)}>
+                Cancelar
+              </button>
+              <button className="btn btn--primary" onClick={() => createMut.mutate()} disabled={createMut.isPending}>
+                <Check /> {createMut.isPending ? "Guardando…" : "Guardar registro"}
+              </button>
+            </div>
+          </div>
+
+        </div>
       </main>
-    </>
+    </AppShell>
   );
 }

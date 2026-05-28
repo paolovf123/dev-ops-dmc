@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="es" data-palette="citrus" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <title>OpsGrid · Personas y accesos</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="theme.js"></script>
+  <link rel="stylesheet" href="ds-tokens.css">
+  <link rel="stylesheet" href="ds-styles.css">
+  <link rel="stylesheet" href="dataset.css">
+  <link rel="stylesheet" href="phase4.css">
+  <link rel="stylesheet" href="phase5.css">
+  <style>body.page { display: grid !important; min-height: 100vh !important; }</style>
+</head>
+<body class="page">
+
+  <header class="dv-topbar" data-screen-label="Personas y accesos">
+    <div class="dv-topbar__logo"><span class="dv-topbar__logo-mark"></span> OpsGrid</div>
+    <nav class="dv-bcrumb">
+      <a href="#" class="dv-bcrumb__ws">Financiera Andes <i data-lucide="chevrons-up-down"></i></a>
+      <span class="dv-bcrumb__sep">/</span>
+      <span class="dv-bcrumb__current">Personas y accesos</span>
+    </nav>
+    <span class="dv-live">Live</span>
+    <div class="dv-topbar__grow"></div>
+    <button class="dv-topbar__icon-btn"><i data-lucide="help-circle"></i></button>
+    <button class="dv-topbar__icon-btn"><i data-lucide="bell"></i></button>
+    <span class="avatar avatar--sm">MA</span>
+  </header>
+
+  <aside class="dv-side">
+    <a href="04-Home.html" class="dv-side__link"><i data-lucide="home"></i> Inicio</a>
+    <a href="04-Home.html" class="dv-side__link"><i data-lucide="database"></i> Datasets</a>
+    <a href="08-Scripts-Hub.html" class="dv-side__link"><i data-lucide="function-square"></i> Scripts</a>
+    <a href="09-Personas.html" class="dv-side__link is-active"><i data-lucide="users"></i> Personas</a>
+    <a href="10-Workspaces.html" class="dv-side__link"><i data-lucide="building"></i> Workspaces</a>
+    <a href="11-Auditoria.html" class="dv-side__link"><i data-lucide="history"></i> Auditoría</a>
+  </aside>
+
+  <main class="page-main">
+    <div class="page-header">
+      <div>
+        <h1>Personas y accesos</h1>
+        <p>Gestiona quién entra al workspace, en qué grupo está, y exactamente qué puede hacer en cada dataset.</p>
+      </div>
+      <div class="page-header__actions">
+        <button class="btn btn--secondary"><i data-lucide="download"></i> Exportar matriz</button>
+        <button class="btn btn--primary"><i data-lucide="user-plus"></i> Invitar persona</button>
+      </div>
+    </div>
+
+    <div class="page-tabs-row">
+      <div class="tabs" style="border-bottom: 0;">
+        <span class="tab"><i data-lucide="users"></i> Usuarios <span class="tab__count">42</span></span>
+        <span class="tab"><i data-lucide="user-check"></i> Miembros del workspace <span class="tab__count">7</span></span>
+        <span class="tab"><i data-lucide="layers"></i> Grupos <span class="tab__count">4</span></span>
+        <span class="tab is-active"><i data-lucide="shield"></i> Accesos a datasets ★</span>
+      </div>
+      <span class="home-toolbar__grow"></span>
+      <span style="font-size: var(--fs-11); color: var(--text-mute); margin-right: var(--sp-2);">Mostrando matriz por · </span>
+      <div class="segmented">
+        <span class="segmented__item is-active">Grupo</span>
+        <span class="segmented__item">Persona</span>
+      </div>
+    </div>
+
+    <div class="matrix-wrap">
+      <div class="matrix-controls">
+        <span class="search" style="width: 280px;">
+          <i data-lucide="search"></i>
+          Buscar grupo o persona…
+        </span>
+        <button class="tb-btn"><i data-lucide="filter"></i> Filtrar datasets</button>
+        <span class="grow"></span>
+        <span style="font-size: var(--fs-12); color: var(--text-soft); display: inline-flex; gap: var(--sp-3); align-items: center;">
+          <span><span style="display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--accent-pri-soft); border: 1px solid var(--accent-pri); vertical-align: -1px; margin-right: 4px;"></span> Ver</span>
+          <span><span style="display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--success-soft); border: 1px solid var(--success); vertical-align: -1px; margin-right: 4px;"></span> Editar</span>
+          <span><span style="display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--accent-rel-soft); border: 1px solid var(--accent-rel); vertical-align: -1px; margin-right: 4px;"></span> Admin</span>
+          <span style="color: var(--text-mute);">↑ heredado del grupo</span>
+        </span>
+      </div>
+
+      <div class="matrix-scroll">
+        <table class="matrix">
+          <thead>
+            <tr>
+              <th class="who">Grupo / persona</th>
+              <th><div class="dataset-h"><span class="name"><span class="glyph">P</span> Préstamos</span><span class="meta">1,284 filas</span></div></th>
+              <th><div class="dataset-h"><span class="name"><span class="glyph" style="background: var(--accent-rel);">C</span> Clientes</span><span class="meta">842 filas</span></div></th>
+              <th><div class="dataset-h"><span class="name"><span class="glyph" style="background: #0fb583;">P</span> Pagos</span><span class="meta">9,140 filas</span></div></th>
+              <th><div class="dataset-h"><span class="name"><span class="glyph" style="background: #8b3df0;">A</span> Cobradores</span><span class="meta">18 filas</span></div></th>
+              <th><div class="dataset-h"><span class="name"><span class="glyph">P</span> Productos</span><span class="meta">12 filas</span></div></th>
+              <th><div class="dataset-h"><span class="name"><span class="glyph" style="background: var(--accent-calc);">R</span> Reporte mora</span><span class="meta">ƒ derivado</span></div></th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- GROUP: Cobranzas -->
+            <tr class="is-group-row">
+              <td class="who"><span class="who-cell is-group"><i data-lucide="layers"></i> Cobranzas · 5 personas</span></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item is-on is-edit">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item is-on is-view">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item is-on is-edit">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item is-on is-view">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item is-on is-none">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item is-on is-view">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+            </tr>
+            <tr>
+              <td class="who"><span class="who-cell" style="padding-left: var(--sp-4);"><span class="avatar avatar--xs">KM</span> Karla M. <span style="font-size: 10px; color: var(--text-mute);">karla@financiera-andes</span></span></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item is-on is-edit is-inherited">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item is-on is-view is-inherited">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item is-on is-edit is-inherited">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item is-on is-view is-inherited">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item is-on is-none is-inherited">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item is-on is-view is-inherited">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+            </tr>
+            <tr>
+              <td class="who"><span class="who-cell" style="padding-left: var(--sp-4);"><span class="avatar avatar--xs avatar--rel">DR</span> Diego R.</span></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item is-on is-edit is-inherited">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item is-on is-edit">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item is-on is-edit is-inherited">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item is-on is-view is-inherited">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item is-on is-none is-inherited">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item is-on is-view is-inherited">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+            </tr>
+            <tr>
+              <td class="who"><span class="who-cell" style="padding-left: var(--sp-4);"><span class="avatar avatar--xs avatar--mint">YP</span> Yamil P.</span></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item is-on is-edit is-inherited">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item is-on is-view is-inherited">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item is-on is-edit is-inherited">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item is-on is-view is-inherited">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item is-on is-none is-inherited">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item is-on is-view is-inherited">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+            </tr>
+
+            <!-- GROUP: Riesgo -->
+            <tr class="is-group-row">
+              <td class="who"><span class="who-cell is-group"><i data-lucide="layers"></i> Riesgo · 2 personas</span></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item is-on is-view">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item is-on is-edit">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item is-on is-view">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item is-on is-none">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item is-on is-view">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item is-on is-edit">Editar</span><span class="access-seg__item">Admin</span></div></td>
+            </tr>
+            <tr>
+              <td class="who"><span class="who-cell" style="padding-left: var(--sp-4);"><span class="avatar avatar--xs avatar--violet">LR</span> Lorena R. · gerente</span></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item is-on is-view is-inherited">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item is-on is-edit is-inherited">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item is-on is-view is-inherited">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item is-on is-none is-inherited">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item is-on is-view is-inherited">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item is-on is-edit is-inherited">Editar</span><span class="access-seg__item">Admin</span></div></td>
+            </tr>
+
+            <!-- GROUP: Admin -->
+            <tr class="is-group-row">
+              <td class="who"><span class="who-cell is-group"><i data-lucide="shield-check"></i> Admin workspace · 1 persona</span></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item is-on is-admin">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item is-on is-admin">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item is-on is-admin">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item is-on is-admin">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item is-on is-admin">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item is-on is-admin">Admin</span></div></td>
+            </tr>
+            <tr>
+              <td class="who"><span class="who-cell" style="padding-left: var(--sp-4);"><span class="avatar avatar--xs">MA</span> María A. · owner</span></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item is-on is-admin is-inherited">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item is-on is-admin is-inherited">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item is-on is-admin is-inherited">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item is-on is-admin is-inherited">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item is-on is-admin is-inherited">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item is-on is-admin is-inherited">Admin</span></div></td>
+            </tr>
+
+            <!-- Lone user override -->
+            <tr>
+              <td class="who"><span class="who-cell"><span class="avatar avatar--xs avatar--violet">RA</span> Rafael A. <span style="font-size: 10px; color: var(--text-mute);">externo · contador</span></span></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item is-on is-view">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item is-on is-none">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item is-on is-view">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item is-on is-none">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item is-on is-none">Sin</span><span class="access-seg__item">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+              <td><div class="access-seg"><span class="access-seg__item">Sin</span><span class="access-seg__item is-on is-view">Ver</span><span class="access-seg__item">Editar</span><span class="access-seg__item">Admin</span></div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <p style="font-size: var(--fs-12); color: var(--text-mute); margin-top: var(--sp-3);">
+      <i data-lucide="info" style="width: 12px; height: 12px; vertical-align: -1px;"></i>
+      Los accesos individuales sobrescriben al grupo. La flecha ↑ marca el acceso heredado del grupo padre.
+    </p>
+  </main>
+
+  <nav class="idx-cluster">
+    <a href="00-Index.html">←  Pantallas</a>
+    <span class="sep"></span>
+    <a href="01-Design-System.html">DS</a>
+    <a href="02-Dataset.html">Dataset</a>
+    <a href="03-Login.html">Login</a>
+    <a href="04-Home.html">Home</a>
+    <a href="05-Form-Registro.html">Form</a>
+    <a href="06-Import-Excel.html">Importar</a>
+    <a href="07-Scripts-Editor.html">Editor</a>
+    <a href="08-Scripts-Hub.html">Hub</a>
+    <a href="09-Personas.html" class="is-active">Personas</a>
+    <a href="10-Workspaces.html">WS</a>
+    <a href="11-Auditoria.html">Audit</a>
+    <a href="12-Billing.html">Plan</a>
+    <a href="13-Settings.html">Config</a>
+  </nav>
+
+  <script src="https://unpkg.com/lucide@0.453.0/dist/umd/lucide.min.js"></script>
+  <script>lucide.createIcons({ attrs: { 'stroke-width': 1.75 } });</script>
+</body>
+</html>

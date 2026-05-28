@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="es" data-palette="citrus" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <title>OpsGrid · Planes y facturación</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="theme.js"></script>
+  <link rel="stylesheet" href="ds-tokens.css">
+  <link rel="stylesheet" href="ds-styles.css">
+  <link rel="stylesheet" href="dataset.css">
+  <link rel="stylesheet" href="phase4.css">
+  <link rel="stylesheet" href="phase5.css">
+  <style>body.page { display: grid !important; min-height: 100vh !important; }</style>
+</head>
+<body class="page">
+
+  <header class="dv-topbar" data-screen-label="Planes y facturación">
+    <div class="dv-topbar__logo"><span class="dv-topbar__logo-mark"></span> OpsGrid</div>
+    <nav class="dv-bcrumb">
+      <a href="#" class="dv-bcrumb__ws">Financiera Andes <i data-lucide="chevrons-up-down"></i></a>
+      <span class="dv-bcrumb__sep">/</span>
+      <span class="dv-bcrumb__current">Planes y facturación</span>
+    </nav>
+    <span class="dv-live">Live</span>
+    <div class="dv-topbar__grow"></div>
+    <button class="dv-topbar__icon-btn"><i data-lucide="help-circle"></i></button>
+    <span class="avatar avatar--sm">MA</span>
+  </header>
+
+  <aside class="dv-side">
+    <a href="04-Home.html" class="dv-side__link"><i data-lucide="home"></i> Inicio</a>
+    <a href="04-Home.html" class="dv-side__link"><i data-lucide="database"></i> Datasets</a>
+    <a href="09-Personas.html" class="dv-side__link"><i data-lucide="users"></i> Personas</a>
+    <a href="11-Auditoria.html" class="dv-side__link"><i data-lucide="history"></i> Auditoría</a>
+    <a href="12-Billing.html" class="dv-side__link is-active"><i data-lucide="credit-card"></i> Facturación</a>
+    <a href="13-Settings.html" class="dv-side__link"><i data-lucide="settings"></i> Configuración</a>
+  </aside>
+
+  <main class="page-main">
+    <div class="page-header">
+      <div>
+        <h1>Planes y facturación</h1>
+        <p>Pago en soles peruanos · Mercado Pago o transferencia BCP. Sin contratos, cancela cuando quieras.</p>
+      </div>
+      <div class="page-header__actions">
+        <button class="btn btn--secondary"><i data-lucide="file-text"></i> Ver facturas</button>
+      </div>
+    </div>
+
+    <!-- Uso del plan actual -->
+    <h3 class="t-h4" style="margin: 0 0 var(--sp-3);">Uso del plan actual · <span style="color: var(--accent-pri);">Pro</span></h3>
+    <div class="bill-usage-grid">
+      <div class="ds-card" style="margin-bottom: 0;">
+        <div class="usage">
+          <div class="usage__head"><span class="usage__label">Miembros</span><span class="usage__val">7 <em>/ 10</em></span></div>
+          <div class="usage__bar"><div class="usage__fill" style="width: 70%;"></div></div>
+          <p style="margin: var(--sp-2) 0 0; font-size: var(--fs-11); color: var(--text-mute);">3 invitaciones disponibles.</p>
+        </div>
+      </div>
+      <div class="ds-card" style="margin-bottom: 0;">
+        <div class="usage usage--warn">
+          <div class="usage__head"><span class="usage__label">Datasets</span><span class="usage__val">17 <em>/ 20</em></span></div>
+          <div class="usage__bar"><div class="usage__fill" style="width: 85%;"></div></div>
+          <p style="margin: var(--sp-2) 0 0; font-size: var(--fs-11); color: color-mix(in oklab, var(--warning) 70%, var(--text));">⚠ 3 datasets más antes del tope.</p>
+        </div>
+      </div>
+      <div class="ds-card" style="margin-bottom: 0;">
+        <div class="usage usage--danger">
+          <div class="usage__head"><span class="usage__label">Registros totales</span><span class="usage__val">48,200 <em>/ 50,000</em></span></div>
+          <div class="usage__bar"><div class="usage__fill" style="width: 96%;"></div></div>
+          <p style="margin: var(--sp-2) 0 0; font-size: var(--fs-11); color: var(--danger);">⚠ Bloqueo en aprox. 4 días al ritmo actual.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Planes -->
+    <h3 class="t-h4" style="margin: var(--sp-6) 0 var(--sp-3);">Elegir plan</h3>
+    <div class="bill-grid">
+
+      <div class="bill-card">
+        <div>
+          <div class="bill-card__name" style="color: var(--text-mute);">Free</div>
+          <div class="bill-card__price">S/ 0 <small>/ mes</small></div>
+          <p class="bill-card__tagline">Para probar OpsGrid con un equipo chico y datasets sencillos.</p>
+        </div>
+        <ul class="bill-card__features">
+          <li><i data-lucide="check"></i> <b>3</b> miembros</li>
+          <li><i data-lucide="check"></i> <b>3</b> datasets · <b>1,000</b> registros totales</li>
+          <li><i data-lucide="check"></i> Importar Excel · detectar relaciones</li>
+          <li><i data-lucide="check"></i> <b>1</b> script computed</li>
+          <li><i data-lucide="check"></i> Soporte por email · respuesta 48h</li>
+        </ul>
+        <div class="bill-card__cta">
+          <button class="btn btn--secondary" style="width: 100%;">Cambiar a Free</button>
+        </div>
+      </div>
+
+      <div class="bill-card is-current">
+        <span class="bill-card__pill">PLAN ACTUAL</span>
+        <div>
+          <div class="bill-card__name">Pro</div>
+          <div class="bill-card__price">S/ 490 <small>/ mes</small></div>
+          <p class="bill-card__tagline">Para PYMEs que ya viven en sus datos y necesitan equipo, relaciones y scripts.</p>
+        </div>
+        <ul class="bill-card__features">
+          <li><i data-lucide="check"></i> <b>10</b> miembros</li>
+          <li><i data-lucide="check"></i> <b>20</b> datasets · <b>50,000</b> registros</li>
+          <li><i data-lucide="check"></i> Todo lo de Free</li>
+          <li><i data-lucide="check"></i> Scripts ilimitados · programación cron</li>
+          <li><i data-lucide="check"></i> Auditoría <b>90 días</b></li>
+          <li><i data-lucide="check"></i> Soporte por chat · respuesta 8h</li>
+        </ul>
+        <div class="bill-card__cta">
+          <button class="btn btn--ghost" style="width: 100%;" disabled>Tu plan actual</button>
+        </div>
+      </div>
+
+      <div class="bill-card is-recommended">
+        <div>
+          <div class="bill-card__name" style="color: var(--accent-rel);">Business</div>
+          <div class="bill-card__price">S/ 980 <small>/ mes</small></div>
+          <p class="bill-card__tagline">Para equipos que mueven volumen serio. Tu data en infraestructura dedicada.</p>
+        </div>
+        <ul class="bill-card__features">
+          <li><i data-lucide="check"></i> <b>30</b> miembros</li>
+          <li><i data-lucide="check"></i> <b>Ilimitados</b> datasets · <b>200,000</b> registros</li>
+          <li><i data-lucide="check"></i> Todo lo de Pro</li>
+          <li><i data-lucide="check"></i> SSO Google Workspace + SAML</li>
+          <li><i data-lucide="check"></i> Auditoría <b>ilimitada</b></li>
+          <li><i data-lucide="check"></i> Soporte prioritario · respuesta 1h</li>
+        </ul>
+        <div class="bill-card__cta">
+          <button class="btn btn--primary" style="width: 100%; background: var(--accent-rel); border-color: var(--accent-rel);">Subir a Business</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pago -->
+    <h3 class="t-h4" style="margin: var(--sp-6) 0 var(--sp-3);">Método de pago</h3>
+    <div class="bill-pay">
+      <p style="margin: 0 0 var(--sp-3); font-size: var(--fs-13); color: var(--text-soft);">Elige cómo quieres pagar. Te enviamos la factura electrónica SUNAT en automático.</p>
+      <div class="bill-pay-methods">
+        <div class="bill-method is-on">
+          <span class="bill-method__radio"></span>
+          <span class="bill-method__logo is-mp">MP</span>
+          <div style="flex: 1;">
+            <div class="bill-method__name">Mercado Pago</div>
+            <div class="bill-method__desc">Tarjeta, Yape, Plin, o pago en efectivo en agente · cargo automático mensual</div>
+          </div>
+          <span class="badge badge--success">CONFIGURADO</span>
+        </div>
+        <div class="bill-method">
+          <span class="bill-method__radio"></span>
+          <span class="bill-method__logo is-bcp">BCP</span>
+          <div style="flex: 1;">
+            <div class="bill-method__name">Transferencia bancaria</div>
+            <div class="bill-method__desc">BCP, BBVA, Interbank · sube el voucher y aprobamos en 24h</div>
+          </div>
+        </div>
+      </div>
+      <p style="margin: var(--sp-4) 0 0; font-size: var(--fs-11); color: var(--text-mute); display: flex; align-items: center; gap: var(--sp-2);">
+        <i data-lucide="shield-check" style="width: 12px; height: 12px; color: var(--success);"></i>
+        Datos protegidos · pago procesado en infraestructura PCI-DSS. No guardamos tu tarjeta directamente.
+      </p>
+    </div>
+
+    <!-- Admin view: pending payment requests -->
+    <h3 class="t-h4" style="margin: var(--sp-6) 0 var(--sp-3); display: flex; align-items: center; gap: var(--sp-2);">
+      <i data-lucide="hourglass" style="width: 16px; height: 16px; color: var(--warning);"></i>
+      Solicitudes de pago pendientes <span class="badge badge--danger">3</span>
+      <span style="font-size: var(--fs-11); color: var(--text-mute); font-weight: var(--fw-regular); margin-left: auto;">vista admin</span>
+    </h3>
+    <div class="bill-pending">
+      <div class="bill-pending__row">
+        <div class="who">
+          <span class="avatar avatar--sm is-rel">CC</span>
+          <div>
+            <b>Comercial Cusco S.A.C.</b>
+            <div style="font-size: var(--fs-11); color: var(--text-mute);">cusco.opsgrid.app · Business</div>
+          </div>
+        </div>
+        <div>
+          <span class="amount">S/ 980.00</span>
+          <div class="meta">Transferencia BCP · voucher v_3221.pdf</div>
+        </div>
+        <div>
+          <div class="meta">Solicitado hace 4 horas</div>
+          <span class="status-pill status-pill--due"><span class="status-pill__dot"></span>Esperando aprobación</span>
+        </div>
+        <div class="actions">
+          <button class="btn btn--ghost btn--sm"><i data-lucide="eye"></i> Ver</button>
+          <button class="btn btn--danger btn--sm"><i data-lucide="x"></i></button>
+          <button class="btn btn--primary btn--sm"><i data-lucide="check"></i> Aprobar</button>
+        </div>
+      </div>
+
+      <div class="bill-pending__row">
+        <div class="who">
+          <span class="avatar avatar--sm avatar--mint">MR</span>
+          <div>
+            <b>Mototaxi Rapid S.A.C.</b>
+            <div style="font-size: var(--fs-11); color: var(--text-mute);">mototaxi.opsgrid.app · Pro</div>
+          </div>
+        </div>
+        <div>
+          <span class="amount">S/ 490.00</span>
+          <div class="meta">Transferencia BBVA · voucher v_3218.pdf</div>
+        </div>
+        <div>
+          <div class="meta">Solicitado ayer</div>
+          <span class="status-pill status-pill--due"><span class="status-pill__dot"></span>Esperando aprobación</span>
+        </div>
+        <div class="actions">
+          <button class="btn btn--ghost btn--sm"><i data-lucide="eye"></i> Ver</button>
+          <button class="btn btn--danger btn--sm"><i data-lucide="x"></i></button>
+          <button class="btn btn--primary btn--sm"><i data-lucide="check"></i> Aprobar</button>
+        </div>
+      </div>
+
+      <div class="bill-pending__row">
+        <div class="who">
+          <span class="avatar avatar--sm avatar--violet">PA</span>
+          <div>
+            <b>Pastelería del Ande</b>
+            <div style="font-size: var(--fs-11); color: var(--text-mute);">pasteleria.opsgrid.app · Pro (upgrade)</div>
+          </div>
+        </div>
+        <div>
+          <span class="amount">S/ 490.00</span>
+          <div class="meta">Transferencia Interbank · voucher v_3215.pdf</div>
+        </div>
+        <div>
+          <div class="meta">Hace 2 días <span style="color: var(--danger);">· por vencer</span></div>
+          <span class="status-pill status-pill--late"><span class="status-pill__dot"></span>Atrasado · 48h</span>
+        </div>
+        <div class="actions">
+          <button class="btn btn--ghost btn--sm"><i data-lucide="eye"></i> Ver</button>
+          <button class="btn btn--danger btn--sm"><i data-lucide="x"></i></button>
+          <button class="btn btn--primary btn--sm"><i data-lucide="check"></i> Aprobar</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <nav class="idx-cluster">
+    <a href="00-Index.html">←  Pantallas</a>
+    <span class="sep"></span>
+    <a href="01-Design-System.html">DS</a>
+    <a href="02-Dataset.html">Dataset</a>
+    <a href="03-Login.html">Login</a>
+    <a href="04-Home.html">Home</a>
+    <a href="05-Form-Registro.html">Form</a>
+    <a href="06-Import-Excel.html">Importar</a>
+    <a href="07-Scripts-Editor.html">Editor</a>
+    <a href="08-Scripts-Hub.html">Hub</a>
+    <a href="09-Personas.html">Personas</a>
+    <a href="10-Workspaces.html">WS</a>
+    <a href="11-Auditoria.html">Audit</a>
+    <a href="12-Billing.html" class="is-active">Plan</a>
+    <a href="13-Settings.html">Config</a>
+  </nav>
+
+  <script src="https://unpkg.com/lucide@0.453.0/dist/umd/lucide.min.js"></script>
+  <script>lucide.createIcons({ attrs: { 'stroke-width': 1.75 } });</script>
+</body>
+</html>

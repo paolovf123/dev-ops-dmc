@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="es" data-palette="citrus" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <title>OpsGrid · Scripts</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="theme.js"></script>
+  <link rel="stylesheet" href="ds-tokens.css">
+  <link rel="stylesheet" href="ds-styles.css">
+  <link rel="stylesheet" href="dataset.css">
+  <link rel="stylesheet" href="phase4.css">
+  <link rel="stylesheet" href="phase5.css">
+  <style>body.page { display: grid !important; min-height: 100vh !important; }</style>
+</head>
+<body class="page">
+
+  <header class="dv-topbar" data-screen-label="Scripts · Hub">
+    <div class="dv-topbar__logo"><span class="dv-topbar__logo-mark"></span> OpsGrid</div>
+    <nav class="dv-bcrumb">
+      <a href="#" class="dv-bcrumb__ws">Financiera Andes <i data-lucide="chevrons-up-down"></i></a>
+      <span class="dv-bcrumb__sep">/</span>
+      <span class="dv-bcrumb__current">Scripts</span>
+    </nav>
+    <span class="dv-live">Live</span>
+    <div class="dv-topbar__grow"></div>
+    <button class="dv-topbar__icon-btn"><i data-lucide="help-circle"></i></button>
+    <button class="dv-topbar__icon-btn"><i data-lucide="bell"></i></button>
+    <span class="avatar avatar--sm">MA</span>
+  </header>
+
+  <aside class="dv-side">
+    <a href="04-Home.html" class="dv-side__link"><i data-lucide="home"></i> Inicio</a>
+    <a href="04-Home.html" class="dv-side__link"><i data-lucide="database"></i> Datasets <span class="count">17</span></a>
+    <a href="08-Scripts-Hub.html" class="dv-side__link is-active"><i data-lucide="function-square"></i> Scripts <span class="count">8</span></a>
+    <a href="06-Import-Excel.html" class="dv-side__link"><i data-lucide="upload"></i> Importaciones</a>
+    <a href="09-Personas.html" class="dv-side__link"><i data-lucide="users"></i> Personas</a>
+    <a href="11-Auditoria.html" class="dv-side__link"><i data-lucide="history"></i> Auditoría</a>
+  </aside>
+
+  <main class="page-main">
+    <div class="page-header">
+      <div>
+        <h1>Scripts</h1>
+        <p>Código Python que limpia, deriva o reporta sobre tus datasets. Corren por trigger, programados, o cuando los ejecutas a mano.</p>
+      </div>
+      <div class="page-header__actions">
+        <button class="btn btn--secondary"><i data-lucide="sparkles"></i> Desde plantilla</button>
+        <a href="07-Scripts-Editor.html" class="btn btn--primary"><i data-lucide="plus"></i> Nuevo script</a>
+      </div>
+    </div>
+
+    <div class="home-toolbar">
+      <span class="search">
+        <i data-lucide="search"></i>
+        Buscar script por nombre, fuente o destino…
+        <span class="search__kbd" style="margin-left: auto;"><span class="kbd">⌘</span><span class="kbd">F</span></span>
+      </span>
+      <div class="tabs" style="border-bottom: 0;">
+        <span class="tab is-active">Todos <span class="tab__count">8</span></span>
+        <span class="tab">Computed <span class="tab__count">5</span></span>
+        <span class="tab">Limpieza <span class="tab__count">2</span></span>
+        <span class="tab">Reportes <span class="tab__count">1</span></span>
+      </div>
+      <span class="home-toolbar__grow"></span>
+      <button class="tb-btn"><i data-lucide="arrow-up-down"></i> Última corrida</button>
+    </div>
+
+    <div class="scripts-list" style="margin-top: var(--sp-2);">
+      <div class="scripts-head">
+        <span></span>
+        <span>Script</span>
+        <span>Fuentes</span>
+        <span>Programación</span>
+        <span style="text-align: right;">Última corrida</span>
+        <span></span>
+      </div>
+
+      <a href="07-Scripts-Editor.html" class="script-row" style="text-decoration: none; color: inherit;">
+        <span class="script-row__icon"><i data-lucide="function-square"></i></span>
+        <div>
+          <div class="script-row__name">mora_diaria.py <span class="badge badge--success" style="margin-left: 4px;">ACTIVO</span></div>
+          <div class="script-row__desc">Recalcula días en mora, mora S/ y saldo restante en Préstamos.</div>
+        </div>
+        <div class="script-row__sources">
+          <span class="script-row__src">Préstamos</span>
+          <span class="script-row__src">Clientes</span>
+          <span class="script-row__src">Pagos</span>
+        </div>
+        <div class="script-row__schedule"><i data-lucide="clock" style="width: 11px; height: 11px; vertical-align: -1px;"></i> Cada noche 03:00</div>
+        <div class="script-row__meta">hoy <b>08:30</b> · 2.4 s · <span style="color: var(--success);">✓ 1,284</span></div>
+        <div class="script-row__actions">
+          <button title="Ejecutar"><i data-lucide="play"></i></button>
+          <button title="Editar"><i data-lucide="pencil"></i></button>
+          <button title="Más"><i data-lucide="more-horizontal"></i></button>
+        </div>
+      </a>
+
+      <div class="script-row">
+        <span class="script-row__icon"><i data-lucide="function-square"></i></span>
+        <div>
+          <div class="script-row__name">riesgo_cliente.py <span class="badge badge--success" style="margin-left: 4px;">ACTIVO</span></div>
+          <div class="script-row__desc">Asigna nivel de riesgo (Bajo/Medio/Alto) por historial de cobranza.</div>
+        </div>
+        <div class="script-row__sources">
+          <span class="script-row__src">Clientes</span>
+          <span class="script-row__src">Préstamos</span>
+        </div>
+        <div class="script-row__schedule"><i data-lucide="zap" style="width: 11px; height: 11px; vertical-align: -1px;"></i> En cada update</div>
+        <div class="script-row__meta">hace <b>2 h</b> · 0.8 s · <span style="color: var(--success);">✓ 842</span></div>
+        <div class="script-row__actions">
+          <button title="Ejecutar"><i data-lucide="play"></i></button>
+          <button title="Editar"><i data-lucide="pencil"></i></button>
+          <button title="Más"><i data-lucide="more-horizontal"></i></button>
+        </div>
+      </div>
+
+      <div class="script-row">
+        <span class="script-row__icon" style="background: color-mix(in oklab, var(--success) 14%, var(--surface)); color: var(--success);"><i data-lucide="sparkles"></i></span>
+        <div>
+          <div class="script-row__name">limpieza_telefonos.py</div>
+          <div class="script-row__desc">Normaliza teléfonos a formato +51 9XX XXX XXX. Limpieza una sola vez.</div>
+        </div>
+        <div class="script-row__sources">
+          <span class="script-row__src">Clientes</span>
+        </div>
+        <div class="script-row__schedule"><i data-lucide="hand" style="width: 11px; height: 11px; vertical-align: -1px;"></i> Manual</div>
+        <div class="script-row__meta">hace <b>4 días</b> · 0.3 s · <span style="color: var(--success);">✓ 842</span></div>
+        <div class="script-row__actions">
+          <button title="Ejecutar"><i data-lucide="play"></i></button>
+          <button title="Editar"><i data-lucide="pencil"></i></button>
+          <button title="Más"><i data-lucide="more-horizontal"></i></button>
+        </div>
+      </div>
+
+      <div class="script-row">
+        <span class="script-row__icon"><i data-lucide="function-square"></i></span>
+        <div>
+          <div class="script-row__name">reporte_mora_mensual.py</div>
+          <div class="script-row__desc">Genera un dataset derivado con totales de mora por cobrador.</div>
+        </div>
+        <div class="script-row__sources">
+          <span class="script-row__src">Préstamos</span>
+          <span class="script-row__src">Cobradores</span>
+        </div>
+        <div class="script-row__schedule"><i data-lucide="calendar" style="width: 11px; height: 11px; vertical-align: -1px;"></i> Mensual · día 1</div>
+        <div class="script-row__meta">2 may <b>00:00</b> · 1.1 s · <span style="color: var(--success);">✓ 1,284</span></div>
+        <div class="script-row__actions">
+          <button title="Ejecutar"><i data-lucide="play"></i></button>
+          <button title="Editar"><i data-lucide="pencil"></i></button>
+          <button title="Más"><i data-lucide="more-horizontal"></i></button>
+        </div>
+      </div>
+
+      <div class="script-row">
+        <span class="script-row__icon"><i data-lucide="function-square"></i></span>
+        <div>
+          <div class="script-row__name">interes_compuesto.py</div>
+          <div class="script-row__desc">Calcula el interés total a pagar al final del préstamo (proyección).</div>
+        </div>
+        <div class="script-row__sources">
+          <span class="script-row__src">Préstamos</span>
+        </div>
+        <div class="script-row__schedule"><i data-lucide="hand" style="width: 11px; height: 11px; vertical-align: -1px;"></i> Manual</div>
+        <div class="script-row__meta">hace <b>1 semana</b> · 0.5 s · <span style="color: var(--success);">✓ 1,284</span></div>
+        <div class="script-row__actions">
+          <button title="Ejecutar"><i data-lucide="play"></i></button>
+          <button title="Editar"><i data-lucide="pencil"></i></button>
+          <button title="Más"><i data-lucide="more-horizontal"></i></button>
+        </div>
+      </div>
+
+      <div class="script-row" style="opacity: 0.65;">
+        <span class="script-row__icon" style="background: var(--danger-soft); color: var(--danger);"><i data-lucide="alert-circle"></i></span>
+        <div>
+          <div class="script-row__name">alerta_atrasos.py <span class="badge badge--danger" style="margin-left: 4px;">ERROR</span></div>
+          <div class="script-row__desc">Envía email cuando un préstamo se atrasa más de 30 días.</div>
+        </div>
+        <div class="script-row__sources">
+          <span class="script-row__src">Préstamos</span>
+        </div>
+        <div class="script-row__schedule"><i data-lucide="clock" style="width: 11px; height: 11px; vertical-align: -1px;"></i> Diario 08:00</div>
+        <div class="script-row__meta" style="color: var(--danger);">hoy 08:00 · <span style="font-family: var(--font-mono);">ImportError</span></div>
+        <div class="script-row__actions">
+          <button title="Ver error"><i data-lucide="alert-circle"></i></button>
+          <button title="Editar"><i data-lucide="pencil"></i></button>
+          <button title="Más"><i data-lucide="more-horizontal"></i></button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <nav class="idx-cluster">
+    <a href="00-Index.html">←  Pantallas</a>
+    <span class="sep"></span>
+    <a href="01-Design-System.html">DS</a>
+    <a href="02-Dataset.html">Dataset</a>
+    <a href="03-Login.html">Login</a>
+    <a href="04-Home.html">Home</a>
+    <a href="05-Form-Registro.html">Form</a>
+    <a href="06-Import-Excel.html">Importar</a>
+    <a href="07-Scripts-Editor.html">Editor</a>
+    <a href="08-Scripts-Hub.html" class="is-active">Hub</a>
+    <a href="09-Personas.html">Personas</a>
+    <a href="10-Workspaces.html">WS</a>
+    <a href="11-Auditoria.html">Audit</a>
+    <a href="12-Billing.html">Plan</a>
+    <a href="13-Settings.html">Config</a>
+  </nav>
+
+  <script src="https://unpkg.com/lucide@0.453.0/dist/umd/lucide.min.js"></script>
+  <script>lucide.createIcons({ attrs: { 'stroke-width': 1.75 } });</script>
+</body>
+</html>

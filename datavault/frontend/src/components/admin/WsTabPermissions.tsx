@@ -1,12 +1,11 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Layers, Shield, Search, Filter, Info } from "lucide-react";
 import { getDatasets, setDatasetGroupPermission, removeDatasetGroupPermission } from "../../api/datasets";
 import { getWorkspaceMembers, getWorkspaceAccessMatrix } from "../../api/workspaces";
 import { getGroups } from "../../api/groups";
-import { DS_ROLE_STYLE } from "../../utils/ui";
-import { SearchInput, EmptyState, Badge } from "../ui";
-import { IcTable, IcUsers, IcLink } from "../ui/icons";
+import { EmptyState } from "../ui";
+import { IcUsers, IcLink, IcTable } from "../ui/icons";
 import { useToast } from "../Toast";
 
 interface Props {
@@ -19,31 +18,46 @@ interface Props {
 type Mode = "groups" | "users";
 type Role = "none" | "viewer" | "editor" | "admin";
 const ROLES: Role[] = ["none", "viewer", "editor", "admin"];
-const ROLE_LABEL: Record<Role, string> = { none: "Sin acceso", viewer: "Ver", editor: "Editar", admin: "Admin" };
+const ROLE_LABEL: Record<Role, string> = { none: "Sin", viewer: "Ver", editor: "Editar", admin: "Admin" };
+// Clase de acento por rol para el control .access-seg (matchea el mockup).
+const ROLE_SEG_CLASS: Record<Role, string> = { none: "is-none", viewer: "is-view", editor: "is-edit", admin: "is-admin" };
 
-// Color de acento por grupo (consistente por nombre).
-const GROUP_COLORS = ["#6366F1", "#8B5CF6", "#EC4899", "#F59E0B", "#10B981", "#0EA5E9", "#EF4444", "#14B8A6", "#7C3AED"];
-function groupColor(name: string) {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % GROUP_COLORS.length;
-  return GROUP_COLORS[h];
+// Glifos de color para las cabeceras de dataset (rotan por índice).
+const GLYPH_COLORS = ["var(--accent-pri)", "var(--accent-rel)", "#0fb583", "#8b3df0", "var(--accent-pri)", "var(--accent-calc)"];
+const AVATAR_VARIANTS = ["", "avatar--rel", "avatar--mint", "avatar--violet"];
+
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-// ── Control segmentado para asignar rol ───────────────────────────────────────
-function RoleSegmented({ value, onChange, busy }: { value: Role; onChange: (r: Role) => void; busy?: boolean }) {
+// ── Celda: control segmentado de 4 niveles (Sin / Ver / Editar / Admin) ─────────
+function AccessSeg({
+  value, editable, busy, onChange,
+}: {
+  value: Role;
+  editable: boolean;
+  busy?: boolean;
+  onChange?: (r: Role) => void;
+}) {
   return (
-    <div className="dk-seg" role="group" aria-label="Nivel de acceso">
+    <div className="access-seg">
       {ROLES.map((r) => {
-        const active = value === r;
-        const accent = r === "none" ? "#94A3B8" : DS_ROLE_STYLE[r].solid;
+        const on = value === r;
+        const cls = on ? `access-seg__item is-on ${ROLE_SEG_CLASS[r]}` : "access-seg__item";
         return (
-          <button key={r} className="dk-seg-btn" data-active={active} disabled={busy}
-            onClick={() => !active && onChange(r)}
-            style={active ? (r === "none"
-              ? { background: "#E2E8F0", color: "var(--color-text-secondary)" }
-              : { background: accent, color: "#fff" }) : undefined}>
+          <span
+            key={r}
+            className={cls}
+            role={editable ? "button" : undefined}
+            aria-disabled={editable ? busy : undefined}
+            style={editable && !busy ? { cursor: "pointer" } : editable ? { cursor: "wait" } : { cursor: "default" }}
+            onClick={() => { if (editable && !busy && !on) onChange?.(r); }}
+          >
             {ROLE_LABEL[r]}
-          </button>
+          </span>
         );
       })}
     </div>
@@ -52,7 +66,6 @@ function RoleSegmented({ value, onChange, busy }: { value: Role; onChange: (r: R
 
 export default function WsTabPermissions({ workspaceId, workspaceName, editable = false }: Props) {
   const [mode, setMode] = useState<Mode>("groups");
-  const [subjectId, setSubjectId] = useState("");
   const [filter, setFilter] = useState("");
   const qc = useQueryClient();
   const toast = useToast();
@@ -101,121 +114,141 @@ export default function WsTabPermissions({ workspaceId, workspaceName, editable 
 
   const realDatasets = datasets.filter((d) => !d.is_bridge);
   const q = filter.trim().toLowerCase();
-  const visibleDatasets = realDatasets.filter((d) => !q || d.name.toLowerCase().includes(q));
 
-  const subjects = mode === "groups"
-    ? groups.map((g) => ({ id: g.id, name: g.name }))
-    : members.map((m) => ({ id: m.user_id, name: m.username }));
-
-  const effectiveSubjectId = subjectId && subjects.some((s) => s.id === subjectId) ? subjectId : (subjects[0]?.id ?? "");
-  const subjectAccess = accessBySubject.get(effectiveSubjectId) ?? new Map<string, string>();
-  const accessCountBy = (id: string) => accessBySubject.get(id)?.size ?? 0;
+  // Filas: grupos (mode=groups) o miembros (mode=users), filtradas por el buscador.
+  const rows = mode === "groups"
+    ? groups
+        .filter((g) => !q || g.name.toLowerCase().includes(q))
+        .map((g) => ({ id: g.id, name: g.name, sub: `${g.member_count} ${g.member_count === 1 ? "persona" : "personas"}`, isGroup: true }))
+    : members
+        .filter((m) => !q || m.username.toLowerCase().includes(q) || m.email.toLowerCase().includes(q))
+        .map((m) => ({ id: m.user_id, name: m.username, sub: m.email, isGroup: false }));
 
   const canEdit = editable && mode === "groups";
 
+  const emptyRows = mode === "groups" ? groups.length === 0 : members.length === 0;
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      {/* Header + toggle de modo */}
-      <div className="dk-card dk-card-pad" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <div>
-          <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>Accesos · {workspaceName}</p>
-          <p style={{ margin: "3px 0 0", fontSize: 12, color: "var(--color-text-muted)" }}>
-            {mode === "groups"
-              ? "Elegí un grupo y asigná su nivel de acceso a cada dataset."
-              : "Rol efectivo de cada miembro (combina permisos directos, de grupo y de workspace)."}
-          </p>
-        </div>
-        <div style={{ display: "flex", border: "1px solid var(--color-border)", borderRadius: 8, overflow: "hidden" }}>
+    <>
+      {/* Toggle de modo: Grupo / Persona (segmented del DS) */}
+      <div className="page-tabs-row" style={{ borderBottom: 0, marginBottom: "var(--sp-3)" }}>
+        <span style={{ fontSize: "var(--fs-13)", fontWeight: 600 }}>Accesos · {workspaceName}</span>
+        <span className="home-toolbar__grow" style={{ flex: 1 }} />
+        <span style={{ fontSize: "var(--fs-11)", color: "var(--text-mute)", marginRight: "var(--sp-2)" }}>Mostrando matriz por ·</span>
+        <div className="segmented">
           {(["groups", "users"] as Mode[]).map((m) => (
-            <button key={m} onClick={() => { setMode(m); setSubjectId(""); }}
-              style={{
-                padding: "6px 16px", fontSize: 12.5, fontWeight: 600, border: "none", cursor: "pointer",
-                background: mode === m ? "var(--color-primary)" : "transparent",
-                color: mode === m ? "#fff" : "var(--color-text-secondary)",
-              }}>
-              {m === "groups" ? "Por grupo" : "Por miembro"}
-            </button>
+            <span
+              key={m}
+              className={`segmented__item${mode === m ? " is-active" : ""}`}
+              onClick={() => setMode(m)}
+              style={{ cursor: "pointer" }}
+            >
+              {m === "groups" ? "Grupo" : "Persona"}
+            </span>
           ))}
         </div>
       </div>
 
-      {subjects.length === 0 ? (
-        <div className="dk-card">
+      <div className="matrix-wrap">
+        <div className="matrix-controls">
+          <span className="search" style={{ width: 280 }}>
+            <Search />
+            <input
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder={mode === "groups" ? "Buscar grupo…" : "Buscar persona…"}
+              style={{ border: 0, background: "transparent", outline: "none", flex: 1, font: "inherit", color: "inherit" }}
+            />
+          </span>
+          <button className="tb-btn"><Filter /> Filtrar datasets</button>
+          <span className="grow" />
+          <span style={{ fontSize: "var(--fs-12)", color: "var(--text-soft)", display: "inline-flex", gap: "var(--sp-3)", alignItems: "center" }}>
+            <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 3, background: "var(--accent-pri-soft)", border: "1px solid var(--accent-pri)", verticalAlign: -1, marginRight: 4 }} /> Ver</span>
+            <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 3, background: "var(--success-soft)", border: "1px solid var(--success)", verticalAlign: -1, marginRight: 4 }} /> Editar</span>
+            <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 3, background: "var(--accent-rel-soft)", border: "1px solid var(--accent-rel)", verticalAlign: -1, marginRight: 4 }} /> Admin</span>
+          </span>
+        </div>
+
+        {emptyRows ? (
           <EmptyState
             icon={mode === "groups" ? <IcLink size={22} /> : <IcUsers size={22} />}
             title={mode === "groups" ? "Sin grupos en este workspace" : "Sin miembros en este workspace"}
             subtitle={mode === "groups" ? "Creá grupos en la pestaña Grupos para asignarles acceso." : "Agregá miembros en la pestaña Miembros."}
           />
-        </div>
-      ) : (
-        <>
-          {/* Selector de sujeto (chips) */}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {subjects.map((s) => {
-              const active = s.id === effectiveSubjectId;
-              const dot = mode === "groups" ? groupColor(s.name) : "#64748B";
-              const n = accessCountBy(s.id);
-              return (
-                <button key={s.id} className="dk-chip" data-active={active} onClick={() => setSubjectId(s.id)}>
-                  <span className="dk-chip-dot" style={{ background: dot }} />
-                  {s.name}
-                  {n > 0 && <span className="dk-chip-count">{n}</span>}
-                </button>
-              );
-            })}
+        ) : realDatasets.length === 0 ? (
+          <EmptyState icon={<IcTable size={22} />} title="Sin datasets"
+            subtitle="Este workspace no tiene datasets." />
+        ) : (
+          <div className="matrix-scroll">
+            <table className="matrix">
+              <thead>
+                <tr>
+                  <th className="who">{mode === "groups" ? "Grupo" : "Persona"}</th>
+                  {realDatasets.map((d, i) => (
+                    <th key={d.id}>
+                      <div className="dataset-h">
+                        <span className="name">
+                          <span className="glyph" style={{ background: GLYPH_COLORS[i % GLYPH_COLORS.length] }}>
+                            {d.name.charAt(0).toUpperCase()}
+                          </span>
+                          {d.name}
+                        </span>
+                        <span className="meta">{d.is_computed ? "ƒ derivado" : "dataset"}</span>
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, ri) => {
+                  const subjectAccess = accessBySubject.get(row.id) ?? new Map<string, string>();
+                  return (
+                    <tr key={row.id} className={row.isGroup ? "is-group-row" : undefined}>
+                      <td className="who">
+                        <span className={`who-cell${row.isGroup ? " is-group" : ""}`}>
+                          {row.isGroup ? (
+                            <Layers />
+                          ) : (
+                            <span className={`avatar avatar--xs ${AVATAR_VARIANTS[ri % AVATAR_VARIANTS.length]}`}>
+                              {initials(row.name)}
+                            </span>
+                          )}
+                          {row.name}
+                          {row.isGroup ? (
+                            <> · {row.sub}</>
+                          ) : (
+                            <span style={{ fontSize: 10, color: "var(--text-mute)" }}>{row.sub}</span>
+                          )}
+                        </span>
+                      </td>
+                      {realDatasets.map((d) => {
+                        const role = (subjectAccess.get(d.id) as Role) || "none";
+                        return (
+                          <td key={d.id}>
+                            <AccessSeg
+                              value={role}
+                              editable={canEdit}
+                              busy={setPerm.isPending}
+                              onChange={(r) => setPerm.mutate({ datasetId: d.id, groupId: row.id, role: r })}
+                            />
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
+        )}
+      </div>
 
-          {/* Buscador + resumen */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-            <SearchInput value={filter} onChange={setFilter} placeholder="Buscar dataset…" style={{ minWidth: 240 }} />
-            <span style={{ fontSize: 12.5, color: "var(--color-text-muted)" }}>
-              {mode === "groups"
-                ? <>Este grupo accede a <strong style={{ color: "var(--color-text-secondary)" }}>{subjectAccess.size}</strong> de {realDatasets.length} datasets</>
-                : <>Acceso a <strong style={{ color: "var(--color-text-secondary)" }}>{subjectAccess.size}</strong> de {realDatasets.length} datasets</>}
-            </span>
-          </div>
-
-          {/* Lista de datasets con su control de acceso */}
-          {visibleDatasets.length === 0 ? (
-            <div className="dk-card">
-              <EmptyState icon={<IcTable size={22} />} title="Sin datasets"
-                subtitle={realDatasets.length === 0 ? "Este workspace no tiene datasets." : "Ningún dataset coincide con el filtro."} />
-            </div>
-          ) : (
-            <div className="dk-card dk-card--flush">
-              {visibleDatasets.map((d) => {
-                const role = (subjectAccess.get(d.id) as Role) || "none";
-                return (
-                  <div key={d.id} className="dk-access-row">
-                    <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{
-                        display: "inline-flex", alignItems: "center", justifyContent: "center",
-                        width: 30, height: 30, borderRadius: 8, flexShrink: 0,
-                        background: role === "none" ? "var(--color-bg)" : (DS_ROLE_STYLE[role].bg),
-                        color: role === "none" ? "var(--color-text-muted)" : DS_ROLE_STYLE[role].fg,
-                      }}>
-                        <IcTable size={15} />
-                      </span>
-                      <Link to={`/datasets/${d.id}`}
-                        style={{ fontWeight: 600, fontSize: 13.5, color: "var(--color-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {d.name}
-                      </Link>
-                    </div>
-                    {canEdit ? (
-                      <RoleSegmented value={role} busy={setPerm.isPending}
-                        onChange={(r) => setPerm.mutate({ datasetId: d.id, groupId: effectiveSubjectId, role: r })} />
-                    ) : (
-                      role === "none"
-                        ? <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>Sin acceso</span>
-                        : <Badge tone={role === "admin" ? "danger" : role === "editor" ? "warn" : "primary"}>{ROLE_LABEL[role]}</Badge>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </>
-      )}
-    </div>
+      <p style={{ fontSize: "var(--fs-12)", color: "var(--text-mute)", marginTop: "var(--sp-3)" }}>
+        <Info style={{ width: 12, height: 12, verticalAlign: -1 }} />{" "}
+        {mode === "groups"
+          ? "Asigná el nivel de acceso de cada grupo a cada dataset. Las personas del grupo heredan estos accesos."
+          : "Rol efectivo de cada miembro (combina permisos directos, de grupo y de workspace). Para editar, cambiá a la vista por Grupo."}
+      </p>
+    </>
   );
 }

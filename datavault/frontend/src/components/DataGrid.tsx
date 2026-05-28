@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import type { ColumnDefinition, Record as DRecord, FormulaColDef } from "../types";
+import { getRecords } from "../api/datasets";
 import { evalFormula } from "../utils/formula";
 import CellEditor, { type NavDir } from "./CellEditor";
 import { useConfirm } from "./ConfirmDialog";
@@ -20,6 +22,15 @@ export interface ExtraColumn {
   fkKey: string;
   lookup: JoinLookup;
   onRemove: () => void;
+}
+
+/** Datos del dataset relacionado para el hover-card V5 de columnas relation.
+ *  El registro se busca lazy (on-hover) por `displayField` para soportar targets grandes. */
+export interface RelationLookup {
+  targetId: string;
+  datasetName?: string;
+  displayField: string;
+  cols: ColumnDefinition[];
 }
 
 interface Props {
@@ -44,6 +55,7 @@ interface Props {
   conditionalRules?: CondRule[];
   onOpenSearchReplace?: () => void;
   sheetMode?: boolean; // Excel-style A/B/C column letters above the column name
+  relationData?: Record<string, RelationLookup>; // field_key → datos del target para hover-card V5
 }
 
 // ── Cell display renderer ─────────────────────────────────────────────────────
@@ -103,14 +115,11 @@ function renderCellValue(col: ColumnDefinition, cellVal: unknown): React.ReactNo
         ? cellVal as string[]
         : String(cellVal).split(",").map((s) => s.trim()).filter(Boolean);
       if (vals.length === 0) return "—";
+      // Chips neutros del design system (OpsGrid)
       return (
-        <span style={{ display: "flex", gap: 3, alignItems: "center", overflow: "hidden" }}>
+        <span style={{ display: "flex", gap: 4, alignItems: "center", overflow: "hidden" }}>
           {vals.map((v) => (
-            <span key={v} style={{
-              fontSize: 11.5, fontWeight: 500, padding: "2px 8px", borderRadius: 6,
-              background: "#EFF8FF", color: "var(--color-primary)",
-              border: "1px solid #BAE6FD", whiteSpace: "nowrap", flexShrink: 0,
-            }}>{v}</span>
+            <span key={v} className="chip" title={v}>{v}</span>
           ))}
         </span>
       );
@@ -118,20 +127,19 @@ function renderCellValue(col: ColumnDefinition, cellVal: unknown): React.ReactNo
 
     case "relation": {
       // Modelo unificado N:N: el valor siempre es un array de referencias.
-      // Se aceptan también escalares legacy y se renderizan como un chip único.
+      // Render V5 (OpsGrid): chip de código mono naranja (.chip--code) por cada referencia.
       const vals: string[] = Array.isArray(cellVal)
         ? (cellVal as unknown[]).map((v) => String(v)).filter(Boolean)
         : [String(cellVal)].filter(Boolean);
       if (vals.length === 0) return "—";
       return (
-        <span style={{ display: "flex", gap: 3, alignItems: "center", overflow: "hidden" }}>
+        <span style={{ display: "flex", gap: 4, alignItems: "center", overflow: "hidden" }}>
           {vals.map((v, i) => (
-            <span key={`${v}-${i}`} style={{
-              fontSize: 11.5, fontWeight: 500, padding: "2px 8px", borderRadius: 6,
-              background: "#FDF2F8", color: "#BE185D",
-              border: "1px solid #FBCFE8", flexShrink: 0,
-              maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-            }} title={v}>{v}</span>
+            <span key={`${v}-${i}`} className="chip chip--code"
+              title={`Relación → ${v}`}
+              style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis" }}>
+              {v}
+            </span>
           ))}
         </span>
       );
@@ -140,6 +148,70 @@ function renderCellValue(col: ColumnDefinition, cellVal: unknown): React.ReactNo
     default:
       return String(cellVal);
   }
+}
+
+// ── Relation cell (V5): chips de código + hover-card con el registro relacionado ──
+const fmtRel = (x: unknown) => (x == null || x === "" ? "—" : Array.isArray(x) ? x.join(", ") : String(x));
+
+function RelChip({ v, rel }: { v: string; rel?: RelationLookup }) {
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  // Fetch lazy del registro relacionado al pasar el mouse (soporta targets grandes).
+  const { data: rec } = useQuery({
+    queryKey: ["rel-hover", rel?.targetId, rel?.displayField, v],
+    queryFn: async () => {
+      const res = await getRecords(rel!.targetId, { search: v, limit: 8 });
+      const exact = res.data.find((r) => String(r.data[rel!.displayField] ?? "") === v);
+      return (exact ?? res.data[0])?.data ?? null;
+    },
+    enabled: !!pos && !!rel?.targetId,
+    staleTime: 300_000,
+  });
+  const fields = rel && rec ? rel.cols.filter((c) => c.field_key !== rel.displayField).slice(0, 6) : [];
+  return (
+    <>
+      <span
+        className="chip chip--code"
+        title={`Relación → ${v}`}
+        style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", cursor: rel?.targetId ? "help" : "default" }}
+        onMouseEnter={(e) => {
+          if (!rel?.targetId) return;
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          setPos({ x: Math.min(r.left, window.innerWidth - 320), y: r.bottom + 6 });
+        }}
+        onMouseLeave={() => setPos(null)}
+      >{v}</span>
+      {pos && rec && (
+        <div className="dv-hover-card" style={{ position: "fixed", left: pos.x, top: pos.y, zIndex: 600, pointerEvents: "none" }}>
+          <div className="dv-hover-card__head">
+            <span className="dv-hover-card__sub">◇ {rel?.datasetName ?? "Relación"}</span>
+          </div>
+          <h5>{v}</h5>
+          <div className="dv-hover-card__kvs">
+            {fields.length ? fields.map((c) => (
+              <div className="dv-hover-card__kv" key={c.id}>
+                <span>{c.name}</span>
+                <b className={c.data_type === "number" || c.data_type === "currency" || c.data_type === "date" ? "mono" : undefined}>
+                  {fmtRel(rec[c.field_key])}
+                </b>
+              </div>
+            )) : <div className="dv-hover-card__kv"><span>Sin campos adicionales</span></div>}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function RelationCell({ value, rel }: { value: unknown; rel?: RelationLookup }) {
+  const vals: string[] = Array.isArray(value)
+    ? (value as unknown[]).map((x) => String(x)).filter(Boolean)
+    : (value != null && value !== "" ? [String(value)] : []);
+  if (!vals.length) return <span className="cell-empty">—</span>;
+  return (
+    <span style={{ display: "flex", gap: 4, alignItems: "center", overflow: "hidden" }}>
+      {vals.map((v, i) => <RelChip key={`${v}-${i}`} v={v} rel={rel} />)}
+    </span>
+  );
 }
 
 function FormulaCell({ formula, data }: { formula: string; data: Record<string, unknown> }) {
@@ -359,6 +431,7 @@ export default function DataGrid({
   onShowHistory,
   selectedIds, onSelectionChange,
   conditionalRules = [], onOpenSearchReplace, sheetMode = false,
+  relationData,
 }: Props) {
   const confirm = useConfirm();
   const [editing, setEditing] = useState<{ recordId: string; fieldKey: string } | null>(null);
@@ -772,7 +845,7 @@ export default function DataGrid({
                   const filterActive = (visualFilters[col.field_key]?.size ?? 0) > 0;
                   return (
                     <th key={uCol.id}
-                      className={`th-sortable${isOver ? " th-drag-over" : ""}`}
+                      className={`th-sortable${isOver ? " th-drag-over" : ""}${col.data_type === "relation" ? " th-relation" : ""}`}
                       onClick={() => handleSortClick(col.field_key)}
                       title={sheetMode ? `Columna ${colLetter(colDisplayIdx)} · Ordenar por ${col.name}` : `Ordenar por ${col.name}`}
                       style={{ position: "relative" }}
@@ -1039,7 +1112,9 @@ export default function DataGrid({
                             onCancel={() => { setEditing(null); setFocused({ recordId: rec.id, fieldKey: col.field_key }); }} />
                         ) : (
                           <span className="cell-inner">
-                            {renderCellValue(col, cellVal)}
+                            {col.data_type === "relation"
+                              ? <RelationCell value={cellVal} rel={relationData?.[col.field_key]} />
+                              : renderCellValue(col, cellVal)}
                             {validationError && (
                               <span className="cell-warn" title={validationError}>⚠</span>
                             )}

@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="es" data-palette="citrus" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <title>OpsGrid · Índice</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <script src="theme.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="ds-tokens.css">
+  <link rel="stylesheet" href="ds-styles.css">
+  <link rel="stylesheet" href="phase5.css">
+  <style>
+    html, body { height: 100%; overflow: hidden; }
+    body { display: grid !important; grid-template-rows: auto 1fr !important; grid-template-columns: 1fr !important; min-height: 100vh !important; }
+
+    .idx-head {
+      padding: var(--sp-8) var(--sp-10) var(--sp-6);
+      border-bottom: 1px solid var(--border-soft);
+      background: var(--surface);
+      display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-6);
+    }
+    .idx-head__l { max-width: 640px; }
+    .idx-head__eyebrow {
+      display: inline-flex; align-items: center; gap: var(--sp-2);
+      padding: var(--sp-1) var(--sp-3);
+      border-radius: var(--r-pill);
+      background: var(--accent-pri-soft);
+      color: var(--accent-pri);
+      font-size: var(--fs-12);
+      font-weight: var(--fw-medium);
+      margin-bottom: var(--sp-3);
+    }
+    .idx-head__eyebrow .lucide { width: 12px; height: 12px; }
+    .idx-head h1 {
+      margin: 0 0 var(--sp-2);
+      font-size: var(--fs-36);
+      letter-spacing: -0.025em;
+      font-weight: var(--fw-bold);
+    }
+    .idx-head p {
+      margin: 0;
+      font-size: var(--fs-15);
+      color: var(--text-soft);
+      line-height: 1.5;
+    }
+    .idx-head__r { display: flex; flex-direction: column; gap: var(--sp-1); align-items: flex-end; text-align: right; font-size: var(--fs-12); color: var(--text-mute); }
+    .idx-head__r b { color: var(--text); }
+
+    .idx-main {
+      overflow-y: auto;
+      padding: var(--sp-8) var(--sp-10) var(--sp-12);
+      background: var(--bg);
+    }
+
+    .idx-sec-title {
+      font-size: var(--fs-11);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: var(--fw-semibold);
+      color: var(--text-mute);
+      margin: var(--sp-2) 0 var(--sp-3);
+    }
+    .idx-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--sp-4);
+      margin-bottom: var(--sp-6);
+    }
+    .idx-card {
+      background: var(--surface);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--r-4);
+      padding: var(--sp-5);
+      text-decoration: none;
+      color: inherit;
+      display: flex; flex-direction: column;
+      gap: var(--sp-3);
+      transition: var(--t-base);
+      cursor: pointer;
+      position: relative;
+    }
+    .idx-card:hover {
+      border-color: var(--accent-pri);
+      box-shadow: var(--shadow-2);
+      transform: translateY(-2px);
+    }
+    .idx-card__top { display: flex; align-items: center; gap: var(--sp-3); }
+    .idx-card__num {
+      width: 32px; height: 32px;
+      border-radius: var(--r-2);
+      display: inline-flex; align-items: center; justify-content: center;
+      background: var(--surface-alt);
+      color: var(--text-mute);
+      font-family: var(--font-mono);
+      font-size: var(--fs-12);
+      font-weight: var(--fw-semibold);
+    }
+    .idx-card:hover .idx-card__num { background: var(--accent-pri); color: #fff; }
+    .idx-card__icon {
+      width: 32px; height: 32px;
+      border-radius: var(--r-2);
+      background: var(--accent-pri-soft);
+      color: var(--accent-pri);
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .idx-card__icon .lucide { width: 16px; height: 16px; }
+    .idx-card__icon.is-rel  { background: var(--accent-rel-soft);  color: var(--accent-rel); }
+    .idx-card__icon.is-calc { background: var(--accent-calc-soft); color: var(--accent-calc); }
+    .idx-card__icon.is-success { background: var(--success-soft); color: var(--success); }
+    .idx-card__icon.is-mint { background: color-mix(in oklab, #0fb583 14%, var(--surface)); color: #0fb583; }
+    .idx-card__icon.is-violet { background: color-mix(in oklab, #8b3df0 14%, var(--surface)); color: #8b3df0; }
+    .idx-card__title { font-size: var(--fs-15); font-weight: var(--fw-semibold); letter-spacing: -0.01em; }
+    .idx-card__file { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-mute); margin-top: 2px; }
+    .idx-card__desc { font-size: var(--fs-12); color: var(--text-soft); line-height: 1.5; margin: 0; }
+    .idx-card__tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: auto; }
+    .idx-card__tags span {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: var(--r-1);
+      background: var(--surface-alt);
+      color: var(--text-soft);
+    }
+    .idx-card__tags span.is-star { background: var(--accent-pri); color: #fff; font-weight: var(--fw-medium); }
+    .idx-card__tags span.is-diff { background: var(--accent-rel); color: #fff; font-weight: var(--fw-medium); }
+    .idx-card__arrow { position: absolute; top: var(--sp-5); right: var(--sp-5); color: var(--text-mute); transition: var(--t-fast); }
+    .idx-card:hover .idx-card__arrow { color: var(--accent-pri); transform: translate(2px, -2px); }
+    .idx-card__arrow .lucide { width: 16px; height: 16px; }
+
+    /* Roadmap */
+    .roadmap {
+      background: var(--surface);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--r-3);
+      padding: var(--sp-5);
+      margin-bottom: var(--sp-6);
+    }
+    .roadmap h3 {
+      font-size: var(--fs-15);
+      font-weight: var(--fw-semibold);
+      margin: 0 0 var(--sp-3);
+      display: flex; align-items: center; gap: var(--sp-2);
+    }
+    .roadmap h3 .lucide { color: var(--text-mute); width: 16px; height: 16px; }
+    .roadmap-bar { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--sp-2); }
+    .roadmap-step { padding: var(--sp-3); border-radius: var(--r-2); background: var(--surface-alt); font-size: var(--fs-12); position: relative; }
+    .roadmap-step.is-done { background: var(--success-soft); }
+    .roadmap-step.is-now { background: var(--accent-pri); color: #fff; }
+    .roadmap-step__n { font-family: var(--font-mono); font-size: var(--fs-11); font-weight: var(--fw-semibold); color: var(--text-mute); display: flex; align-items: center; gap: 4px; }
+    .roadmap-step.is-done .roadmap-step__n { color: var(--success); }
+    .roadmap-step.is-now .roadmap-step__n { color: rgba(255,255,255,0.7); }
+    .roadmap-step__n .lucide { width: 11px; height: 11px; }
+    .roadmap-step__name { font-weight: var(--fw-semibold); margin-top: 2px; font-size: var(--fs-13); }
+    .roadmap-step__sub { font-size: var(--fs-11); opacity: 0.7; margin-top: 2px; }
+    .roadmap-step.is-now .roadmap-step__sub { opacity: 0.85; }
+
+    /* Theme toggle */
+    .theme-toggle {
+      position: fixed;
+      top: var(--sp-4); right: var(--sp-5);
+      z-index: 60;
+      display: inline-flex; align-items: center; gap: var(--sp-2);
+      padding: 6px var(--sp-3);
+      background: var(--surface);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--r-pill);
+      cursor: pointer;
+      font: inherit;
+      font-size: var(--fs-12);
+      font-weight: var(--fw-medium);
+      color: var(--text);
+      box-shadow: var(--shadow-2);
+    }
+    .theme-toggle .lucide { width: 14px; height: 14px; }
+    .theme-toggle:hover { border-color: var(--border-strong); }
+
+    .handoff-banner {
+      background: linear-gradient(135deg, color-mix(in oklab, var(--accent-pri) 96%, white), color-mix(in oklab, var(--accent-pri) 70%, var(--accent-rel)));
+      color: #fff;
+      border-radius: var(--r-4);
+      padding: var(--sp-5) var(--sp-6);
+      margin-bottom: var(--sp-6);
+      display: flex; align-items: center; gap: var(--sp-5);
+    }
+    .handoff-banner__icon {
+      width: 56px; height: 56px;
+      border-radius: var(--r-3);
+      background: rgba(255,255,255,0.18);
+      border: 1px solid rgba(255,255,255,0.3);
+      display: inline-flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .handoff-banner__icon .lucide { width: 28px; height: 28px; }
+    .handoff-banner h4 { margin: 0 0 4px; font-size: var(--fs-18); font-weight: var(--fw-semibold); letter-spacing: -0.01em; }
+    .handoff-banner p { margin: 0; font-size: var(--fs-13); opacity: 0.92; line-height: 1.5; }
+    .handoff-banner .btn { background: rgba(255,255,255,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.3); }
+    .handoff-banner .btn:hover { background: rgba(255,255,255,0.3); }
+  </style>
+</head>
+<body>
+
+  <button class="theme-toggle" id="theme">
+    <i data-lucide="moon"></i>
+    <span>Modo oscuro</span>
+  </button>
+
+  <header class="idx-head">
+    <div class="idx-head__l">
+      <span class="idx-head__eyebrow"><i data-lucide="check-circle-2"></i> 14 pantallas · proyecto completo</span>
+      <h1>OpsGrid · entregable final.</h1>
+      <p>Todas las pantallas del brief, hi-fi, con paleta <b>Citrus pop</b>, variante de grid <b>V5</b>, tipografía <b>Inter</b>, íconos <b>Lucide</b>, dark mode listo. Sistema de diseño documentado, tokens listos para frontend.</p>
+    </div>
+    <div class="idx-head__r">
+      <span><b>14 / 14</b> pantallas entregadas</span>
+      <span>5 fases completas</span>
+      <span style="margin-top: var(--sp-2); padding: 3px var(--sp-2); border-radius: var(--r-1); background: var(--accent-pri-soft); color: var(--accent-pri); font-family: var(--font-mono); font-size: var(--fs-11);">v1.0 · final</span>
+    </div>
+  </header>
+
+  <main class="idx-main">
+
+    <!-- Banner handoff -->
+    <div class="handoff-banner">
+      <span class="handoff-banner__icon"><i data-lucide="package"></i></span>
+      <div style="flex: 1;">
+        <h4>Paquete de handoff listo para frontend</h4>
+        <p>tokens.css · styles.css · tokens.json · 01-Design-System.html · README + HANDOFF en la carpeta <code style="font-family: var(--font-mono); padding: 1px 6px; background: rgba(255,255,255,0.18); border-radius: 4px;">handoff/</code>. Tu equipo puede arrancar a codear hoy mismo.</p>
+      </div>
+      <a href="01-Design-System.html" class="btn">Ver sistema de diseño →</a>
+    </div>
+
+    <!-- Roadmap -->
+    <div class="roadmap">
+      <h3><i data-lucide="route"></i> Plan de fases · completo</h3>
+      <div class="roadmap-bar">
+        <div class="roadmap-step is-done">
+          <div class="roadmap-step__n"><i data-lucide="check-circle-2"></i> Fase 1</div>
+          <div class="roadmap-step__name">Wireframes</div>
+          <div class="roadmap-step__sub">5 variantes del grid + 6 paletas</div>
+        </div>
+        <div class="roadmap-step is-done">
+          <div class="roadmap-step__n"><i data-lucide="check-circle-2"></i> Fase 2</div>
+          <div class="roadmap-step__name">Sistema de diseño</div>
+          <div class="roadmap-step__sub">tokens · 30+ componentes</div>
+        </div>
+        <div class="roadmap-step is-done">
+          <div class="roadmap-step__n"><i data-lucide="check-circle-2"></i> Fase 3</div>
+          <div class="roadmap-step__name">Dataset view ★</div>
+          <div class="roadmap-step__sub">pantalla estrella hi-fi</div>
+        </div>
+        <div class="roadmap-step is-done">
+          <div class="roadmap-step__n"><i data-lucide="check-circle-2"></i> Fase 4</div>
+          <div class="roadmap-step__name">Pantallas críticas</div>
+          <div class="roadmap-step__sub">login · home · form · importar</div>
+        </div>
+        <div class="roadmap-step is-done">
+          <div class="roadmap-step__n"><i data-lucide="check-circle-2"></i> Fase 5</div>
+          <div class="roadmap-step__name">Resto + dark mode</div>
+          <div class="roadmap-step__sub">scripts · personas · planes · más</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Referencia -->
+    <div class="idx-sec-title">Referencia · sistema base</div>
+    <div class="idx-grid" style="grid-template-columns: 1fr 1fr;">
+      <a class="idx-card" href="01-Design-System.html">
+        <span class="idx-card__arrow"><i data-lucide="arrow-up-right"></i></span>
+        <div class="idx-card__top">
+          <span class="idx-card__num">01</span>
+          <span class="idx-card__icon"><i data-lucide="palette"></i></span>
+          <div>
+            <div class="idx-card__title">Sistema de diseño</div>
+            <div class="idx-card__file">01-Design-System.html</div>
+          </div>
+        </div>
+        <p class="idx-card__desc">Tokens completos (color, tipo, espaciado, radios, sombras), iconografía Lucide, +30 componentes con sus variantes y estados. La fuente de verdad visual.</p>
+        <div class="idx-card__tags">
+          <span class="is-star">REFERENCIA</span>
+          <span>Citrus pop</span>
+          <span>Lucide · Inter</span>
+          <span>30+ componentes</span>
+        </div>
+      </a>
+      <a class="idx-card" href="02-Dataset.html">
+        <span class="idx-card__arrow"><i data-lucide="arrow-up-right"></i></span>
+        <div class="idx-card__top">
+          <span class="idx-card__num">02</span>
+          <span class="idx-card__icon is-rel"><i data-lucide="table-2"></i></span>
+          <div>
+            <div class="idx-card__title">Dataset view <span style="color: var(--accent-pri);">★</span></div>
+            <div class="idx-card__file">02-Dataset.html</div>
+          </div>
+        </div>
+        <p class="idx-card__desc">Pantalla estrella. Grid editable con V5 (códigos mono + hover-card), lookups, calc, side-panel, sumas en vivo.</p>
+        <div class="idx-card__tags">
+          <span class="is-star">LA ESTRELLA</span>
+          <span>V5 · hover-card</span>
+          <span>side-panel</span>
+        </div>
+      </a>
+    </div>
+
+    <!-- Pantallas críticas -->
+    <div class="idx-sec-title">Fase 4 · pantallas críticas (login + home + form + diferencial)</div>
+    <div class="idx-grid">
+      <a class="idx-card" href="03-Login.html">
+        <span class="idx-card__arrow"><i data-lucide="arrow-up-right"></i></span>
+        <div class="idx-card__top">
+          <span class="idx-card__num">03</span>
+          <span class="idx-card__icon"><i data-lucide="log-in"></i></span>
+          <div>
+            <div class="idx-card__title">Login</div>
+            <div class="idx-card__file">03-Login.html</div>
+          </div>
+        </div>
+        <p class="idx-card__desc">Autenticación con split visual de marca y testimonio · OAuth Google + Microsoft.</p>
+        <div class="idx-card__tags"><span>OAuth listo</span><span>Set password</span></div>
+      </a>
+      <a class="idx-card" href="04-Home.html">
+        <span class="idx-card__arrow"><i data-lucide="arrow-up-right"></i></span>
+        <div class="idx-card__top">
+          <span class="idx-card__num">04</span>
+          <span class="idx-card__icon is-success"><i data-lucide="database"></i></span>
+          <div>
+            <div class="idx-card__title">Home · Datasets</div>
+            <div class="idx-card__file">04-Home.html</div>
+          </div>
+        </div>
+        <p class="idx-card__desc">Grid de tarjetas con stats · 4 tabs · 4 plantillas de starter.</p>
+        <div class="idx-card__tags"><span>4 plantillas</span><span>CTA Importar</span></div>
+      </a>
+      <a class="idx-card" href="05-Form-Registro.html">
+        <span class="idx-card__arrow"><i data-lucide="arrow-up-right"></i></span>
+        <div class="idx-card__top">
+          <span class="idx-card__num">05</span>
+          <span class="idx-card__icon is-calc"><i data-lucide="form-input"></i></span>
+          <div>
+            <div class="idx-card__title">Formulario de registro</div>
+            <div class="idx-card__file">05-Form-Registro.html</div>
+          </div>
+        </div>
+        <p class="idx-card__desc">Crear / editar fila · typeahead de relación abierto · preview de lookups en vivo.</p>
+        <div class="idx-card__tags"><span>typeahead</span><span>lookup preview</span></div>
+      </a>
+      <a class="idx-card" href="06-Import-Excel.html" style="grid-column: span 3;">
+        <span class="idx-card__arrow"><i data-lucide="arrow-up-right"></i></span>
+        <div class="idx-card__top">
+          <span class="idx-card__num">06</span>
+          <span class="idx-card__icon is-rel"><i data-lucide="upload"></i></span>
+          <div>
+            <div class="idx-card__title">Importar Excel · wizard multi-paso <span style="color: var(--accent-pri);">★ diferencial</span></div>
+            <div class="idx-card__file">06-Import-Excel.html</div>
+          </div>
+        </div>
+        <p class="idx-card__desc" style="max-width: 720px;">5 pasos navegables: subir → preview con limpieza automática → mapear columnas con sugerencias → detectar relaciones por contenido → confirmar con visualización topology. Chip flotante arriba-derecha cambia entre los 5 pasos.</p>
+        <div class="idx-card__tags">
+          <span class="is-diff">DIFERENCIAL</span>
+          <span>5 pasos navegables</span>
+          <span>detección por contenido</span>
+          <span>fuzzy matching</span>
+        </div>
+      </a>
+    </div>
+
+    <!-- Scripts -->
+    <div class="idx-sec-title">Fase 5 · scripts (Python computed datasets)</div>
+    <div class="idx-grid" style="grid-template-columns: 1.6fr 1fr;">
+      <a class="idx-card" href="07-Scripts-Editor.html">
+        <span class="idx-card__arrow"><i data-lucide="arrow-up-right"></i></span>
+        <div class="idx-card__top">
+          <span class="idx-card__num">07</span>
+          <span class="idx-card__icon is-calc"><i data-lucide="code-2"></i></span>
+          <div>
+            <div class="idx-card__title">Editor de scripts</div>
+            <div class="idx-card__file">07-Scripts-Editor.html</div>
+          </div>
+        </div>
+        <p class="idx-card__desc">Editor tipo Monaco con tres columnas: sidebar de fuentes (tablas + columnas drag-eable como chips), editor Python con syntax highlighting + linea actual, y panel de resultado con preview + logs en vivo.</p>
+        <div class="idx-card__tags"><span>3 columnas</span><span>Python 3.11</span><span>preview + logs</span></div>
+      </a>
+      <a class="idx-card" href="08-Scripts-Hub.html">
+        <span class="idx-card__arrow"><i data-lucide="arrow-up-right"></i></span>
+        <div class="idx-card__top">
+          <span class="idx-card__num">08</span>
+          <span class="idx-card__icon is-calc"><i data-lucide="function-square"></i></span>
+          <div>
+            <div class="idx-card__title">Hub de scripts</div>
+            <div class="idx-card__file">08-Scripts-Hub.html</div>
+          </div>
+        </div>
+        <p class="idx-card__desc">Lista de los 6 scripts del workspace con su programación, fuentes, última corrida y un script en error.</p>
+        <div class="idx-card__tags"><span>cron + trigger + manual</span></div>
+      </a>
+    </div>
+
+    <!-- Admin -->
+    <div class="idx-sec-title">Fase 5 · administración</div>
+    <div class="idx-grid" style="grid-template-columns: 1.6fr 1fr;">
+      <a class="idx-card" href="09-Personas.html">
+        <span class="idx-card__arrow"><i data-lucide="arrow-up-right"></i></span>
+        <div class="idx-card__top">
+          <span class="idx-card__num">09</span>
+          <span class="idx-card__icon is-rel"><i data-lucide="shield"></i></span>
+          <div>
+            <div class="idx-card__title">Personas y accesos · matriz</div>
+            <div class="idx-card__file">09-Personas.html</div>
+          </div>
+        </div>
+        <p class="idx-card__desc">Tabs Usuarios / Miembros / Grupos / Accesos. La pestaña Accesos es una matriz que cruza grupos (y personas dentro de cada grupo) × datasets, con un segmented control de 4 niveles (Sin / Ver / Editar / Admin) en cada celda. Las marcas ↑ indican acceso heredado del grupo.</p>
+        <div class="idx-card__tags"><span class="is-star">MATRIZ ★</span><span>4 niveles</span><span>herencia visible</span></div>
+      </a>
+      <a class="idx-card" href="10-Workspaces.html">
+        <span class="idx-card__arrow"><i data-lucide="arrow-up-right"></i></span>
+        <div class="idx-card__top">
+          <span class="idx-card__num">10</span>
+          <span class="idx-card__icon"><i data-lucide="building"></i></span>
+          <div>
+            <div class="idx-card__title">Workspaces admin</div>
+            <div class="idx-card__file">10-Workspaces.html</div>
+          </div>
+        </div>
+        <p class="idx-card__desc">Vista admin global de los 5 workspaces · stats por workspace · plan · estado.</p>
+        <div class="idx-card__tags"><span>admin global</span></div>
+      </a>
+      <a class="idx-card" href="11-Auditoria.html">
+        <span class="idx-card__arrow"><i data-lucide="arrow-up-right"></i></span>
+        <div class="idx-card__top">
+          <span class="idx-card__num">11</span>
+          <span class="idx-card__icon"><i data-lucide="history"></i></span>
+          <div>
+            <div class="idx-card__title">Auditoría</div>
+            <div class="idx-card__file">11-Auditoria.html</div>
+          </div>
+        </div>
+        <p class="idx-card__desc">Log inmutable con filtros activos · 6 tipos de acción (Update / Create / Delete / Import / Script / Access) · diff visual viejo/nuevo.</p>
+        <div class="idx-card__tags"><span>diff visual</span><span>filtros activos</span><span>undo por evento</span></div>
+      </a>
+      <a class="idx-card" href="12-Billing.html">
+        <span class="idx-card__arrow"><i data-lucide="arrow-up-right"></i></span>
+        <div class="idx-card__top">
+          <span class="idx-card__num">12</span>
+          <span class="idx-card__icon is-rel"><i data-lucide="credit-card"></i></span>
+          <div>
+            <div class="idx-card__title">Planes y facturación</div>
+            <div class="idx-card__file">12-Billing.html</div>
+          </div>
+        </div>
+        <p class="idx-card__desc">Uso del plan actual (3 barras) · 3 cards Free/Pro/Business · Mercado Pago + transferencia BCP · vista admin con 3 solicitudes de pago pendientes.</p>
+        <div class="idx-card__tags"><span>Pro S/ 490 · Business S/ 980</span><span>MP + BCP</span></div>
+      </a>
+    </div>
+
+    <!-- Configuración -->
+    <div class="idx-sec-title">Fase 5 · usuario</div>
+    <div class="idx-grid" style="grid-template-columns: 1fr 2fr;">
+      <a class="idx-card" href="13-Settings.html">
+        <span class="idx-card__arrow"><i data-lucide="arrow-up-right"></i></span>
+        <div class="idx-card__top">
+          <span class="idx-card__num">13</span>
+          <span class="idx-card__icon"><i data-lucide="settings"></i></span>
+          <div>
+            <div class="idx-card__title">Configuración</div>
+            <div class="idx-card__file">13-Settings.html</div>
+          </div>
+        </div>
+        <p class="idx-card__desc">Perfil · preferencias · notificaciones · 2FA · API tokens.</p>
+        <div class="idx-card__tags"><span>6 secciones</span><span>2FA</span></div>
+      </a>
+      <div class="idx-card" style="cursor: default; background: var(--accent-pri-soft); border-color: var(--accent-pri); display: flex; align-items: center; gap: var(--sp-4); flex-direction: row;">
+        <span class="idx-card__icon" style="background: var(--accent-pri); color: #fff; width: 44px; height: 44px;"><i data-lucide="moon"></i></span>
+        <div style="flex: 1;">
+          <div class="idx-card__title" style="color: var(--accent-pri);">Dark mode</div>
+          <p class="idx-card__desc">Las 14 pantallas funcionan en oscuro. Cambia con el toggle <span style="color: var(--accent-pri); font-weight: var(--fw-semibold);">"Modo oscuro"</span> arriba a la derecha — la preferencia se guarda y persiste entre páginas.</p>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script src="https://unpkg.com/lucide@0.453.0/dist/umd/lucide.min.js"></script>
+  <script>
+    lucide.createIcons({ attrs: { 'stroke-width': 1.75 } });
+
+    // Theme toggle wiring
+    const btn = document.getElementById('theme');
+    function syncBtn() {
+      const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+      btn.innerHTML = dark
+        ? '<i data-lucide="sun"></i><span>Modo claro</span>'
+        : '<i data-lucide="moon"></i><span>Modo oscuro</span>';
+      lucide.createIcons({ attrs: { 'stroke-width': 1.75 } });
+    }
+    syncBtn();
+    btn.addEventListener('click', () => {
+      const cur = document.documentElement.getAttribute('data-theme') || 'light';
+      const next = cur === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('opsgrid-theme', next); } catch (e) {}
+      syncBtn();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,150 @@
+/* og-grid.css — Lleva la tabla legacy (.data-table del DataGrid) al look OpsGrid `dv-grid`.
+ * Solo aplica DENTRO del shell (.og) → no afecta nada fuera. Sin tocar el markup/lógica:
+ * se apoya en las clases que el DataGrid ya emite (.th-sortable / .th-joined / .th-formula /
+ * .td-joined / .td-formula / .col-rownum / .cell-inner / .joined-val).
+ *   relación / lookup  → --accent-rel (naranja, glifo ◇)
+ *   calculada (script)  → --accent-calc (magenta, glifo ƒ)
+ */
+
+/* ── Contenedor + tabla ── */
+.og .table-wrap {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow-1);
+  background: var(--surface);
+}
+.og .data-table {
+  font-size: var(--fs-13);
+  font-feature-settings: "tnum";
+}
+
+/* ── Header ── */
+.og .data-table thead th {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-mute);
+  font-size: var(--fs-11);
+  font-weight: var(--fw-medium);
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 0 var(--sp-3);
+  height: 34px;
+}
+.og .data-table thead th.col-rownum {
+  background: var(--surface-alt) !important;
+  color: var(--text-mute) !important;
+  border-right: 1px solid var(--border-soft) !important;
+}
+.og .data-table .th-col-name { color: var(--text); font-weight: var(--fw-medium); }
+.og .data-table .th-sortable:hover { background: var(--surface-alt) !important; }
+.og .data-table .sort-icon--active { color: var(--accent-pri); }
+
+/* Columna de relación nativa (data_type=relation): tint naranja + glifo ◇ */
+.og .data-table th.th-relation {
+  background: color-mix(in oklab, var(--accent-rel) 6%, var(--surface)) !important;
+  border-left: 2px solid var(--accent-rel) !important;
+}
+.og .data-table th.th-relation .th-col-name { color: color-mix(in oklab, var(--accent-rel) 72%, var(--text)); }
+.og .data-table th.th-relation .th-col-name::before {
+  content: "◇";
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; margin-right: 6px; vertical-align: -3px;
+  border-radius: var(--r-1);
+  font-family: var(--font-mono); font-size: 10px; font-weight: var(--fw-semibold);
+  color: var(--accent-rel);
+  background: color-mix(in oklab, var(--accent-rel) 10%, var(--surface));
+  border: 1px solid color-mix(in oklab, var(--accent-rel) 40%, var(--border));
+}
+
+/* Glifo de tipo de columna en el header (vía ::before, sin tocar el markup) */
+.og .data-table th.th-joined .th-col-name::before,
+.og .data-table th.th-formula .th-col-name::before {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; margin-right: 6px;
+  border-radius: var(--r-1);
+  font-family: var(--font-mono); font-size: 10px; font-weight: var(--fw-semibold);
+  vertical-align: -3px;
+}
+.og .data-table th.th-joined .th-col-name::before {
+  content: "◇";
+  color: var(--accent-rel);
+  background: color-mix(in oklab, var(--accent-rel) 10%, var(--surface));
+  border: 1px solid color-mix(in oklab, var(--accent-rel) 40%, var(--border));
+}
+.og .data-table th.th-formula .th-col-name::before {
+  content: "\0192"; /* ƒ */
+  color: var(--accent-calc);
+  background: color-mix(in oklab, var(--accent-calc) 10%, var(--surface));
+  border: 1px solid color-mix(in oklab, var(--accent-calc) 40%, var(--border));
+}
+
+/* ── Headers de columnas relación / cálculo (tint + acento OpsGrid) ── */
+.og .data-table th.th-joined {
+  background: color-mix(in oklab, var(--accent-rel) 6%, var(--surface)) !important;
+  color: color-mix(in oklab, var(--accent-rel) 70%, var(--text)) !important;
+  border-left: 2px solid var(--accent-rel) !important;
+}
+.og .data-table th.th-formula {
+  background: color-mix(in oklab, var(--accent-calc) 6%, var(--surface)) !important;
+  color: color-mix(in oklab, var(--accent-calc) 70%, var(--text)) !important;
+  border-left: 2px solid var(--accent-calc) !important;
+}
+
+/* ── Celdas ── */
+.og .data-table td {
+  border-bottom: 1px solid var(--border-soft);
+  border-right: 1px solid var(--border-soft);
+  color: var(--text);
+}
+.og .data-table tbody tr:hover td {
+  background: color-mix(in oklab, var(--accent-pri) 3%, var(--surface));
+}
+.og .data-table td.cell-editing,
+.og .data-table td.cell-focused {
+  box-shadow: inset 0 0 0 1.5px var(--accent-pri) !important;
+  background: var(--surface) !important;
+  outline: none !important;
+}
+
+/* Lookup (columna vinculada) → texto suave + banda naranja sutil */
+.og .data-table td.td-joined {
+  border-left: 2px solid color-mix(in oklab, var(--accent-rel) 30%, transparent);
+  background: color-mix(in oklab, var(--accent-rel) 2.5%, var(--surface));
+}
+.og .data-table tbody tr:hover td.td-joined {
+  background: color-mix(in oklab, var(--accent-rel) 5%, var(--surface));
+}
+.og .data-table td.td-joined .joined-val { color: var(--text-soft); }
+
+/* Calculada (script) → mono + magenta */
+.og .data-table td.td-formula {
+  border-left: 2px solid color-mix(in oklab, var(--accent-calc) 30%, transparent);
+  background: color-mix(in oklab, var(--accent-calc) 2.5%, var(--surface));
+  color: color-mix(in oklab, var(--accent-calc) 55%, var(--text));
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+}
+.og .data-table tbody tr:hover td.td-formula {
+  background: color-mix(in oklab, var(--accent-calc) 5%, var(--surface));
+}
+
+/* Fila seleccionada → soft cobalt + barra lateral */
+.og .data-table tbody tr.row-selected td,
+.og .data-table tbody tr.is-selected td {
+  background: var(--accent-pri-soft) !important;
+}
+
+/* Número de fila / índice */
+.og .data-table .col-rownum-cell {
+  background: var(--surface-alt);
+  color: var(--text-mute);
+  border-right: 1px solid var(--border-soft);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+}
+
+/* Filtro por columna (fila de filtros) */
+.og .data-table .filter-row td {
+  background: color-mix(in oklab, var(--accent-pri) 4%, var(--surface)) !important;
+  border-bottom: 1px solid var(--border) !important;
+}

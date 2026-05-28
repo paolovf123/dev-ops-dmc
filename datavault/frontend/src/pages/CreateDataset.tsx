@@ -8,6 +8,7 @@ import type { ColumnDefinition } from "../types";
 import ImportExcelModal from "../components/ImportExcelModal";
 import { useWorkspace } from "../workspace/WorkspaceContext";
 import { IcUpload } from "../components/ui/icons";
+import AppShell from "../components/chrome/AppShell";
 
 interface ColDraft {
   uid: string;
@@ -371,7 +372,8 @@ export default function CreateDataset() {
   if (step === "choose") {
     return (
       <>
-        <header className="app-header">
+        <AppShell>
+        <header className="app-header" style={{ display: "none" }}>
           <button className="btn btn-ghost" onClick={() => navigate("/")} style={{ padding: "5px 8px", fontSize: 18 }}>←</button>
           <button className="app-brand-btn" onClick={() => navigate("/")}>
             <div className="app-header-logo" style={{ width: 28, height: 28, fontSize: 13, borderRadius: "var(--radius-xs)" }}>T</div>
@@ -381,7 +383,11 @@ export default function CreateDataset() {
           <span style={{ fontWeight: 600, fontSize: 15 }}>Nuevo dataset</span>
         </header>
 
-        <main className="page" style={{ maxWidth: 920 }}>
+        <main className="page" style={{ maxWidth: 920, overflowY: "auto", width: "100%" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+            <button className="btn btn-ghost" onClick={() => navigate("/")} style={{ padding: "5px 8px", fontSize: 18 }}>←</button>
+            <span style={{ fontWeight: 600, fontSize: 15 }}>Nuevo dataset</span>
+          </div>
           {/* Import zone */}
           <div className="card"
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -463,6 +469,7 @@ export default function CreateDataset() {
             </button>
           </div>
         </main>
+        </AppShell>
 
         <ImportExcelModal
           open={!!multiSheetFile}
@@ -488,7 +495,8 @@ export default function CreateDataset() {
   // ── Render: form step (original UI) ────────────────────────────────────
   return (
     <>
-      <header className="app-header">
+      <AppShell>
+      <header className="app-header" style={{ display: "none" }}>
         <button className="btn btn-ghost" onClick={() => navigate("/")} style={{ padding: "5px 8px", fontSize: 18 }}>←</button>
         <button className="app-brand-btn" onClick={() => navigate("/")}>
           <div className="app-header-logo" style={{ width: 28, height: 28, fontSize: 13, borderRadius: "var(--radius-xs)" }}><img src="/opsgrid-logo.svg" alt="OpsGrid" style={{ width: "100%", height: "100%" }} /></div>
@@ -518,7 +526,31 @@ export default function CreateDataset() {
         )}
       </header>
 
-      <main className="page" style={{ maxWidth: 820 }}>
+      <main className="page" style={{ maxWidth: 820, overflowY: "auto", width: "100%" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+          <button className="btn btn-ghost" onClick={() => navigate("/")} style={{ padding: "5px 8px", fontSize: 18 }}>←</button>
+          <span style={{ fontWeight: 600, fontSize: 15 }}>Nuevo dataset</span>
+          {linkedName && (
+            <span style={{ fontSize: 12, padding: "3px 10px", borderRadius: 20, background: "var(--color-primary-bg)", color: "var(--pm-green-600)", fontWeight: 600, border: "1px solid var(--color-primary-border)" }}>
+              Relacionado con {linkedName}
+            </span>
+          )}
+          {appliedTemplate && (
+            <span style={{ fontSize: 12, padding: "3px 10px", borderRadius: 20, background: "var(--color-primary-bg)", color: "var(--color-primary)", fontWeight: 600, border: "1px solid var(--color-primary-border)" }}>
+              Plantilla: {TEMPLATES.find((t) => t.id === appliedTemplate)?.name}
+            </span>
+          )}
+          {importedRows.length > 0 && (
+            <span style={{ fontSize: 12, padding: "3px 10px", borderRadius: 20, background: "#FEF3C7", color: "#92400E", fontWeight: 600, border: "1px solid #FDE68A" }}>
+              {importedRows.length} filas listas para importar
+            </span>
+          )}
+          {!linkedName && (
+            <button className="btn btn-ghost" onClick={() => setStep("choose")} style={{ marginLeft: "auto", fontSize: 12 }}>
+              ← Cambiar plantilla
+            </button>
+          )}
+        </div>
         <div className="card" style={{ padding: "28px 32px" }}>
           <h2 style={{ marginBottom: 20 }}>Crear dataset</h2>
 
@@ -572,6 +604,7 @@ export default function CreateDataset() {
           </div>
         </div>
       </main>
+      </AppShell>
     </>
   );
 }

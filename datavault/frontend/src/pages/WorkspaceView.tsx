@@ -13,6 +13,7 @@ import WorkspaceSwitcher from "../workspace/WorkspaceSwitcher";
 import UserMenu from "../components/UserMenu";
 import { useToast } from "../components/Toast";
 import { IcSearch, IcTable } from "../components/ui/icons";
+import AppShell from "../components/chrome/AppShell";
 import type { ColumnDefinition } from "../types";
 import type { UseQueryResult } from "@tanstack/react-query";
 
@@ -236,7 +237,7 @@ export default function WorkspaceView() {
 
   return (
     <>
-      <header className="app-header" style={{ gap: 4 }}>
+      <header className="app-header" style={{ gap: 4, display: "none" }}>
         {/* Brand */}
         <button className="app-brand-btn" onClick={() => { setCurrent(null); navigate("/"); }}>
           <div className="app-header-logo app-header-logo--img"><img src="/opsgrid-logo.svg" alt="OpsGrid" /></div>
@@ -284,6 +285,28 @@ export default function WorkspaceView() {
         <div style={{ width: 1, height: 22, background: "var(--color-border)", margin: "0 4px", flexShrink: 0 }} />
         <UserMenu />
       </header>
+
+      <AppShell active="workspaces">
+      <main className="page" style={{ overflowY: "auto", maxWidth: "none", width: "100%", paddingTop: 28 }}>
+
+      {/* Nav propio del workspace (movido desde el header legacy) */}
+      {(isAdmin || isWsManager) && (() => {
+        const navBtn = (title: string, path: string, icon: React.ReactNode) => (
+          <button key={title} title={title} onClick={() => navigate(path)}
+            style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 10px", height:34, borderRadius:7, background:"transparent", border:"1.5px solid transparent", cursor:"pointer", color:"var(--color-text-secondary)", fontSize:12.5, fontWeight:600, transition:"all 0.14s", whiteSpace:"nowrap" }}
+            onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.background="var(--color-border-light)"; el.style.borderColor="var(--color-border)"; el.style.color="var(--color-text)"; }}
+            onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.background="transparent"; el.style.borderColor="transparent"; el.style.color="var(--color-text-secondary)"; }}
+          >{icon}<span>{title}</span></button>
+        );
+        return (
+          <nav style={{ display:"flex", gap:2, alignItems:"center", marginBottom: 12 }}>
+            {isAdmin && navBtn("Workspaces", "/admin/workspaces", <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>)}
+            {navBtn("Equipo",   "/admin/workspaces", <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>)}
+            {navBtn("Grupos",   "/admin/groups", <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6"/><circle cx="16" cy="8" r="3"/><path d="M22 20c0-3.3-2.7-6-6-6"/><path d="M9 14c0 0 1.5-.5 3-.5s3 .5 3 .5"/></svg>)}
+            {navBtn("Usuarios", `/admin/users?workspace_id=${workspaceId}`, <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>)}
+          </nav>
+        );
+      })()}
 
       <div className="ds-hero">
         <div className="ds-hero-inner">
@@ -408,21 +431,7 @@ export default function WorkspaceView() {
         )}
       </div>
 
-      {showSchema && (
-        <GlobalSchemaDiagram
-          onClose={() => setShowSchema(false)}
-          workspaceId={workspaceId}
-          workspaceName={workspace?.name}
-        />
-      )}
-
-      <RelationsManagerModal
-        open={showRelManager}
-        onClose={() => setShowRelManager(false)}
-        workspaceId={workspaceId}
-      />
-
-      <main className="page" style={{ paddingTop: 28 }}>
+      <div>
         {bridgesCount > 0 && (
           <div style={{
             display: "flex", alignItems: "center", gap: 10, marginBottom: 14,
@@ -547,7 +556,23 @@ export default function WorkspaceView() {
             <SchemaPreview datasets={datasets} colQueries={colQueries} />
           </div>
         )}
+      </div>
       </main>
+      </AppShell>
+
+      {showSchema && (
+        <GlobalSchemaDiagram
+          onClose={() => setShowSchema(false)}
+          workspaceId={workspaceId}
+          workspaceName={workspace?.name}
+        />
+      )}
+
+      <RelationsManagerModal
+        open={showRelManager}
+        onClose={() => setShowRelManager(false)}
+        workspaceId={workspaceId}
+      />
 
       <ImportExcelModal
         open={showImportModal}

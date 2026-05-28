@@ -1,12 +1,14 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
 import api from "../api/client";
 import { useAuth } from "../auth/AuthContext";
-import UserMenu from "../components/UserMenu";
 import AuditTimeline from "../components/AuditTimeline";
-import { EmptyState } from "../components/ui";
-import { IcLock, IcList, IcFile, IcDownload } from "../components/ui/icons";
+import AppShell from "../components/chrome/AppShell";
+import {
+  Lock, History, Download, FileText, FileSpreadsheet, ChevronDown,
+  Filter, User, X, ChevronLeft, ChevronRight, Search, Check,
+  Plus, Pencil, Trash2, RotateCcw, ArrowRight, List, Clock,
+} from "lucide-react";
 
 interface AuditEntry {
   id: string;
@@ -26,31 +28,22 @@ interface UserInfo { id: string; username: string; email: string; role: string }
 interface WorkspaceInfo { id: string; name: string; description: string }
 interface DatasetInfo { id: string; name: string; workspace_id: string | null }
 
-const ACTION_META: Record<string, { label: string; color: string; bg: string; border: string; dot: string }> = {
-  create:  { label: "Creado",     color: "#16A34A", bg: "#F0FDF4", border: "#BBF7D0", dot: "#22C55E" },
-  update:  { label: "Editado",    color: "#2563EB", bg: "#EFF6FF", border: "#BFDBFE", dot: "#3B82F6" },
-  delete:  { label: "Eliminado",  color: "#DC2626", bg: "#FEF2F2", border: "#FECACA", dot: "#EF4444" },
-  restore: { label: "Restaurado", color: "#D97706", bg: "#FFFBEB", border: "#FDE68A", dot: "#F59E0B" },
+const ACTION_META: Record<string, { label: string; chip: string; icon: React.ReactNode }> = {
+  create:  { label: "Creado",     chip: "is-create", icon: <Plus /> },
+  update:  { label: "Editado",    chip: "is-update", icon: <Pencil /> },
+  delete:  { label: "Eliminado",  chip: "is-delete", icon: <Trash2 /> },
+  restore: { label: "Restaurado", chip: "is-import", icon: <RotateCcw /> },
 };
-const ACTION_ICONS: Record<string, React.ReactNode> = {
-  create:  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>,
-  update:  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
-  delete:  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>,
-  restore: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.02"/></svg>,
-};
-
-const USER_COLORS = ["#6366F1","#8B5CF6","#EC4899","#F59E0B","#10B981","#0EA5E9","#EF4444","#14B8A6"];
-function userColor(name: string) { return USER_COLORS[name.charCodeAt(0) % USER_COLORS.length]; }
 
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000);
   if (m < 1) return "ahora";
-  if (m < 60) return `${m}m`;
+  if (m < 60) return `hace ${m} min`;
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h`;
+  if (h < 24) return `hace ${h} h`;
   const d = Math.floor(h / 24);
-  if (d < 7) return `${d}d`;
+  if (d < 7) return `hace ${d} d`;
   return new Date(iso).toLocaleDateString("es-PE", { day: "2-digit", month: "short" });
 }
 function fullDate(iso: string) {
@@ -58,12 +51,20 @@ function fullDate(iso: string) {
     day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
   });
 }
+function shortStamp(iso: string) {
+  return new Date(iso).toLocaleString("es-PE", {
+    day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+  });
+}
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || name.slice(0, 2).toUpperCase();
+}
 
 const PAGE_SIZE = 50;
 
 export default function AdminAudit() {
   const { isAdmin } = useAuth();
-  const navigate = useNavigate();
   const [page, setPage] = useState(0);
   const [filterAction, setFilterAction] = useState("");
   const [filterWorkspace, setFilterWorkspace] = useState("");
@@ -239,152 +240,84 @@ export default function AdminAudit() {
   function xmlEsc(s: string) { return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 
   if (!isAdmin) return (
-    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh" }}>
-      <EmptyState icon={<IcLock size={24} />} title="Solo administradores"
-        subtitle="Esta sección requiere rol de administrador global." />
-    </div>
+    <AppShell active="audit">
+      <main className="page">
+        <div className="empty" style={{ marginTop: "var(--sp-8)" }}>
+          <span className="empty__art"><Lock /></span>
+          <h4>Solo administradores</h4>
+          <p>Esta sección requiere rol de administrador global.</p>
+        </div>
+      </main>
+    </AppShell>
   );
 
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const hasFilters = !!filterAction || !!filterWorkspace || !!filterDataset || filterUsers.length > 0;
-  const actionCounts = items.reduce((acc, i) => { acc[i.action] = (acc[i.action] ?? 0) + 1; return acc; }, {} as Record<string, number>);
 
   return (
-    <div style={{ minHeight:"100vh", background:"var(--color-bg)" }}>
+    <AppShell active="audit">
+      <main className="page" style={{ maxWidth: "none", width: "100%", overflowY: "auto" }}>
 
-      {/* ── Header ── */}
-      <header className="app-header" style={{ gap:4 }}>
-        <button className="app-brand-btn" onClick={() => navigate("/")}>
-          <div className="app-header-logo app-header-logo--img"><img src="/opsgrid-logo.svg" alt="OpsGrid" /></div>
-          <span className="app-header-name">Ops<em>Grid</em></span>
-        </button>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" style={{ flexShrink:0, margin:"0 2px" }}>
-          <polyline points="9 18 15 12 9 6"/>
-        </svg>
-        <span style={{ fontSize:13, fontWeight:600, color:"var(--color-text)" }}>Auditoría</span>
-        <div style={{ width:1, height:22, background:"var(--color-border)", margin:"0 8px", flexShrink:0 }}/>
-        <div className="app-header-spacer"/>
-        <nav style={{ display:"flex", gap:2 }}>
-          {([
-            { title:"Personas y accesos", path:"/admin/personas", icon:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg> },
-            { title:"Workspaces", path:"/admin/workspaces", icon:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg> },
-          ] as { title: string; path: string; icon: React.ReactNode }[]).map(({ title, path, icon }) => (
-            <button key={path} onClick={() => navigate(path)} style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 10px", height:34, borderRadius:7, background:"transparent", border:"1.5px solid transparent", cursor:"pointer", color:"var(--color-text-secondary)", fontSize:12.5, fontWeight:600, transition:"all 0.14s", whiteSpace:"nowrap" }}
-              onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.background="var(--color-border-light)"; el.style.borderColor="var(--color-border)"; el.style.color="var(--color-text)"; }}
-              onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.background="transparent"; el.style.borderColor="transparent"; el.style.color="var(--color-text-secondary)"; }}>
-              {icon}<span>{title}</span>
-            </button>
-          ))}
-        </nav>
-        <div style={{ width:1, height:22, background:"var(--color-border)", margin:"0 4px", flexShrink:0 }}/>
-        <UserMenu/>
-      </header>
-
-      <div style={{ maxWidth:1280, margin:"0 auto", padding:"28px 24px 56px" }}>
-
-        {/* ── Título + stat cards + export ── */}
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:24, gap:20, flexWrap:"wrap" }}>
+        {/* ── Page header ── */}
+        <div className="page-header">
           <div>
-            <h1 style={{ margin:0, fontSize:22, fontWeight:800, letterSpacing:-0.5 }}>📋 Registro de auditoría</h1>
-            <p style={{ margin:"4px 0 0", fontSize:13, color:"var(--color-text-muted)" }}>
-              Historial completo de cambios · {total.toLocaleString()} entradas
+            <h1>Registro de auditoría</h1>
+            <p>
+              Historial inmutable de todo lo que pasa en el workspace · {total.toLocaleString()} entrada{total !== 1 ? "s" : ""}.
             </p>
           </div>
-
-          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            {/* Stat cards */}
-            {!isLoading && Object.entries(ACTION_META).map(([key, meta]) => {
-              const count = actionCounts[key] ?? 0;
-              if (!count) return null;
-              const active = filterAction === key;
-              return (
-                <button key={key}
-                  onClick={() => { setFilterAction(active ? "" : key); setPage(0); }}
-                  style={{
-                    display:"flex", flexDirection:"column", alignItems:"center",
-                    padding:"8px 14px", borderRadius:10, cursor:"pointer",
-                    background: active ? meta.bg : "var(--color-surface)",
-                    border:`1.5px solid ${active ? meta.border : "var(--color-border)"}`,
-                    boxShadow: active ? `0 0 0 3px ${meta.dot}18` : "none",
-                    transition:"all 0.15s", minWidth:70,
-                  }}>
-                  <span style={{ fontSize:18, fontWeight:800, color: active ? meta.color : "var(--color-text)", lineHeight:1 }}>{count}</span>
-                  <span style={{ fontSize:10.5, fontWeight:600, color: active ? meta.color : "var(--color-text-muted)", marginTop:2, display:"flex", alignItems:"center", gap:4 }}>
-                    <div style={{ width:5, height:5, borderRadius:"50%", background: meta.dot, flexShrink:0 }}/>
-                    {meta.label}
-                  </span>
-                </button>
-              );
-            })}
-
-            {/* View toggle: Table vs Timeline */}
-            <div style={{ display: "flex", border: "1.5px solid var(--color-border)", borderRadius: 8, overflow: "hidden", height: 38 }}>
-              {([["table", "Tabla"], ["timeline", "Timeline"]] as const).map(([k, label]) => (
-                <button key={k}
-                  onClick={() => setView(k)}
-                  style={{
-                    padding: "0 14px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-                    border: "none",
-                    background: view === k ? "var(--color-primary)" : "var(--color-surface)",
-                    color: view === k ? "#fff" : "var(--color-text-secondary)",
-                    transition: "all 0.14s",
-                  }}>
-                  {label}
-                </button>
-              ))}
+          <div className="page-header__actions">
+            {/* View toggle: Tabla / Timeline */}
+            <div className="segmented" role="tablist" aria-label="Vista">
+              <button
+                className={`segmented__item${view === "table" ? " is-active" : ""}`}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "none", background: view === "table" ? undefined : "transparent" }}
+                onClick={() => setView("table")}
+              >
+                <List style={{ width: 13, height: 13 }} /> Tabla
+              </button>
+              <button
+                className={`segmented__item${view === "timeline" ? " is-active" : ""}`}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "none", background: view === "timeline" ? undefined : "transparent" }}
+                onClick={() => setView("timeline")}
+              >
+                <Clock style={{ width: 13, height: 13 }} /> Timeline
+              </button>
             </div>
 
             {/* Export dropdown */}
-            <div ref={exportRef} style={{ position:"relative" }}>
+            <div ref={exportRef} style={{ position: "relative" }}>
               <button
+                className={`btn btn--secondary${downloading ? " is-loading" : ""}`}
                 onClick={() => setExportOpen((v) => !v)}
                 disabled={downloading || total === 0}
-                style={{
-                  display:"flex", alignItems:"center", gap:7, padding:"8px 14px",
-                  borderRadius:8, cursor:"pointer", height:38,
-                  background:"var(--color-surface)", border:"1.5px solid var(--color-border)",
-                  color:"var(--color-text-secondary)", fontSize:13, fontWeight:600,
-                  transition:"all 0.14s", whiteSpace:"nowrap",
-                }}
-                onMouseEnter={(e) => { if (!downloading && total > 0) { const el=e.currentTarget as HTMLElement; el.style.background="#F0FDF4"; el.style.borderColor="#0EA5E9"; el.style.color="#0EA5E9"; }}}
-                onMouseLeave={(e) => { const el=e.currentTarget as HTMLElement; el.style.background="var(--color-surface)"; el.style.borderColor="var(--color-border)"; el.style.color="var(--color-text-secondary)"; }}
               >
-                {downloading
-                  ? <div style={{ width:14, height:14, borderRadius:"50%", border:"2px solid #0EA5E940", borderTopColor:"#0EA5E9", animation:"spin 0.7s linear infinite" }}/>
-                  : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                }
-                {downloading ? "Exportando…" : "Exportar"}
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: exportOpen ? "rotate(180deg)":"none", transition:"transform 0.18s" }}>
-                  <polyline points="6 9 12 15 18 9"/>
-                </svg>
+                <Download /> {downloading ? "Exportando…" : "Exportar"}
+                <ChevronDown style={{ transform: exportOpen ? "rotate(180deg)" : "none", transition: "transform .18s" }} />
               </button>
 
               {exportOpen && (
                 <div style={{
-                  position:"absolute", top:"calc(100% + 6px)", right:0, minWidth:180, zIndex:50,
-                  background:"var(--color-surface)", border:"1.5px solid var(--color-border)",
-                  borderRadius:10, boxShadow:"0 8px 24px rgba(0,0,0,0.12)", overflow:"hidden",
+                  position: "absolute", top: "calc(100% + 6px)", right: 0, minWidth: 200, zIndex: 50,
+                  background: "var(--surface)", border: "1px solid var(--border)",
+                  borderRadius: "var(--r-3)", boxShadow: "var(--shadow-lg, 0 8px 24px rgba(0,0,0,.12))", overflow: "hidden",
                 }}>
-                  <div style={{ padding:"8px 12px 6px", borderBottom:"1px solid var(--color-border-light)" }}>
-                    <p style={{ margin:0, fontSize:11, fontWeight:700, color:"var(--color-text-muted)", textTransform:"uppercase", letterSpacing:0.5 }}>
+                  <div style={{ padding: "8px 12px 6px", borderBottom: "1px solid var(--border-soft)" }}>
+                    <p style={{ margin: 0, fontSize: "var(--fs-11)", fontWeight: 600, color: "var(--text-mute)", textTransform: "uppercase", letterSpacing: ".04em" }}>
                       {hasFilters ? "Exportar con filtros" : "Exportar todo"}
                     </p>
                   </div>
                   {[
-                    { label:"CSV", sub:"Compatible con cualquier app", icon:<IcFile size={18} />, fn: exportCSV },
-                    { label:"Excel (.xls)", sub:"Abre directo en Excel", icon:<IcDownload size={18} />, fn: exportExcel },
+                    { label: "CSV", sub: "Compatible con cualquier app", icon: <FileText />, fn: exportCSV },
+                    { label: "Excel (.xls)", sub: "Abre directo en Excel", icon: <FileSpreadsheet />, fn: exportExcel },
                   ].map(({ label, sub, icon, fn }) => (
-                    <button key={label} onClick={fn}
-                      style={{ width:"100%", padding:"10px 14px", background:"transparent", border:"none", cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:10, transition:"background 0.1s" }}
-                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background="var(--color-border-light)"; }}
-                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background="transparent"; }}
-                    >
-                      <span style={{ display:"inline-flex", color:"var(--color-text-secondary)", lineHeight:1 }}>{icon}</span>
+                    <button key={label} onClick={fn} style={{ width: "100%", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, textAlign: "left", background: "transparent", border: "none", cursor: "pointer" }}>
+                      <span style={{ display: "inline-flex", color: "var(--text-soft)", lineHeight: 1 }}>{icon}</span>
                       <div>
-                        <div style={{ fontSize:13, fontWeight:600, color:"var(--color-text)" }}>{label}</div>
-                        <div style={{ fontSize:11, color:"var(--color-text-muted)" }}>{sub}</div>
+                        <div style={{ fontSize: "var(--fs-13)", fontWeight: 600, color: "var(--text)" }}>{label}</div>
+                        <div style={{ fontSize: "var(--fs-11)", color: "var(--text-mute)" }}>{sub}</div>
                       </div>
                     </button>
                   ))}
@@ -394,311 +327,254 @@ export default function AdminAudit() {
           </div>
         </div>
 
-        {/* ── Barra de filtros ── */}
-        <div style={{
-          display:"flex", gap:8, marginBottom:20, alignItems:"center",
-          background:"var(--color-surface)", border:"1px solid var(--color-border)",
-          borderRadius:12, padding:"10px 14px", flexWrap:"wrap",
-        }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" style={{ flexShrink:0 }}>
-            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
-          </svg>
-          <span style={{ fontSize:11, fontWeight:700, color:"var(--color-text-muted)", textTransform:"uppercase", letterSpacing:0.5, marginRight:4 }}>Filtros</span>
+        {/* ── Filter bar ── */}
+        <div className="dv-toolbar-wrap" style={{ border: "1px solid var(--border-soft)", borderRadius: "var(--r-3)", overflow: "visible", marginBottom: "var(--sp-4)" }}>
+          <div className="dv-toolbar" style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", padding: "var(--sp-2) var(--sp-3)", flexWrap: "wrap" }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "var(--fs-11)", fontWeight: 600, color: "var(--text-mute)", textTransform: "uppercase", letterSpacing: ".04em", marginRight: 2 }}>
+              <Filter style={{ width: 14, height: 14 }} /> Filtros
+            </span>
 
-          {/* Acción */}
-          <select value={filterAction} onChange={(e) => { setFilterAction(e.target.value); setPage(0); }} style={selectStyle(!!filterAction)}>
-            <option value="">Toda acción</option>
-            <option value="create">Creaciones</option>
-            <option value="update">Ediciones</option>
-            <option value="delete">Eliminaciones</option>
-            <option value="restore">Restauraciones</option>
-          </select>
+            {/* Acción */}
+            <select className="input" value={filterAction} onChange={(e) => { setFilterAction(e.target.value); setPage(0); }} style={{ width: "auto", height: 32 }}>
+              <option value="">Toda acción</option>
+              <option value="create">Creaciones</option>
+              <option value="update">Ediciones</option>
+              <option value="delete">Eliminaciones</option>
+              <option value="restore">Restauraciones</option>
+            </select>
 
-          {/* Workspace */}
-          <select value={filterWorkspace} onChange={(e) => { setFilterWorkspace(e.target.value); setFilterDataset(""); setPage(0); }} style={{ ...selectStyle(!!filterWorkspace), maxWidth:160 }}>
-            <option value="">Todo workspace</option>
-            {workspaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
+            {/* Workspace */}
+            <select className="input" value={filterWorkspace} onChange={(e) => { setFilterWorkspace(e.target.value); setFilterDataset(""); setPage(0); }} style={{ width: "auto", height: 32, maxWidth: 180 }}>
+              <option value="">Todo workspace</option>
+              {workspaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
 
-          {/* Dataset — filtered by workspace */}
-          <select value={filterDataset} onChange={(e) => { setFilterDataset(e.target.value); setPage(0); }} style={{ ...selectStyle(!!filterDataset), maxWidth:180 }} disabled={datasets.length === 0 && !filterDataset}>
-            <option value="">{filterWorkspace ? "Todo dataset" : "Todo dataset"}</option>
-            {datasets.map((ds) => <option key={ds.id} value={ds.id}>{ds.name}</option>)}
-          </select>
+            {/* Dataset — filtered by workspace */}
+            <select className="input" value={filterDataset} onChange={(e) => { setFilterDataset(e.target.value); setPage(0); }} style={{ width: "auto", height: 32, maxWidth: 200 }} disabled={datasets.length === 0 && !filterDataset}>
+              <option value="">Todo dataset</option>
+              {datasets.map((ds) => <option key={ds.id} value={ds.id}>{ds.name}</option>)}
+            </select>
 
-          {/* Persona — dropdown multi-select */}
-          <div ref={userDropRef} style={{ position:"relative" }}>
-            <button onClick={() => setUserDropOpen((v) => !v)} style={{
-              display:"flex", alignItems:"center", gap:6, height:32, padding:"0 10px",
-              borderRadius:7, cursor:"pointer", fontSize:13, fontWeight: filterUsers.length ? 600 : 400,
-              border:`1px solid ${filterUsers.length ? "var(--color-primary,#0EA5E9)" : "var(--color-border)"}`,
-              background: filterUsers.length ? "#F0FDF4" : "var(--color-bg)",
-              color: filterUsers.length ? "#0EA5E9" : "var(--color-text-muted)", whiteSpace:"nowrap",
-            }}>
-              {filterUsers.length === 0 ? (
-                <>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-                  <span>Toda persona</span>
-                </>
-              ) : filterUsers.length === 1 ? (
-                <>
-                  <UserAvatar name={selectedUserObjs[0].username} size={18}/>
-                  <span>{selectedUserObjs[0].username}</span>
-                </>
-              ) : (
-                <>
-                  <div style={{ display:"flex", alignItems:"center" }}>
-                    {selectedUserObjs.slice(0,3).map((u, i) => (
-                      <div key={u.id} style={{ marginLeft: i > 0 ? -6 : 0, zIndex: 3-i }}>
-                        <UserAvatar name={u.username} size={18}/>
-                      </div>
-                    ))}
-                  </div>
-                  <span>{filterUsers.length} personas</span>
-                </>
-              )}
-              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: userDropOpen ? "rotate(180deg)":"none", transition:"transform 0.18s", flexShrink:0 }}>
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </button>
-
-            {userDropOpen && (
-              <div style={{ position:"absolute", top:"calc(100% + 6px)", left:0, minWidth:260, zIndex:50, background:"var(--color-surface)", border:"1.5px solid var(--color-border)", borderRadius:10, boxShadow:"0 8px 24px rgba(0,0,0,0.13)", overflow:"hidden" }}>
-                <div style={{ padding:"8px 10px", borderBottom:"1px solid var(--color-border-light)" }}>
-                  <input autoFocus placeholder="Buscar persona…" value={userSearch} onChange={(e) => setUserSearch(e.target.value)}
-                    style={{ width:"100%", padding:"5px 9px", borderRadius:6, fontSize:12, border:"1px solid var(--color-border)", background:"var(--color-bg)", color:"var(--color-text)", outline:"none", boxSizing:"border-box" }}/>
-                </div>
-                {filterUsers.length > 0 && (
-                  <div style={{ padding:"6px 10px", borderBottom:"1px solid var(--color-border-light)", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                    <span style={{ fontSize:11, color:"var(--color-text-muted)" }}>{filterUsers.length} seleccionada{filterUsers.length > 1 ? "s":""}</span>
-                    <button onClick={() => { setFilterUsers([]); setPage(0); }} style={{ fontSize:11, fontWeight:600, color:"#DC2626", background:"transparent", border:"none", cursor:"pointer", padding:"2px 6px" }}>Limpiar</button>
-                  </div>
+            {/* Persona — dropdown multi-select */}
+            <div ref={userDropRef} style={{ position: "relative" }}>
+              <button
+                className={`btn btn--secondary btn--sm${filterUsers.length ? " is-active" : ""}`}
+                onClick={() => setUserDropOpen((v) => !v)}
+                style={{ height: 32 }}
+              >
+                {filterUsers.length === 0 ? (
+                  <><User /> Toda persona</>
+                ) : filterUsers.length === 1 ? (
+                  <><span className="avatar avatar--xs">{initials(selectedUserObjs[0].username)}</span>{selectedUserObjs[0].username}</>
+                ) : (
+                  <>
+                    <span className="avatar-group">
+                      {selectedUserObjs.slice(0, 3).map((u) => (
+                        <span key={u.id} className="avatar avatar--xs">{initials(u.username)}</span>
+                      ))}
+                    </span>
+                    {filterUsers.length} personas
+                  </>
                 )}
-                <div style={{ maxHeight:240, overflowY:"auto" }}>
-                  {filteredUsers.map((u) => {
-                    const isActive = filterUsers.includes(u.id);
-                    return (
-                      <button key={u.id} onClick={() => toggleUser(u.id)}
-                        style={{ width:"100%", padding:"7px 12px", background: isActive ? "#F0FDF4":"transparent", border:"none", cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:8, transition:"background 0.1s" }}
-                        onMouseEnter={(e) => { if(!isActive) (e.currentTarget as HTMLElement).style.background="var(--color-border-light)"; }}
-                        onMouseLeave={(e) => { if(!isActive) (e.currentTarget as HTMLElement).style.background="transparent"; }}>
-                        {/* Checkbox visual */}
-                        <div style={{ width:16, height:16, borderRadius:4, border:`2px solid ${isActive ? "#0EA5E9":"var(--color-border)"}`, background: isActive ? "#0EA5E9":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"all 0.12s" }}>
-                          {isActive && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
-                        </div>
-                        <UserAvatar name={u.username} size={22}/>
-                        <div style={{ flex:1, minWidth:0 }}>
-                          <div style={{ fontSize:13, fontWeight: isActive ? 600:500, color: isActive ? "#0EA5E9":"var(--color-text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{u.username}</div>
-                          <div style={{ fontSize:11, color:"var(--color-text-muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{u.email}</div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                  {filteredUsers.length === 0 && <p style={{ padding:"10px 12px", fontSize:12, color:"var(--color-text-muted)", margin:0 }}>Sin resultados</p>}
+                <ChevronDown style={{ transform: userDropOpen ? "rotate(180deg)" : "none", transition: "transform .18s" }} />
+              </button>
+
+              {userDropOpen && (
+                <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, minWidth: 260, zIndex: 50, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-3)", boxShadow: "var(--shadow-lg, 0 8px 24px rgba(0,0,0,.13))", overflow: "hidden" }}>
+                  <div style={{ padding: "8px 10px", borderBottom: "1px solid var(--border-soft)" }}>
+                    <span className="input-affix" style={{ width: "100%" }}>
+                      <Search />
+                      <input autoFocus className="input input--with-icon" placeholder="Buscar persona…" value={userSearch} onChange={(e) => setUserSearch(e.target.value)} style={{ width: "100%", height: 32 }} />
+                    </span>
+                  </div>
+                  {filterUsers.length > 0 && (
+                    <div style={{ padding: "6px 10px", borderBottom: "1px solid var(--border-soft)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span style={{ fontSize: "var(--fs-11)", color: "var(--text-mute)" }}>{filterUsers.length} seleccionada{filterUsers.length > 1 ? "s" : ""}</span>
+                      <button className="btn btn--ghost btn--sm" onClick={() => { setFilterUsers([]); setPage(0); }} style={{ color: "var(--danger)" }}>Limpiar</button>
+                    </div>
+                  )}
+                  <div style={{ maxHeight: 240, overflowY: "auto" }}>
+                    {filteredUsers.map((u) => {
+                      const isActive = filterUsers.includes(u.id);
+                      return (
+                        <button key={u.id} onClick={() => toggleUser(u.id)}
+                          style={{ width: "100%", padding: "7px 12px", background: isActive ? "var(--accent-pri-soft)" : "transparent", border: "none", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${isActive ? "var(--accent-pri)" : "var(--border-strong)"}`, background: isActive ? "var(--accent-pri)" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "#fff" }}>
+                            {isActive && <Check style={{ width: 11, height: 11 }} />}
+                          </span>
+                          <span className="avatar avatar--sm">{initials(u.username)}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: "var(--fs-13)", fontWeight: isActive ? 600 : 500, color: isActive ? "var(--accent-pri)" : "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.username}</div>
+                            <div style={{ fontSize: "var(--fs-11)", color: "var(--text-mute)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                    {filteredUsers.length === 0 && <p style={{ padding: "10px 12px", fontSize: "var(--fs-12)", color: "var(--text-mute)", margin: 0 }}>Sin resultados</p>}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+
+            <span style={{ marginLeft: "auto", fontSize: "var(--fs-12)", color: "var(--text-mute)", whiteSpace: "nowrap" }}>
+              <b style={{ color: "var(--text)", fontFamily: "var(--font-mono)" }}>{total.toLocaleString()}</b> resultado{total !== 1 ? "s" : ""}
+            </span>
           </div>
 
-          {/* Chips filtros activos */}
+          {/* Active filter chips */}
           {hasFilters && (
-            <div style={{ display:"flex", gap:5, alignItems:"center", marginLeft:4, flexWrap:"wrap" }}>
+            <div className="dv-filters" style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", padding: "var(--sp-2) var(--sp-3)", borderTop: "1px dashed var(--border-soft)", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "var(--fs-11)", color: "var(--text-mute)", fontWeight: 600 }}>Filtros activos</span>
               {filterAction && (
-                <FilterChip label={ACTION_META[filterAction]?.label ?? filterAction} color={ACTION_META[filterAction]?.color} bg={ACTION_META[filterAction]?.bg} border={ACTION_META[filterAction]?.border} onRemove={() => { setFilterAction(""); setPage(0); }}/>
+                <Chip label={ACTION_META[filterAction]?.label ?? filterAction} onRemove={() => { setFilterAction(""); setPage(0); }} />
               )}
               {filterWorkspace && (
-                <FilterChip label={workspaces.find((w) => w.id === filterWorkspace)?.name ?? "Workspace"} color="#8B5CF6" bg="#F5F3FF" border="#DDD6FE" onRemove={() => { setFilterWorkspace(""); setFilterDataset(""); setPage(0); }}/>
+                <Chip label={workspaces.find((w) => w.id === filterWorkspace)?.name ?? "Workspace"} onRemove={() => { setFilterWorkspace(""); setFilterDataset(""); setPage(0); }} />
               )}
               {filterDataset && (
-                <FilterChip label={allDatasets.find((d) => d.id === filterDataset)?.name ?? "Dataset"} color="#6366F1" bg="#EEF2FF" border="#C7D2FE" onRemove={() => { setFilterDataset(""); setPage(0); }}/>
+                <Chip label={allDatasets.find((d) => d.id === filterDataset)?.name ?? "Dataset"} onRemove={() => { setFilterDataset(""); setPage(0); }} />
               )}
               {selectedUserObjs.map((u) => (
-                <FilterChip key={u.id} label={u.username} color="#0EA5E9" bg="#F0FDF4" border="#BBF7D0" onRemove={() => { setFilterUsers((prev) => prev.filter((id) => id !== u.id)); setPage(0); }}/>
+                <Chip key={u.id} label={u.username} onRemove={() => { setFilterUsers((prev) => prev.filter((id) => id !== u.id)); setPage(0); }} />
               ))}
-              <button onClick={() => { setFilterAction(""); setFilterWorkspace(""); setFilterDataset(""); setFilterUsers([]); setUserSearch(""); setPage(0); }}
-                style={{ fontSize:11, fontWeight:600, color:"var(--color-text-muted)", background:"transparent", border:"none", cursor:"pointer", padding:"2px 6px", borderRadius:5, textDecoration:"underline" }}>
+              <button className="btn btn--ghost btn--sm" onClick={() => { setFilterAction(""); setFilterWorkspace(""); setFilterDataset(""); setFilterUsers([]); setUserSearch(""); setPage(0); }}>
                 Limpiar todo
               </button>
             </div>
           )}
-
-          <span style={{ marginLeft:"auto", fontSize:12, color:"var(--color-text-muted)", whiteSpace:"nowrap" }}>
-            {total.toLocaleString()} resultado{total !== 1 ? "s" : ""}
-          </span>
         </div>
 
-        {/* ── Tabla ── */}
-        <div style={{ background:"var(--color-surface)", border:"1px solid var(--color-border)", borderRadius:14, overflow:"hidden" }}>
-          {isLoading ? (
-            <div style={{ padding:"72px 0", display:"flex", flexDirection:"column", alignItems:"center", gap:14, color:"var(--color-text-muted)" }}>
-              <div style={{ width:32, height:32, borderRadius:"50%", border:"3px solid var(--color-border)", borderTopColor:"var(--color-primary)", animation:"spin 0.8s linear infinite" }}/>
-              <span style={{ fontSize:13 }}>Cargando registros…</span>
-            </div>
-          ) : items.length === 0 ? (
-            <EmptyState icon={<IcList size={22} />} title="Sin registros"
-              subtitle={hasFilters ? "Probá ajustando los filtros." : "Aún no hay actividad registrada."} />
-          ) : view === "timeline" ? (
-            <AuditTimeline items={items} loading={isLoading} />
-          ) : (
-            <div style={{ overflowX:"auto" }}>
-              <table style={{ width:"100%", borderCollapse:"collapse" }}>
-                <thead>
-                  <tr style={{ background:"var(--color-bg)", borderBottom:"2px solid var(--color-border)" }}>
-                    {[["Cuándo","w:120px"],["Acción",""],["Usuario",""],["Dataset",""],["Campo",""],["Cambio","w:260px"]].map(([h, w]) => (
-                      <th key={h} style={{ padding:"9px 14px", textAlign:"left", fontSize:10.5, fontWeight:700, textTransform:"uppercase", color:"var(--color-text-muted)", letterSpacing:"0.07em", whiteSpace:"nowrap", width: w || undefined }}>
-                        {h}
-                      </th>
-                    ))}
+        {/* ── Content: timeline / table / empty ── */}
+        {isLoading ? (
+          <div className="empty">
+            <span className="empty__art"><History /></span>
+            <h4>Cargando registros…</h4>
+          </div>
+        ) : items.length === 0 ? (
+          <div className="empty">
+            <span className="empty__art"><List /></span>
+            <h4>Sin registros</h4>
+            <p>{hasFilters ? "Probá ajustando los filtros." : "Aún no hay actividad registrada."}</p>
+          </div>
+        ) : view === "timeline" ? (
+          <AuditTimeline items={items} loading={isLoading} />
+        ) : (
+          <table className="audit-tbl">
+            <thead>
+              <tr>
+                <th style={{ width: 130 }}>Cuándo</th>
+                <th style={{ width: 200 }}>Quién</th>
+                <th style={{ width: 120 }}>Acción</th>
+                <th>Objetivo</th>
+                <th>Cambio</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((entry) => {
+                const meta = ACTION_META[entry.action] ?? ACTION_META.update;
+                const isFiltered = !!entry.user_id && filterUsers.includes(entry.user_id);
+                return (
+                  <tr key={entry.id}>
+                    {/* Cuándo */}
+                    <td>
+                      <span className="when" title={fullDate(entry.changed_at)}>{timeAgo(entry.changed_at)}</span>
+                      <div style={{ fontSize: 10, color: "var(--text-mute)", fontFamily: "var(--font-mono)", marginTop: 2 }}>
+                        {shortStamp(entry.changed_at)}
+                      </div>
+                    </td>
+
+                    {/* Quién — clickeable para filtrar */}
+                    <td>
+                      {entry.user_name ? (
+                        <button
+                          className="who"
+                          title={isFiltered ? "Quitar filtro" : `Filtrar por ${entry.user_name}`}
+                          onClick={() => toggleUser(entry.user_id ?? "")}
+                          style={{ background: isFiltered ? "var(--accent-pri-soft)" : "transparent", border: "none", borderRadius: "var(--r-2)", padding: "2px 6px 2px 2px", cursor: "pointer" }}
+                        >
+                          <span className="avatar avatar--xs">{initials(entry.user_name)}</span>
+                          <b style={{ color: isFiltered ? "var(--accent-pri)" : undefined }}>{entry.user_name}</b>
+                        </button>
+                      ) : (
+                        <span className="who"><span className="avatar avatar--xs avatar--calc">ƒ</span><b style={{ color: "var(--text-mute)", fontStyle: "italic" }}>Sistema</b></span>
+                      )}
+                    </td>
+
+                    {/* Acción */}
+                    <td>
+                      <span className={`action-chip ${meta.chip}`}>{meta.icon} {meta.label.toUpperCase()}</span>
+                    </td>
+
+                    {/* Objetivo */}
+                    <td>
+                      <span className="target"><b>{entry.dataset_name}</b></span>
+                      {entry.field_key && (
+                        <div style={{ fontSize: "var(--fs-11)", color: "var(--text-mute)", fontFamily: "var(--font-mono)", marginTop: 2 }}>
+                          columna · {entry.field_key}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Cambio (diff) */}
+                    <td>
+                      {entry.old_value !== null || entry.new_value !== null ? (
+                        <div className="diff">
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                            {entry.old_value !== null && (
+                              <code className="old">{entry.old_value || "vacío"}</code>
+                            )}
+                            {entry.old_value !== null && entry.new_value !== null && (
+                              <ArrowRight style={{ width: 11, height: 11, color: "var(--text-mute)" }} />
+                            )}
+                            {entry.new_value !== null && (
+                              <code className="new">{entry.new_value || "vacío"}</code>
+                            )}
+                          </span>
+                        </div>
+                      ) : (
+                        <span style={{ color: "var(--text-mute)" }}>—</span>
+                      )}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {items.map((entry, idx) => {
-                    const meta = ACTION_META[entry.action] ?? ACTION_META.update;
-                    const isLast = idx === items.length - 1;
-                    const isFiltered = !!entry.user_id && filterUsers.includes(entry.user_id);
-                    return (
-                      <tr key={entry.id}
-                        style={{ borderBottom: isLast ? "none" : "1px solid var(--color-border-light)", transition:"background 0.1s" }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-bg)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                      >
-                        {/* Cuándo */}
-                        <td style={{ padding:"10px 14px", whiteSpace:"nowrap" }}>
-                          <span title={fullDate(entry.changed_at)} style={{ fontSize:12, color:"var(--color-text-muted)", cursor:"default", fontVariantNumeric:"tabular-nums" }}>
-                            {timeAgo(entry.changed_at)}
-                          </span>
-                        </td>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
 
-                        {/* Acción */}
-                        <td style={{ padding:"10px 14px", whiteSpace:"nowrap" }}>
-                          <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11, fontWeight:700, padding:"3px 9px 3px 7px", borderRadius:99, color:meta.color, background:meta.bg, border:`1px solid ${meta.border}` }}>
-                            <span style={{ display:"flex", alignItems:"center", color:meta.color }}>{ACTION_ICONS[entry.action]}</span>
-                            {meta.label}
-                          </span>
-                        </td>
-
-                        {/* Usuario — clickeable para filtrar */}
-                        <td style={{ padding:"10px 14px", whiteSpace:"nowrap" }}>
-                          {entry.user_name ? (
-                            <button title={isFiltered ? "Quitar filtro" : `Filtrar por ${entry.user_name}`}
-                              onClick={() => { toggleUser(entry.user_id ?? ""); }}
-                              style={{ display:"flex", alignItems:"center", gap:6, background: isFiltered ? "#F0FDF4":"transparent", border:`1px solid ${isFiltered ? "#0EA5E950":"transparent"}`, borderRadius:99, padding:"2px 8px 2px 3px", cursor:"pointer", transition:"all 0.12s" }}
-                              onMouseEnter={(e) => { if(!isFiltered) { (e.currentTarget as HTMLElement).style.background="var(--color-border-light)"; (e.currentTarget as HTMLElement).style.borderColor="var(--color-border)"; }}}
-                              onMouseLeave={(e) => { if(!isFiltered) { (e.currentTarget as HTMLElement).style.background="transparent"; (e.currentTarget as HTMLElement).style.borderColor="transparent"; }}}>
-                              <UserAvatar name={entry.user_name} size={22}/>
-                              <span style={{ fontSize:12.5, fontWeight: isFiltered ? 700:500, color: isFiltered ? "#0EA5E9":"var(--color-text)" }}>{entry.user_name}</span>
-                            </button>
-                          ) : (
-                            <span style={{ fontSize:12, color:"var(--color-text-muted)", fontStyle:"italic" }}>Sistema</span>
-                          )}
-                        </td>
-
-                        {/* Dataset */}
-                        <td style={{ padding:"10px 14px" }}>
-                          <span style={{ fontSize:13, fontWeight:600, color:"var(--color-text)" }}>{entry.dataset_name}</span>
-                        </td>
-
-                        {/* Campo */}
-                        <td style={{ padding:"10px 14px" }}>
-                          {entry.field_key ? (
-                            <code style={{ fontSize:11, fontFamily:"var(--font-mono)", background:"var(--color-bg)", border:"1px solid var(--color-border)", borderRadius:5, padding:"2px 7px", color:"var(--color-text-secondary)", whiteSpace:"nowrap" }}>
-                              {entry.field_key}
-                            </code>
-                          ) : <span style={{ color:"var(--color-text-muted)", fontSize:13 }}>—</span>}
-                        </td>
-
-                        {/* Diff */}
-                        <td style={{ padding:"10px 14px" }}>
-                          {entry.old_value !== null || entry.new_value !== null ? (
-                            <div style={{ display:"flex", alignItems:"center", gap:5, minWidth:0 }}>
-                              {entry.old_value !== null && (
-                                <span title={entry.old_value} style={{ color:"#DC2626", background:"#FEF2F2", padding:"2px 7px", borderRadius:5, border:"1px solid #FECACA", maxWidth:110, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontFamily:"var(--font-mono)", fontSize:11, flexShrink:1 }}>
-                                  {entry.old_value || <em style={{ opacity:0.5 }}>vacío</em>}
-                                </span>
-                              )}
-                              {entry.old_value !== null && entry.new_value !== null && (
-                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" style={{ flexShrink:0 }}>
-                                  <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
-                                </svg>
-                              )}
-                              {entry.new_value !== null && (
-                                <span title={entry.new_value} style={{ color:"#16A34A", background:"#F0FDF4", padding:"2px 7px", borderRadius:5, border:"1px solid #BBF7D0", maxWidth:110, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontFamily:"var(--font-mono)", fontSize:11, flexShrink:1 }}>
-                                  {entry.new_value || <em style={{ opacity:0.5 }}>vacío</em>}
-                                </span>
-                              )}
-                            </div>
-                          ) : <span style={{ color:"var(--color-text-muted)", fontSize:13 }}>—</span>}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* ── Paginación ── */}
-        {totalPages > 1 && (
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:16, flexWrap:"wrap", gap:10 }}>
-            <span style={{ fontSize:12, color:"var(--color-text-muted)" }}>
-              Página {page + 1} de {totalPages} · {total.toLocaleString()} entradas
+        {/* ── Footer / pagination ── */}
+        {!isLoading && items.length > 0 && (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "var(--sp-4)", padding: "0 var(--sp-1)", fontSize: "var(--fs-12)", color: "var(--text-mute)", flexWrap: "wrap", gap: "var(--sp-2)" }}>
+            <span>
+              Mostrando {items.length} de <b style={{ color: "var(--text)", fontFamily: "var(--font-mono)" }}>{total.toLocaleString()}</b> evento{total !== 1 ? "s" : ""}
             </span>
-            <div style={{ display:"flex", gap:4 }}>
-              <PgBtn label="«" onClick={() => setPage(0)} disabled={page === 0}/>
-              <PgBtn label="‹" onClick={() => setPage((p) => Math.max(0, p-1))} disabled={page === 0}/>
-              {Array.from({ length: totalPages }, (_, i) => i)
-                .filter((i) => Math.abs(i - page) <= 2)
-                .map((i) => <PgBtn key={i} label={String(i+1)} onClick={() => setPage(i)} active={i === page}/>)}
-              <PgBtn label="›" onClick={() => setPage((p) => Math.min(totalPages-1, p+1))} disabled={page >= totalPages-1}/>
-              <PgBtn label="»" onClick={() => setPage(totalPages-1)} disabled={page >= totalPages-1}/>
-            </div>
+            {totalPages > 1 && (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <button className="btn btn--secondary btn--icon btn--sm" title="Anterior" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>
+                  <ChevronLeft />
+                </button>
+                <span style={{ padding: "0 var(--sp-2)", color: "var(--text)", fontWeight: 600 }}>{page + 1} / {totalPages}</span>
+                <button className="btn btn--secondary btn--icon btn--sm" title="Siguiente" onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}>
+                  <ChevronRight />
+                </button>
+              </span>
+            )}
           </div>
         )}
-      </div>
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </div>
+      </main>
+    </AppShell>
   );
 }
 
 // ── Small reusable components ────────────────────────────────────────────────
 
-function UserAvatar({ name, size = 24 }: { name: string; size?: number }) {
-  const c = userColor(name);
+function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
-    <div style={{ width:size, height:size, borderRadius:"50%", flexShrink:0, background:c+"1A", border:`1.5px solid ${c}40`, color:c, fontSize:size*0.4, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center" }}>
-      {name.charAt(0).toUpperCase()}
-    </div>
-  );
-}
-
-function FilterChip({ label, color, bg, border, onRemove }: { label: string; color: string; bg: string; border: string; onRemove: () => void }) {
-  return (
-    <span style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"3px 8px 3px 10px", borderRadius:99, background:bg, border:`1px solid ${border}`, fontSize:12, fontWeight:600, color }}>
+    <span className="chip">
       {label}
-      <button onClick={onRemove} style={{ background:"none", border:"none", cursor:"pointer", color, display:"flex", alignItems:"center", padding:0, opacity:0.7 }}>
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      <button onClick={onRemove} style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", display: "inline-flex", alignItems: "center", padding: 0, marginLeft: 4, opacity: 0.7 }}>
+        <X style={{ width: 12, height: 12 }} />
       </button>
     </span>
   );
-}
-
-function PgBtn({ label, onClick, disabled, active }: { label: string; onClick: () => void; disabled?: boolean; active?: boolean }) {
-  return (
-    <button onClick={onClick} disabled={disabled || active}
-      style={{ height:32, minWidth:32, padding:"0 10px", borderRadius:8, fontSize:12, fontWeight:600, cursor: disabled || active ? "default":"pointer", border:"1.5px solid", borderColor: active ? "var(--color-primary,#0EA5E9)":"var(--color-border)", background: active ? "var(--color-primary,#0EA5E9)":"var(--color-surface)", color: active ? "#fff":"var(--color-text-secondary)", opacity: disabled ? 0.4:1, transition:"all 0.12s" }}>
-      {label}
-    </button>
-  );
-}
-
-function selectStyle(active: boolean): React.CSSProperties {
-  return {
-    fontSize:13, height:32, padding:"0 10px", borderRadius:7,
-    border:`1px solid ${active ? "var(--color-primary,#0EA5E9)":"var(--color-border)"}`,
-    background: active ? "#F0FDF4":"var(--color-bg)",
-    color: active ? "#0EA5E9":"var(--color-text-muted)",
-    cursor:"pointer", outline:"none", fontWeight: active ? 600:400,
-  };
 }

@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="es" data-palette="citrus" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <title>OpsGrid · Datasets</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="theme.js"></script>
+  <link rel="stylesheet" href="ds-tokens.css">
+  <link rel="stylesheet" href="ds-styles.css">
+  <link rel="stylesheet" href="dataset.css">
+  <link rel="stylesheet" href="phase4.css">
+</head>
+<body class="home">
+
+  <!-- ─── Top bar ─── -->
+  <header class="dv-topbar" data-screen-label="Home / Datasets">
+    <div class="dv-topbar__logo">
+      <span class="dv-topbar__logo-mark"></span>
+      OpsGrid
+    </div>
+    <nav class="dv-bcrumb">
+      <a href="#" class="dv-bcrumb__ws">Financiera Andes <i data-lucide="chevrons-up-down"></i></a>
+    </nav>
+    <span class="dv-live">Live · 4 conectados</span>
+    <div class="dv-topbar__grow"></div>
+    <span class="search" style="background: var(--surface-alt); border: 1px solid transparent;">
+      <i data-lucide="search"></i>
+      Buscar tabla, columna, registro…
+      <span class="search__kbd" style="margin-left: auto;"><span class="kbd">⌘</span><span class="kbd">K</span></span>
+    </span>
+    <button class="dv-topbar__icon-btn"><i data-lucide="help-circle"></i></button>
+    <button class="dv-topbar__icon-btn"><i data-lucide="bell"></i><span class="dot"></span></button>
+    <button class="dv-topbar__icon-btn"><i data-lucide="settings"></i></button>
+    <span class="avatar avatar--sm" style="margin-left: var(--sp-1);">MA</span>
+  </header>
+
+  <!-- ─── Sidebar ─── -->
+  <aside class="dv-side">
+    <a href="#" class="dv-side__link"><i data-lucide="home"></i> Inicio</a>
+    <a href="04-Home.html" class="dv-side__link is-active"><i data-lucide="database"></i> Datasets <span class="count">17</span></a>
+    <a href="#" class="dv-side__link"><i data-lucide="function-square"></i> Scripts <span class="count">8</span></a>
+    <a href="06-Import-Excel.html" class="dv-side__link"><i data-lucide="upload"></i> Importaciones</a>
+    <a href="#" class="dv-side__link"><i data-lucide="users"></i> Personas</a>
+    <a href="#" class="dv-side__link"><i data-lucide="bar-chart-3"></i> Auditoría</a>
+
+    <div class="dv-side__sep"></div>
+
+    <div class="dv-side__heading">
+      <span>Recientes</span>
+    </div>
+    <a href="02-Dataset.html" class="dv-side__link"><i data-lucide="table-2"></i> Préstamos · activa</a>
+    <a href="#" class="dv-side__link"><i data-lucide="table-2"></i> Clientes</a>
+    <a href="#" class="dv-side__link"><i data-lucide="function-square"></i> Reporte mora</a>
+
+    <div class="dv-side__upgrade">
+      <div class="label">Pro · 96% de tope</div>
+      <h5>Estás cerca del límite</h5>
+      <p>48,200 / 50,000 registros este mes.</p>
+      <button class="btn btn--primary btn--sm">Ver Business</button>
+    </div>
+  </aside>
+
+  <!-- ─── Main ─── -->
+  <main class="home-main">
+    <div class="home-header">
+      <div>
+        <h1>Datasets</h1>
+        <p>17 datasets activos en <b>Financiera Andes</b>. Importa un Excel y lo convertimos en tablas relacionadas en menos de un minuto.</p>
+      </div>
+      <div class="home-header__actions">
+        <a href="06-Import-Excel.html" class="btn btn--secondary"><i data-lucide="upload"></i> Importar Excel</a>
+        <button class="btn btn--primary"><i data-lucide="plus"></i> Nuevo dataset</button>
+      </div>
+    </div>
+
+    <div class="home-toolbar">
+      <span class="search">
+        <i data-lucide="search"></i>
+        Buscar dataset por nombre, tabla, columna…
+        <span class="search__kbd" style="margin-left: auto;"><span class="kbd">⌘</span><span class="kbd">F</span></span>
+      </span>
+      <div class="tabs" style="border-bottom: 0;">
+        <span class="tab is-active">Todos <span class="tab__count">17</span></span>
+        <span class="tab">Mis datasets <span class="tab__count">6</span></span>
+        <span class="tab">Compartidos <span class="tab__count">11</span></span>
+        <span class="tab">Archivados <span class="tab__count">3</span></span>
+      </div>
+      <span class="home-toolbar__grow"></span>
+      <button class="tb-btn"><i data-lucide="arrow-up-down"></i> Más recientes</button>
+      <span class="home-toolbar__view">
+        <button class="is-active" title="Vista grid"><i data-lucide="layout-grid"></i></button>
+        <button title="Vista lista"><i data-lucide="list"></i></button>
+      </span>
+    </div>
+
+    <!-- Recientes -->
+    <div class="home-section-title">
+      <h3>Tus datasets</h3>
+      <span class="home-section-title__count">6 datasets</span>
+    </div>
+
+    <div class="home-grid">
+
+      <a href="02-Dataset.html" class="h-card" style="text-decoration: none; color: inherit;">
+        <div class="h-card__head">
+          <span class="h-card__icon"><i data-lucide="table-2"></i></span>
+          <div style="flex: 1; min-width: 0;">
+            <div class="h-card__title">Préstamos · Cartera activa</div>
+            <div class="h-card__sub">PRES · v3 · sincronizado</div>
+          </div>
+          <button class="h-card__menu"><i data-lucide="more-horizontal"></i></button>
+        </div>
+        <div class="h-card__stats">
+          <div><span>Filas</span><b>1,284</b></div>
+          <div><span>Columnas</span><b>12</b></div>
+          <div><span>Relaciones</span><b>4</b></div>
+        </div>
+        <div class="h-card__foot">
+          <span class="avatar-group">
+            <span class="avatar avatar--xs">KM</span>
+            <span class="avatar avatar--xs avatar--rel">DR</span>
+            <span class="avatar avatar--xs avatar--mint">YP</span>
+            <span class="avatar avatar--xs avatar--violet">+1</span>
+          </span>
+          <span class="when"><i data-lucide="clock"></i> hace 3 min · Karla M.</span>
+        </div>
+      </a>
+
+      <div class="h-card">
+        <div class="h-card__head">
+          <span class="h-card__icon is-rel"><i data-lucide="users"></i></span>
+          <div style="flex: 1; min-width: 0;">
+            <div class="h-card__title">Clientes</div>
+            <div class="h-card__sub">CLI · v1 · 2 relaciones entrantes</div>
+          </div>
+          <button class="h-card__menu"><i data-lucide="more-horizontal"></i></button>
+        </div>
+        <div class="h-card__stats">
+          <div><span>Filas</span><b>842</b></div>
+          <div><span>Columnas</span><b>8</b></div>
+          <div><span>Relaciones</span><b>2</b></div>
+        </div>
+        <div class="h-card__foot">
+          <span class="avatar-group">
+            <span class="avatar avatar--xs avatar--rel">DR</span>
+            <span class="avatar avatar--xs">MA</span>
+          </span>
+          <span class="when"><i data-lucide="clock"></i> ayer · Diego R.</span>
+        </div>
+      </div>
+
+      <div class="h-card">
+        <div class="h-card__head">
+          <span class="h-card__icon is-calc"><i data-lucide="function-square"></i></span>
+          <div style="flex: 1; min-width: 0;">
+            <div class="h-card__title">Reporte mora mensual</div>
+            <div class="h-card__sub">RPT · derivado por script</div>
+          </div>
+          <span class="badge badge--calc" style="margin-left: var(--sp-1);">ƒ</span>
+          <button class="h-card__menu"><i data-lucide="more-horizontal"></i></button>
+        </div>
+        <div class="h-card__stats">
+          <div><span>Filas</span><b>1,284</b></div>
+          <div><span>Columnas</span><b>6</b></div>
+          <div><span>Fuentes</span><b>2</b></div>
+        </div>
+        <div class="h-card__foot">
+          <span class="avatar-group">
+            <span class="avatar avatar--xs avatar--violet">RA</span>
+          </span>
+          <span class="when"><i data-lucide="zap"></i> generado · hace 8 min</span>
+        </div>
+      </div>
+
+      <div class="h-card">
+        <div class="h-card__head">
+          <span class="h-card__icon is-mint"><i data-lucide="package"></i></span>
+          <div style="flex: 1; min-width: 0;">
+            <div class="h-card__title">Productos</div>
+            <div class="h-card__sub">PROD · catálogo</div>
+          </div>
+          <button class="h-card__menu"><i data-lucide="more-horizontal"></i></button>
+        </div>
+        <div class="h-card__stats">
+          <div><span>Filas</span><b>12</b></div>
+          <div><span>Columnas</span><b>5</b></div>
+          <div><span>Relaciones</span><b>1</b></div>
+        </div>
+        <div class="h-card__foot">
+          <span class="avatar-group">
+            <span class="avatar avatar--xs">MA</span>
+          </span>
+          <span class="when"><i data-lucide="clock"></i> hace 4 días</span>
+        </div>
+      </div>
+
+      <div class="h-card">
+        <div class="h-card__head">
+          <span class="h-card__icon is-violet"><i data-lucide="user-cog"></i></span>
+          <div style="flex: 1; min-width: 0;">
+            <div class="h-card__title">Cobradores · Agentes</div>
+            <div class="h-card__sub">AG · equipo de campo</div>
+          </div>
+          <button class="h-card__menu"><i data-lucide="more-horizontal"></i></button>
+        </div>
+        <div class="h-card__stats">
+          <div><span>Filas</span><b>18</b></div>
+          <div><span>Columnas</span><b>7</b></div>
+          <div><span>Relaciones</span><b>1</b></div>
+        </div>
+        <div class="h-card__foot">
+          <span class="avatar-group">
+            <span class="avatar avatar--xs avatar--rel">DR</span>
+          </span>
+          <span class="when"><i data-lucide="clock"></i> hace 1 semana</span>
+        </div>
+      </div>
+
+      <div class="h-card">
+        <div class="h-card__head">
+          <span class="h-card__icon"><i data-lucide="receipt"></i></span>
+          <div style="flex: 1; min-width: 0;">
+            <div class="h-card__title">Pagos</div>
+            <div class="h-card__sub">PAG · transacciones</div>
+          </div>
+          <span class="badge badge--success" style="margin-left: var(--sp-1);">LIVE</span>
+          <button class="h-card__menu"><i data-lucide="more-horizontal"></i></button>
+        </div>
+        <div class="h-card__stats">
+          <div><span>Filas</span><b>9,140</b></div>
+          <div><span>Columnas</span><b>9</b></div>
+          <div><span>Relaciones</span><b>2</b></div>
+        </div>
+        <div class="h-card__foot">
+          <span class="avatar-group">
+            <span class="avatar avatar--xs">KM</span>
+            <span class="avatar avatar--xs avatar--mint">YP</span>
+          </span>
+          <span class="when"><i data-lucide="clock"></i> hace 2 horas</span>
+        </div>
+      </div>
+
+      <!-- Create new (CTA) -->
+      <a href="06-Import-Excel.html" class="h-card h-card--new" style="text-decoration: none; color: inherit;">
+        <span class="h-card__icon"><i data-lucide="upload"></i></span>
+        <h4>Importar Excel</h4>
+        <p>Arrastra un archivo y detectamos relaciones automáticamente.</p>
+      </a>
+    </div>
+
+    <!-- Plantillas -->
+    <div class="home-section-title">
+      <h3>Empezar desde una plantilla</h3>
+      <a href="#">Ver todas las plantillas →</a>
+    </div>
+    <div class="template-grid">
+      <div class="t-card">
+        <span class="t-card__icon" style="background: color-mix(in oklab, var(--accent-pri) 14%, var(--surface)); color: var(--accent-pri);"><i data-lucide="banknote"></i></span>
+        <div class="t-card__body">
+          <div class="t-card__title">Cartera de préstamos</div>
+          <p class="t-card__desc">Préstamos + Clientes + Pagos + Cobradores. Con scripts de mora y saldo.</p>
+          <div class="t-card__tags"><span>4 tablas</span><span>3 relaciones</span><span>2 scripts</span></div>
+        </div>
+      </div>
+      <div class="t-card">
+        <span class="t-card__icon" style="background: color-mix(in oklab, #0fb583 14%, var(--surface)); color: #0fb583;"><i data-lucide="boxes"></i></span>
+        <div class="t-card__body">
+          <div class="t-card__title">Inventario y ventas</div>
+          <p class="t-card__desc">Productos + Movimientos + Proveedores. Stock auto-calculado.</p>
+          <div class="t-card__tags"><span>3 tablas</span><span>2 relaciones</span><span>1 script</span></div>
+        </div>
+      </div>
+      <div class="t-card">
+        <span class="t-card__icon" style="background: color-mix(in oklab, var(--accent-rel) 14%, var(--surface)); color: var(--accent-rel);"><i data-lucide="users-round"></i></span>
+        <div class="t-card__body">
+          <div class="t-card__title">CRM de clientes</div>
+          <p class="t-card__desc">Contactos + Empresas + Oportunidades. Pipeline simple para PYMEs.</p>
+          <div class="t-card__tags"><span>3 tablas</span><span>3 relaciones</span></div>
+        </div>
+      </div>
+      <div class="t-card">
+        <span class="t-card__icon" style="background: color-mix(in oklab, #8b3df0 14%, var(--surface)); color: #8b3df0;"><i data-lucide="file-spreadsheet"></i></span>
+        <div class="t-card__body">
+          <div class="t-card__title">RR.HH. y planilla</div>
+          <p class="t-card__desc">Empleados + Cargos + Asistencia. Listo para sumar planilla mensual.</p>
+          <div class="t-card__tags"><span>3 tablas</span><span>2 relaciones</span><span>1 script</span></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <nav class="idx-cluster">
+    <a href="00-Index.html">←  Pantallas</a>
+    <a href="01-Design-System.html">Sistema</a>
+    <a href="02-Dataset.html">Dataset</a>
+    <a href="03-Login.html">Login</a>
+    <a href="04-Home.html" class="is-active">Home</a>
+    <a href="05-Form-Registro.html">Form</a>
+    <a href="06-Import-Excel.html">Importar</a>
+  </nav>
+
+  <script src="https://unpkg.com/lucide@0.453.0/dist/umd/lucide.min.js"></script>
+  <script>lucide.createIcons({ attrs: { 'stroke-width': 1.75 } });</script>
+</body>
+</html>
