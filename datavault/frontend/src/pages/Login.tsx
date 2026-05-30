@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import axios from "axios";
-import { Sparkles, Eye, EyeOff, ArrowRight, Info, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Sparkles, Eye, EyeOff, ArrowRight, Info, CheckCircle2, AlertTriangle, Briefcase } from "lucide-react";
 import api from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import type { AuthUser } from "../auth/AuthContext";
+import AcquireModal from "../components/AcquireModal";
 
 type Mode = "login" | "register";
 
@@ -22,6 +23,7 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(false);
+  const [showAcquire, setShowAcquire] = useState(false);
 
   const switchMode = (m: Mode) => { setMode(m); setError(""); setPending(false); };
 
@@ -147,12 +149,15 @@ export default function Login() {
                   type="button" aria-label={showPw ? "Ocultar contraseña" : "Ver contraseña"}
                   onClick={() => setShowPw((v) => !v)}
                   style={{
-                    position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)",
+                    position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
+                    width: 28, height: 28,
                     border: 0, background: "transparent", color: "var(--text-mute)",
-                    cursor: "pointer", padding: 4, display: "inline-flex",
+                    cursor: "pointer", padding: 0,
+                    display: "inline-flex", alignItems: "center", justifyContent: "center",
+                    borderRadius: "var(--r-1)",
                   }}
                 >
-                  {showPw ? <EyeOff /> : <Eye />}
+                  {showPw ? <EyeOff size={16} strokeWidth={1.75} /> : <Eye size={16} strokeWidth={1.75} />}
                 </button>
               </span>
             </div>
@@ -188,8 +193,20 @@ export default function Login() {
             <br />
             <span style={{ opacity: 0.7 }}>Tu data vive en infraestructura propia · soles peruanos</span>
           </p>
+
+          {/* CTA comercial: adquirir el software para empresas */}
+          <button
+            type="button"
+            className="btn btn--secondary"
+            onClick={() => setShowAcquire(true)}
+            style={{ width: "100%", marginTop: "var(--sp-3)", gap: 8 }}
+          >
+            <Briefcase size={14} strokeWidth={1.75} /> Adquiere OpsGrid para tu empresa
+          </button>
         </div>
       </main>
+
+      <AcquireModal open={showAcquire} onClose={() => setShowAcquire(false)} />
     </div>
     </div>
   );

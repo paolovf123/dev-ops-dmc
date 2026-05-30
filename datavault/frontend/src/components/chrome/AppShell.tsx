@@ -3,11 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   Database, FunctionSquare, Users, BarChart3, LayoutGrid,
-  CreditCard, Bell, Settings, Sun, Moon,
+  CreditCard, Bell, Settings, Sun, Moon, LogOut, Briefcase,
 } from "lucide-react";
+import AcquireModal from "../AcquireModal";
 import { useAuth } from "../../auth/AuthContext";
 import { useWorkspace } from "../../workspace/WorkspaceContext";
 import { getWorkspaces } from "../../api/workspaces";
+import { getWorkspaceBilling } from "../../api/billing";
 import WorkspaceSwitcher from "../../workspace/WorkspaceSwitcher";
 import UserMenu from "../UserMenu";
 import GlobalSearch from "./GlobalSearch";
@@ -27,7 +29,7 @@ interface Props {
  */
 export default function AppShell({ active, children }: Props) {
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
+  const { isAdmin, logout } = useAuth();
   const [theme, setTheme] = useState<string>(
     () => document.documentElement.getAttribute("data-theme") || "light"
   );
@@ -39,6 +41,18 @@ export default function AppShell({ active, children }: Props) {
   };
   const { data: workspaces = [] } = useQuery({ queryKey: ["workspaces"], queryFn: getWorkspaces });
   const isManager = isAdmin || workspaces.some((w) => w.my_role === "owner" || w.my_role === "admin_ws");
+  const { current: workspace } = useWorkspace();
+  // Para el card de upgrade: usar el workspace activo, o el primero disponible si no hay seleccionado
+  // (admin sin workspace activo en context, pero igual queremos mostrar el card si tiene alguno Free).
+  const billingWsId = workspace?.id ?? workspaces[0]?.id;
+  const { data: billing } = useQuery({
+    queryKey: ["billing", billingWsId],
+    queryFn: () => getWorkspaceBilling(billingWsId!),
+    enabled: !!billingWsId,
+    staleTime: 60_000,
+  });
+  const showUpgrade = !!billingWsId && billing?.plan_key === "free";
+  const [showAcquire, setShowAcquire] = useState(false);
 
   const link = (key: ShellSection, to: string, Icon: typeof Database, label: string, count?: number) => (
     <a
@@ -72,6 +86,8 @@ export default function AppShell({ active, children }: Props) {
 
         <GlobalSearch />
 
+        <div className="dv-topbar__grow" />
+
         {isAdmin && (
           <button className="dv-topbar__icon-btn" title="Actividad reciente" onClick={() => navigate("/admin/audit")}>
             <Bell />
@@ -81,6 +97,12 @@ export default function AppShell({ active, children }: Props) {
           {theme === "dark" ? <Sun /> : <Moon />}
         </button>
         <button className="dv-topbar__icon-btn" title="Configuración" onClick={() => navigate("/settings")}><Settings /></button>
+        <button
+          className="dv-topbar__icon-btn"
+          title="Cerrar sesión"
+          onClick={async () => { await logout(); navigate("/login"); }}
+          style={{ color: "var(--danger)" }}
+        ><LogOut /></button>
 
         <div style={{ marginLeft: "var(--sp-1)" }}><UserMenu /></div>
       </header>
@@ -97,18 +119,38 @@ export default function AppShell({ active, children }: Props) {
 
         {isManager && link("billing", "/billing", CreditCard, "Facturación")}
 
-        {isManager && (
-          <div className="dv-side__upgrade">
-            <div className="label">Plan del workspace</div>
-            <h5>Uso y facturación</h5>
-            <p>Revisa el plan, los límites y los pagos de tu equipo.</p>
-            <button className="btn btn--primary btn--sm" onClick={() => navigate("/billing")}>Ver planes</button>
-          </div>
-        )}
+        {/* Bloque al fondo del sidebar: upgrade card (si plan Free) + logout */}
+        <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
+          {showUpgrade && (
+            <div className="dv-side__upgrade">
+              <div className="label">Plan Free</div>
+              <h5>Suscríbete a Pro</h5>
+              <p>Más miembros, datasets, registros y scripts/API para tu equipo.</p>
+              <button className="btn btn--primary btn--sm" onClick={() => navigate("/billing")}>Ver planes</button>
+            </div>
+          )}
+          <a
+            href="#"
+            className="dv-side__link"
+            onClick={(e) => { e.preventDefault(); setShowAcquire(true); }}
+          >
+            <Briefcase /> Adquiere OpsGrid
+          </a>
+          <a
+            href="/login"
+            className="dv-side__link"
+            style={{ color: "var(--danger)" }}
+            onClick={async (e) => { e.preventDefault(); await logout(); navigate("/login"); }}
+          >
+            <LogOut /> Cerrar sesión
+          </a>
+        </div>
       </aside>
 
       {/* ─── Main (lo provee la página) ─── */}
       {children}
+
+      <AcquireModal open={showAcquire} onClose={() => setShowAcquire(false)} />
     </div>
   );
 }

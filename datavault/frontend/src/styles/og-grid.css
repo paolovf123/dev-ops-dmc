@@ -6,6 +6,9 @@
  *   calculada (script)  → --accent-calc (magenta, glifo ƒ)
  */
 
+/* ── Topbar: permitir que los dropdowns (UserMenu, etc.) salgan del topbar ── */
+.og .dv-topbar { overflow: visible; }
+
 /* ── Contenedor + tabla ── */
 .og .table-wrap {
   border: 1px solid var(--border-soft);
