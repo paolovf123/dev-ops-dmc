@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+import {
+  Sparkles, X, RotateCw, ArrowRight, AlertTriangle, Check, ExternalLink, Search,
+} from "lucide-react";
 import { scanRelationships, updateColumn, normalizeColumnValues } from "../api/datasets";
 import type { RelationCandidate, CleanupSuggestion } from "../api/datasets";
 import { useToast } from "./Toast";
 import { useEscapeKey } from "../utils/useEscapeKey";
-import { modalTh as th, modalTd as td } from "../utils/ui";
-import { IcSearch } from "./ui/icons";
+import { Badge, Btn, Chip, TONE } from "./ui/kit";
 
 interface Props {
   open: boolean;
@@ -112,219 +115,336 @@ export default function RelationScanModal({ open, onClose, workspaceId }: Props)
 
   const total = scanMut.data?.candidates.length ?? 0;
   const scanned = scanMut.data?.scanned ?? 0;
+  const cleanupCount = scanMut.data?.cleanup_suggestions?.length ?? 0;
+  const [relFg, relBg] = TONE.rel;
 
   return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 1000,
-      background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center",
-    }} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div style={{
-        background: "var(--color-surface)", borderRadius: 14, padding: "24px 28px",
-        width: "min(1500px, 97vw)", height: "min(940px, 94vh)",
-        display: "flex", flexDirection: "column",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.3)", gap: 16,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ display: "flex", color: "var(--pm-violet-600)" }}><IcSearch size={20} /></div>
-          <div>
-            <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>Detectar relaciones</h3>
-            <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-muted)" }}>
-              Escanea columnas tipo FK por nombre + matching de contenido contra IDs de otras tablas
-            </p>
+    <div
+      onMouseDown={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 1000,
+        background: "var(--overlay)", backdropFilter: "blur(5px)",
+        display: "grid", placeItems: "center", padding: 24,
+        animation: "ogFade var(--t-mid)",
+      }}
+    >
+      <div
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{
+          width: "100%", maxWidth: 1080, maxHeight: "92vh",
+          display: "flex", flexDirection: "column",
+          background: "var(--surface)", border: "1px solid var(--border)",
+          borderRadius: "var(--r-4)", boxShadow: "var(--shadow-4)",
+          animation: "ogPop var(--t-slow)", overflow: "hidden",
+        }}
+      >
+        {/* Header */}
+        <div style={{
+          display: "flex", alignItems: "flex-start", gap: 12,
+          padding: "18px 20px", borderBottom: "1px solid var(--border)",
+        }}>
+          <span style={{
+            display: "grid", placeItems: "center", width: 38, height: 38,
+            borderRadius: "var(--r-2)", background: relBg, color: relFg, flex: "none",
+          }}>
+            <Sparkles size={20} />
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ font: "700 17px/1.2 var(--font-sans)", color: "var(--text)" }}>
+              Detectar relaciones
+            </div>
+            <div style={{ font: "400 13px/1.4 var(--font-sans)", color: "var(--text-soft)", marginTop: 3 }}>
+              El contenido manda: score = 0.85 × contenido + 0.15 × nombre
+            </div>
           </div>
-          <button className="btn btn-ghost" onClick={onClose}
-            style={{ marginLeft: "auto", padding: "4px 8px", fontSize: 18 }}>×</button>
+          <button
+            onClick={onClose}
+            className="og-iconbtn"
+            style={{
+              width: 32, height: 32, display: "grid", placeItems: "center",
+              border: "none", background: "transparent", borderRadius: 8,
+              cursor: "pointer", color: "var(--text-mute)", flex: "none",
+            }}
+          >
+            <X size={18} />
+          </button>
         </div>
 
-        {scanMut.isPending && (
-          <div style={{ padding: "32px 0", textAlign: "center", color: "var(--color-text-muted)" }}>
-            Escaneando datasets…
-          </div>
-        )}
-
-        {scanMut.isError && (
-          <p style={{ margin: 0, color: "var(--pm-red-500)", fontSize: 13 }}>
-            ⚠ {(scanMut.error as Error)?.message ?? "Error al escanear"}
-          </p>
-        )}
-
-        {scanMut.data && (
-          <>
-            {/* Tab switcher */}
+        {/* Body */}
+        <div style={{ padding: 20, overflow: "auto", flex: 1, display: "flex", flexDirection: "column" }}>
+          {scanMut.isPending && (
             <div style={{
-              display: "flex", gap: 4, borderBottom: "1px solid var(--color-border)",
-              paddingBottom: 0, marginBottom: -8,
+              padding: "48px 0", textAlign: "center",
+              font: "400 14px/1.5 var(--font-sans)", color: "var(--text-soft)",
             }}>
-              {([
-                ["relations", `Relaciones (${scanMut.data.candidates.length})`],
-                ["cleanup", `Limpieza sugerida (${scanMut.data.cleanup_suggestions?.length ?? 0})`],
-              ] as [Tab, string][]).map(([k, label]) => (
-                <button key={k} onClick={() => setTab(k)}
-                  style={{
-                    padding: "8px 14px", fontSize: 13, fontWeight: tab === k ? 700 : 500,
-                    background: "none", border: "none", cursor: "pointer",
-                    borderBottom: tab === k ? "2px solid var(--color-primary)" : "2px solid transparent",
-                    color: tab === k ? "var(--color-primary)" : "var(--color-text-secondary)",
-                    marginBottom: -1,
-                  }}>
-                  {label}
-                </button>
-              ))}
-              <button className="btn btn-ghost" style={{ marginLeft: "auto", fontSize: 12, padding: "5px 10px" }}
-                onClick={() => scanMut.mutate()}>
-                ↻ Re-escanear
-              </button>
+              Escaneando datasets…
             </div>
+          )}
 
-            {tab === "relations" && <>
-            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>
-                {total} relación{total !== 1 ? "es" : ""} candidata{total !== 1 ? "s" : ""} en {scanned} dataset{scanned !== 1 ? "s" : ""}
-              </span>
-              <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+          {scanMut.isError && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 9,
+              padding: "12px 14px", borderRadius: "var(--r-2)",
+              background: "var(--danger-soft)",
+              border: "1px solid color-mix(in srgb, var(--danger) 30%, transparent)",
+              font: "500 13px/1.4 var(--font-sans)", color: "var(--danger)",
+            }}>
+              <AlertTriangle size={16} />
+              {(scanMut.error as Error)?.message ?? "Error al escanear"}
+            </div>
+          )}
+
+          {scanMut.data && (
+            <>
+              {/* Tab switcher */}
+              <div style={{
+                display: "flex", alignItems: "center", gap: 2,
+                borderBottom: "1px solid var(--border)", marginBottom: 16,
+              }}>
                 {([
-                  ["all", "Todas"],
-                  ["name+content", "Nombre + contenido"],
-                  ["name", "Solo nombre"],
-                  ["content", "Solo contenido"],
-                ] as [Filter, string][]).map(([k, label]) => (
-                  <button key={k}
-                    onClick={() => setFilter(k)}
+                  ["relations", `Relaciones (${total})`],
+                  ["cleanup", `Limpieza sugerida (${cleanupCount})`],
+                ] as [Tab, string][]).map(([k, label]) => (
+                  <button
+                    key={k}
+                    onClick={() => setTab(k)}
                     style={{
-                      padding: "4px 10px", fontSize: 12, borderRadius: 6,
-                      border: "1px solid",
-                      borderColor: filter === k ? "var(--color-primary)" : "var(--color-border)",
-                      background: filter === k ? "var(--color-primary-bg)" : "transparent",
-                      color: filter === k ? "var(--color-primary)" : "var(--color-text)",
-                      cursor: "pointer", fontWeight: filter === k ? 600 : 400,
-                    }}>
+                      font: `${tab === k ? 600 : 500} 13px/1 var(--font-sans)`,
+                      padding: "9px 13px", border: "none", background: "transparent",
+                      cursor: "pointer",
+                      color: tab === k ? "var(--text)" : "var(--text-soft)",
+                      borderBottom: tab === k ? "2px solid var(--accent-rel)" : "2px solid transparent",
+                      marginBottom: -1, transition: "color var(--t-fast)",
+                    }}
+                  >
                     {label}
                   </button>
                 ))}
+                <Btn
+                  variant="ghost"
+                  size="sm"
+                  icon={<RotateCw size={14} />}
+                  onClick={() => scanMut.mutate()}
+                  style={{ marginLeft: "auto" }}
+                >
+                  Re-escanear
+                </Btn>
               </div>
-              <input
-                placeholder="Filtrar por nombre…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                style={{
-                  fontSize: 13, padding: "5px 10px", borderRadius: 6,
-                  border: "1px solid var(--color-border)", flexBasis: 220,
-                }} />
-            </div>
 
-            <div style={{ overflowY: "auto", flex: 1, border: "1px solid var(--color-border)", borderRadius: 8 }}>
-              {filtered.length === 0 ? (
-                <div style={{ padding: 32, textAlign: "center", color: "var(--color-text-muted)", fontSize: 13 }}>
-                  No hay candidatos con estos filtros.
-                </div>
-              ) : (
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                  <thead>
-                    <tr style={{ background: "var(--color-bg)", position: "sticky", top: 0 }}>
-                      <th style={th}>Desde</th>
-                      <th style={th}>Columna</th>
-                      <th style={th}>→ Hacia</th>
-                      <th style={th}>Match</th>
-                      <th style={th}>Score</th>
-                      <th style={th}>Ejemplos</th>
-                      <th style={th}>Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((c, i) => {
-                    const key = `${c.from_dataset_id}:${c.from_column_id}`;
-                    const isApplied = applied.has(key) || c.from_column_type === "relation";
-                    const isApplying = applyingKey === key;
-                    return (
-                      <tr key={i} style={{ borderBottom: "1px solid var(--color-border-light)" }}>
-                        <td style={td}>
-                          <Link to={`/datasets/${c.from_dataset_id}`} style={{ color: "var(--color-primary)", fontWeight: 600 }}>
-                            {c.from_dataset_name}
-                          </Link>
-                        </td>
-                        <td style={td}>
-                          <code style={{ fontSize: 12, color: "#DB2777" }}>{c.from_column}</code>
-                          {c.from_column_label !== c.from_column && (
-                            <div style={{ fontSize: 11, color: "var(--color-text-muted)" }}>{c.from_column_label}</div>
-                          )}
-                        </td>
-                        <td style={td}>
-                          <Link to={`/datasets/${c.to_dataset_id}`} style={{ color: "var(--color-primary)", fontWeight: 600 }}>
-                            {c.to_dataset_name}
-                          </Link>
-                          <div style={{ fontSize: 11, color: "var(--color-text-muted)" }}>{c.to_field}</div>
-                        </td>
-                        <td style={td}>
-                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                            {c.content_match_ratio > 0 && (
-                              <Badge color="#16A34A">
-                                contenido {Math.round(c.content_match_ratio * 100)}%
-                              </Badge>
-                            )}
-                            {c.name_match && !c.name_only && <Badge color="#2563EB">nombre</Badge>}
-                            {c.name_only && <Badge color="#D97706">solo nombre · sin datos</Badge>}
-                          </div>
-                          <div style={{ fontSize: 10, color: "var(--color-text-muted)", marginTop: 2 }}>
-                            {c.content_matched}/{c.values_sampled} valores
-                          </div>
-                        </td>
-                        <td style={td}>
-                          <ScoreBar score={c.score} />
-                        </td>
-                        <td style={{ ...td, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-muted)" }}>
-                          {c.sample_values.slice(0, 2).map((v) => (
-                            <div key={v} style={{ overflow: "hidden", textOverflow: "ellipsis", maxWidth: 180, whiteSpace: "nowrap" }}>
-                              {v}
-                            </div>
-                          ))}
-                        </td>
-                        <td style={td}>
-                          {isApplied ? (
-                            <span style={{
-                              fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 99,
-                              background: "#16A34A18", color: "#16A34A", border: "1px solid #16A34A40",
-                              whiteSpace: "nowrap",
-                            }}>
-                              ✓ Aplicada
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => applyMut.mutate(c)}
-                              disabled={isApplying}
-                              style={{
-                                fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 6,
-                                border: "1px solid var(--color-primary)", background: "var(--color-primary)",
-                                color: "#fff", cursor: isApplying ? "wait" : "pointer", whiteSpace: "nowrap",
-                                opacity: isApplying ? 0.6 : 1,
-                              }}>
-                              {isApplying ? "Aplicando…" : "Aplicar"}
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                    })}
-                  </tbody>
-                </table>
+              {tab === "relations" && (
+                <>
+                  {/* Filtros + búsqueda */}
+                  <div style={{
+                    display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 14,
+                  }}>
+                    <span style={{ font: "400 13px/1.4 var(--font-sans)", color: "var(--text-soft)" }}>
+                      {total} relación{total !== 1 ? "es" : ""} candidata{total !== 1 ? "s" : ""} en{" "}
+                      {scanned} dataset{scanned !== 1 ? "s" : ""}
+                    </span>
+
+                    <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {([
+                        ["all", "Todas"],
+                        ["name+content", "Nombre + contenido"],
+                        ["name", "Solo nombre"],
+                        ["content", "Solo contenido"],
+                      ] as [Filter, string][]).map(([k, label]) => {
+                        const on = filter === k;
+                        return (
+                          <button
+                            key={k}
+                            onClick={() => setFilter(k)}
+                            style={{
+                              font: `${on ? 600 : 500} 12px/1 var(--font-sans)`,
+                              padding: "6px 11px", borderRadius: "var(--r-pill)", cursor: "pointer",
+                              border: `1px solid ${on ? "color-mix(in srgb, var(--accent-pri) 35%, transparent)" : "var(--border)"}`,
+                              background: on ? "var(--pri-soft)" : "var(--surface)",
+                              color: on ? "var(--accent-pri)" : "var(--text-soft)",
+                              transition: "all var(--t-fast)", whiteSpace: "nowrap",
+                            }}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div style={{ position: "relative", flexBasis: 240, flexGrow: 0 }}>
+                      <Search
+                        size={15}
+                        style={{
+                          position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)",
+                          color: "var(--text-mute)", pointerEvents: "none",
+                        }}
+                      />
+                      <input
+                        placeholder="Filtrar por nombre…"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        style={{
+                          width: "100%", height: 34, padding: "0 11px 0 32px",
+                          borderRadius: "var(--r-2)", border: "1px solid var(--border)",
+                          background: "var(--surface)", color: "var(--text)",
+                          font: "400 13px/1 var(--font-sans)", outline: "none",
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Lista de candidatos */}
+                  {filtered.length === 0 ? (
+                    <div style={{
+                      padding: 40, textAlign: "center",
+                      font: "400 13.5px/1.5 var(--font-sans)", color: "var(--text-soft)",
+                    }}>
+                      No hay candidatos con estos filtros.
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                      {filtered.map((c, i) => {
+                        const key = `${c.from_dataset_id}:${c.from_column_id}`;
+                        const isApplied = applied.has(key) || c.from_column_type === "relation";
+                        const isApplying = applyingKey === key;
+                        return (
+                          <RelationRow
+                            key={i}
+                            c={c}
+                            isApplied={isApplied}
+                            isApplying={isApplying}
+                            onApply={() => applyMut.mutate(c)}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <p style={{
+                    margin: "16px 0 0", font: "400 11.5px/1.6 var(--font-sans)", color: "var(--text-mute)",
+                  }}>
+                    Score = 0.85 × (proporción de valores que coinciden, insensible a mayúsculas y tildes)
+                    + 0.15 × (el nombre coincide, solo como refuerzo). El contenido manda: un match de puro
+                    nombre, sin datos que lo respalden, queda al fondo. Hasta 3 destinos por columna fuente;
+                    los respaldos están penalizados.
+                  </p>
+                </>
               )}
-            </div>
 
-            <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>
-              Score = 0.85 × (proporción de valores que coinciden, insensible a mayúsculas y tildes) + 0.15 × (el nombre coincide, solo como refuerzo).
-              El contenido manda: un match de puro nombre, sin datos que lo respalden, queda al fondo. Hasta 3 destinos por columna fuente; los respaldos están penalizados.
-            </p>
-            </>}
-
-            {tab === "cleanup" && <CleanupTab
-              suggestions={scanMut.data.cleanup_suggestions ?? []}
-              normalized={normalized}
-              normalizingKey={normalizingKey}
-              onNormalize={(s) => normalizeMut.mutate(s)}
-            />}
-          </>
-        )}
+              {tab === "cleanup" && (
+                <CleanupTab
+                  suggestions={scanMut.data.cleanup_suggestions ?? []}
+                  normalized={normalized}
+                  normalizingKey={normalizingKey}
+                  onNormalize={(s) => normalizeMut.mutate(s)}
+                />
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
+  );
+}
+
+// ── Fila de relación candidata ────────────────────────────────────────────────
+function RelationRow({
+  c, isApplied, isApplying, onApply,
+}: {
+  c: RelationCandidate;
+  isApplied: boolean;
+  isApplying: boolean;
+  onApply: () => void;
+}) {
+  const contentPct = Math.round(c.content_match_ratio * 100);
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 12,
+      padding: "11px 14px", borderRadius: "var(--r-3)",
+      border: "1px solid var(--border)", background: "var(--surface)",
+    }}>
+      {/* Desde → Hacia */}
+      <span style={{ display: "flex", alignItems: "center", gap: 7, flex: "1 1 280px", minWidth: 0, flexWrap: "wrap" }}>
+        <Link to={`/datasets/${c.from_dataset_id}`} style={{ textDecoration: "none" }} title={c.from_dataset_name}>
+          <Chip tone="rel" icon={<ExternalLink size={11} />}>{c.from_dataset_name}</Chip>
+        </Link>
+        <span className="mono" style={{ font: "400 11.5px/1 var(--font-mono)", color: "var(--text-mute)" }}>
+          .{c.from_column}
+        </span>
+        <ArrowRight size={14} color="var(--text-mute)" style={{ flex: "none" }} />
+        <Link to={`/datasets/${c.to_dataset_id}`} style={{ textDecoration: "none" }} title={c.to_dataset_name}>
+          <Chip tone="primary">{c.to_dataset_name}</Chip>
+        </Link>
+        <span className="mono" style={{ font: "400 11px/1 var(--font-mono)", color: "var(--text-mute)" }}>
+          {c.to_field}
+        </span>
+      </span>
+
+      {/* Badges de match */}
+      <span style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start", flex: "none", minWidth: 150 }}>
+        <span style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+          {c.content_match_ratio > 0 && (
+            <Badge tone="success">contenido {contentPct}%</Badge>
+          )}
+          {c.name_match && !c.name_only && <Badge tone="primary">nombre</Badge>}
+          {c.name_only && <Badge tone="warn">solo nombre · sin datos</Badge>}
+        </span>
+        <span style={{ font: "400 10.5px/1 var(--font-sans)", color: "var(--text-mute)" }}>
+          {c.content_matched}/{c.values_sampled} valores
+        </span>
+      </span>
+
+      {/* Score con barra */}
+      <ScoreBar score={c.score} />
+
+      {/* Ejemplos */}
+      <span className="mono" style={{
+        flex: "none", width: 150, font: "400 11px/1.4 var(--font-mono)", color: "var(--text-mute)",
+      }}>
+        {c.sample_values.slice(0, 2).map((v) => (
+          <span key={v} style={{
+            display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>
+            {v}
+          </span>
+        ))}
+      </span>
+
+      {/* Acción */}
+      <span style={{ flex: "none" }}>
+        {isApplied ? (
+          <Badge tone="success" style={{ padding: "5px 10px" }}>
+            <Check size={12} /> Aplicada
+          </Badge>
+        ) : (
+          <Btn
+            variant={c.score >= 0.5 ? "primary" : "soft"}
+            size="sm"
+            disabled={isApplying}
+            onClick={onApply}
+          >
+            {isApplying ? "Aplicando…" : "Aplicar"}
+          </Btn>
+        )}
+      </span>
+    </div>
+  );
+}
+
+// ── Barra de score ─────────────────────────────────────────────────────────────
+function ScoreBar({ score }: { score: number }) {
+  const pct = Math.round(score * 100);
+  const tone = score >= 0.75 ? "var(--success)" : score >= 0.5 ? "var(--warning)" : "var(--text-mute)";
+  return (
+    <span style={{ flex: "none", width: 72 }}>
+      <span className="mono" style={{ display: "block", font: "700 13px/1 var(--font-mono)", color: tone }}>
+        {pct}%
+      </span>
+      <span style={{
+        display: "block", width: "100%", height: 4, borderRadius: 2,
+        background: "var(--surface-alt)", marginTop: 4, overflow: "hidden",
+      }}>
+        <span style={{ display: "block", width: `${pct}%`, height: 4, borderRadius: 2, background: tone }} />
+      </span>
+    </span>
   );
 }
 
@@ -339,87 +459,87 @@ function CleanupTab({
 }) {
   if (suggestions.length === 0) {
     return (
-      <div style={{ padding: 48, textAlign: "center", color: "var(--color-text-muted)", fontSize: 13 }}>
+      <div style={{
+        padding: 48, textAlign: "center",
+        font: "400 13.5px/1.6 var(--font-sans)", color: "var(--text-soft)",
+      }}>
         No detectamos columnas con variantes por mayúsculas, tildes o espacios.
         Los datos están razonablemente limpios.
       </div>
     );
   }
+  const code: CSSProperties = {
+    font: "500 11.5px/1 var(--font-mono)", padding: "2px 6px", borderRadius: 5,
+    background: "var(--surface-alt)", color: "var(--text-soft)",
+  };
   return (
     <>
-      <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-secondary)" }}>
+      <p style={{ margin: "0 0 14px", font: "400 13px/1.6 var(--font-sans)", color: "var(--text-soft)" }}>
         Estas columnas tienen valores que solo difieren en mayúsculas, tildes o espacios
-        (ej. <code>Comercio</code>, <code>COMERCIO</code>, <code>comercio</code>). Unificarlas
-        antes de buscar relaciones suele revelar conexiones ocultas con catálogos.
+        (ej. <code className="mono" style={code}>Comercio</code>{" "}
+        <code className="mono" style={code}>COMERCIO</code>{" "}
+        <code className="mono" style={code}>comercio</code>). Unificarlas antes de buscar
+        relaciones suele revelar conexiones ocultas con catálogos.
       </p>
-      <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: 10 }}>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {suggestions.map((s) => {
           const key = `${s.dataset_id}:${s.column_id}`;
           const isDone = normalized.has(key);
           const isPending = normalizingKey === key;
           return (
             <div key={key} style={{
-              border: "1px solid var(--color-border)", borderRadius: 10, padding: "12px 14px",
-              background: isDone ? "#F0FDF4" : "var(--color-surface)",
+              border: "1px solid var(--border)", borderRadius: "var(--r-3)", padding: "13px 15px",
+              background: isDone ? "var(--success-soft)" : "var(--surface)",
+              transition: "background var(--t-mid)",
             }}>
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                    <Link to={`/datasets/${s.dataset_id}`} style={{ fontSize: 14, fontWeight: 700, color: "var(--color-primary)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                    <Link
+                      to={`/datasets/${s.dataset_id}`}
+                      style={{ font: "700 14px/1 var(--font-sans)", color: "var(--accent-pri)", textDecoration: "none" }}
+                    >
                       {s.dataset_name}
                     </Link>
-                    <span style={{ color: "var(--color-text-muted)", fontSize: 13 }}>·</span>
-                    <code style={{ fontSize: 12, color: "#DB2777", fontWeight: 600 }}>{s.column}</code>
-                    <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>({s.column_label})</span>
+                    <span style={{ color: "var(--text-mute)" }}>·</span>
+                    <code className="mono" style={{ font: "600 12px/1 var(--font-mono)", color: "var(--accent-rel)" }}>
+                      {s.column}
+                    </code>
+                    <span style={{ font: "400 11.5px/1 var(--font-sans)", color: "var(--text-mute)" }}>
+                      ({s.column_label})
+                    </span>
                   </div>
-                  <div style={{ fontSize: 12, color: "var(--color-text-muted)", marginBottom: 8 }}>
-                    <strong style={{ color: "var(--color-text)" }}>{s.raw_unique}</strong> valores únicos →
-                    <strong style={{ color: "#16A34A", marginLeft: 4 }}>{s.normalized_unique}</strong> si se unifican
+
+                  <div style={{ font: "400 12px/1.5 var(--font-sans)", color: "var(--text-soft)", marginBottom: 8 }}>
+                    <strong style={{ color: "var(--text)" }}>{s.raw_unique}</strong> valores únicos →{" "}
+                    <strong style={{ color: "var(--success)" }}>{s.normalized_unique}</strong> si se unifican
                     {" · "}
-                    <strong style={{ color: "#D97706" }}>{s.dirty_groups}</strong> grupos con variantes
+                    <strong style={{ color: "var(--warning)" }}>{s.dirty_groups}</strong> grupos con variantes
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                     {s.examples.map((ex, i) => (
-                      <div key={i} style={{ fontSize: 12, lineHeight: 1.5 }}>
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap", font: "400 12px/1 var(--font-sans)" }}>
                         {ex.variants.map((v, j) => (
-                          <span key={j}>
-                            <code style={{
-                              background: v === ex.canonical ? "#16A34A22" : "var(--color-bg)",
-                              color: v === ex.canonical ? "#15803D" : "var(--color-text-secondary)",
-                              padding: "1px 6px", borderRadius: 4,
-                              fontWeight: v === ex.canonical ? 700 : 400,
-                            }}>{v}</code>
-                            {j < ex.variants.length - 1 && <span style={{ color: "var(--color-text-muted)", margin: "0 4px" }}>/</span>}
-                          </span>
+                          <Variant key={j} value={v} canonical={v === ex.canonical} last={j === ex.variants.length - 1} />
                         ))}
-                        <span style={{ color: "var(--color-text-muted)", marginLeft: 8 }}>
-                          → unificar como <strong style={{ color: "#15803D" }}>{ex.canonical}</strong>
-                        </span>
+                        <span style={{ color: "var(--text-mute)", marginLeft: 4 }}>→ unificar como</span>
+                        <Chip tone="success">{ex.canonical}</Chip>
                       </div>
                     ))}
                   </div>
                 </div>
-                <div style={{ flexShrink: 0 }}>
+
+                <div style={{ flex: "none" }}>
                   {isDone ? (
-                    <span style={{
-                      fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 99,
-                      background: "#16A34A18", color: "#16A34A", border: "1px solid #16A34A40",
-                      whiteSpace: "nowrap",
-                    }}>
-                      ✓ Normalizada
-                    </span>
+                    <Badge tone="success" style={{ padding: "5px 10px" }}>
+                      <Check size={12} /> Normalizada
+                    </Badge>
                   ) : (
-                    <button
-                      onClick={() => onNormalize(s)}
-                      disabled={isPending}
-                      style={{
-                        fontSize: 12, fontWeight: 600, padding: "6px 14px", borderRadius: 6,
-                        border: "1px solid #16A34A", background: "#16A34A",
-                        color: "#fff", cursor: isPending ? "wait" : "pointer", whiteSpace: "nowrap",
-                        opacity: isPending ? 0.6 : 1,
-                      }}>
+                    <Btn variant="soft" size="sm" disabled={isPending} onClick={() => onNormalize(s)}>
                       {isPending ? "Normalizando…" : "Normalizar"}
-                    </button>
+                    </Btn>
                   )}
                 </div>
               </div>
@@ -427,7 +547,8 @@ function CleanupTab({
           );
         })}
       </div>
-      <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>
+
+      <p style={{ margin: "16px 0 0", font: "400 11.5px/1.6 var(--font-sans)", color: "var(--text-mute)" }}>
         Al normalizar, cada variante de un grupo se reemplaza por la <strong>forma más frecuente</strong>.
         Los valores se actualizan directamente en los registros — re-escanea después para ver nuevas relaciones.
       </p>
@@ -435,26 +556,19 @@ function CleanupTab({
   );
 }
 
-function Badge({ color, children }: { color: string; children: React.ReactNode }) {
+// ── Píldora de variante (resalta la forma canónica) ────────────────────────────
+function Variant({ value, canonical, last }: { value: string; canonical: boolean; last: boolean }): ReactNode {
   return (
-    <span style={{
-      fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 20,
-      background: color + "1a", color, border: `1px solid ${color}40`, whiteSpace: "nowrap",
-    }}>
-      {children}
-    </span>
-  );
-}
-
-function ScoreBar({ score }: { score: number }) {
-  const pct = Math.round(score * 100);
-  const color = score >= 0.75 ? "#16A34A" : score >= 0.5 ? "#D97706" : "#94A3B8";
-  return (
-    <div style={{ minWidth: 80 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color }}>{pct}%</div>
-      <div style={{ width: 70, height: 4, background: "var(--color-border-light)", borderRadius: 2, marginTop: 2 }}>
-        <div style={{ width: `${pct}%`, height: 4, background: color, borderRadius: 2 }} />
-      </div>
-    </div>
+    <>
+      <code className="mono" style={{
+        font: `${canonical ? 700 : 400} 10.5px/1 var(--font-mono)`,
+        padding: "2px 6px", borderRadius: 5,
+        background: canonical ? "var(--success-soft)" : "var(--surface-alt)",
+        color: canonical ? "var(--success)" : "var(--text-soft)",
+      }}>
+        {value}
+      </code>
+      {!last && <span style={{ color: "var(--text-mute)" }}>/</span>}
+    </>
   );
 }

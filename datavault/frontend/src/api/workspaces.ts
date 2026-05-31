@@ -15,7 +15,7 @@ export const getWorkspaces = () =>
 export const createWorkspace = (body: { name: string; description?: string | null; is_sandbox?: boolean }) =>
   api.post<Workspace>("/workspaces", body).then((r) => r.data);
 
-export const updateWorkspace = (id: string, body: { name?: string; description?: string }) =>
+export const updateWorkspace = (id: string, body: { name?: string; description?: string | null }) =>
   api.patch<Workspace>(`/workspaces/${id}`, body).then((r) => r.data);
 
 export const deleteWorkspace = (id: string) =>

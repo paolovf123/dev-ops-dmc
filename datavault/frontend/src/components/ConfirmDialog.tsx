@@ -1,5 +1,7 @@
-import { createContext, useContext, useState, useCallback, useRef } from "react";
+import { createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { Trash2, Bell, Check, AlertTriangle } from "lucide-react";
+import { Btn, TONE, type Tone } from "./ui/kit";
 
 interface ConfirmOptions {
   title: string;
@@ -23,6 +25,117 @@ export function useConfirm() {
   return useContext(ConfirmContext);
 }
 
+// ── Tono + icono por variante ─────────────────────────────────────────────────
+const VARIANTS: Record<
+  NonNullable<ConfirmOptions["variant"]>,
+  { tone: Tone; Icon: typeof Trash2 }
+> = {
+  danger: { tone: "danger", Icon: Trash2 },
+  warning: { tone: "warn", Icon: AlertTriangle },
+  default: { tone: "primary", Icon: Bell },
+};
+
+function ConfirmCard({
+  dialog,
+  onClose,
+}: {
+  dialog: DialogState;
+  onClose: (result: boolean) => void;
+}) {
+  // Cierra con Esc (resuelve como cancelado).
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose(false);
+    };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [onClose]);
+
+  const variant = dialog.variant ?? "default";
+  const { tone, Icon } = VARIANTS[variant];
+  const [fg, bg] = TONE[tone];
+  const isDanger = variant === "danger";
+
+  return (
+    <div
+      onMouseDown={() => onClose(false)}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 220,
+        background: "var(--overlay)",
+        backdropFilter: "blur(5px)",
+        display: "grid",
+        placeItems: "center",
+        padding: 24,
+        animation: "ogFade var(--t-mid)",
+      }}
+    >
+      <div
+        onMouseDown={(e) => e.stopPropagation()}
+        role="alertdialog"
+        aria-modal="true"
+        style={{
+          width: "100%",
+          maxWidth: 400,
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--r-4)",
+          boxShadow: "var(--shadow-4)",
+          padding: 22,
+          animation: "ogPop var(--t-slow)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 10 }}>
+          <span
+            style={{
+              display: "grid",
+              placeItems: "center",
+              width: 38,
+              height: 38,
+              flex: "none",
+              borderRadius: "var(--r-2)",
+              background: bg,
+              color: fg,
+            }}
+          >
+            <Icon size={19} />
+          </span>
+          <div style={{ font: "700 16px var(--font-sans)", color: "var(--text)" }}>
+            {dialog.title}
+          </div>
+        </div>
+
+        {dialog.message && (
+          <p
+            style={{
+              margin: "0 0 18px",
+              font: "400 13.5px/1.5 var(--font-sans)",
+              color: "var(--text-soft)",
+            }}
+          >
+            {dialog.message}
+          </p>
+        )}
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+          <Btn variant="ghost" onClick={() => onClose(false)}>
+            {dialog.cancelLabel ?? "Cancelar"}
+          </Btn>
+          <Btn
+            variant="primary"
+            tone={tone}
+            icon={isDanger ? <Trash2 size={16} /> : <Check size={16} />}
+            onClick={() => onClose(true)}
+          >
+            {dialog.confirmLabel ?? "Confirmar"}
+          </Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const resolveRef = useRef<ResolveFn | null>(null);
@@ -34,57 +147,20 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const handleClose = (result: boolean) => {
+  const handleClose = useCallback((result: boolean) => {
     resolveRef.current?.(result);
+    resolveRef.current = null;
     setDialog(null);
-  };
-
-  const VARIANT_STYLES = {
-    danger:  { icon: "", iconBg: "#FEE2E2", iconColor: "#EF4444", btnClass: "btn-danger" },
-    warning: { icon: "⚠️", iconBg: "#FEF3C7", iconColor: "#D97706", btnClass: "btn-warning" },
-    default: { icon: "", iconBg: "var(--color-border-light)", iconColor: "var(--color-text-secondary)", btnClass: "btn-primary" },
-  };
-
-  const v = VARIANT_STYLES[dialog?.variant ?? "default"];
+  }, []);
 
   return (
     <ConfirmContext.Provider value={confirm}>
       {children}
-      {dialog && createPortal(
-        <div className="modal-overlay confirm-overlay"
-          onClick={(e) => e.target === e.currentTarget && handleClose(false)}>
-          <div className="modal modal-v2 confirm-modal">
-            <div className="modal-accent" style={{
-              background: dialog.variant === "danger" ? "var(--pm-red-500)"
-                : dialog.variant === "warning" ? "#F59E0B"
-                : "var(--color-primary)",
-            }} />
-
-            <div className="confirm-body">
-              <div className="confirm-icon" style={{ background: v.iconBg, color: v.iconColor }}>
-                {v.icon}
-              </div>
-              <h3 className="confirm-title">{dialog.title}</h3>
-              {dialog.message && (
-                <p className="confirm-message">{dialog.message}</p>
-              )}
-            </div>
-
-            <div className="confirm-footer">
-              <button className="btn btn-secondary" onClick={() => handleClose(false)}
-                autoFocus>
-                {dialog.cancelLabel ?? "Cancelar"}
-              </button>
-              <button
-                className={`btn ${dialog.variant === "danger" ? "btn-danger-solid" : "btn-primary"}`}
-                onClick={() => handleClose(true)}>
-                {dialog.confirmLabel ?? "Aceptar"}
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      {dialog &&
+        createPortal(
+          <ConfirmCard dialog={dialog} onClose={handleClose} />,
+          document.body
+        )}
     </ConfirmContext.Provider>
   );
 }

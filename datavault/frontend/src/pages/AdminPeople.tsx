@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Users, UserCheck, Layers, Shield, LayoutGrid } from "lucide-react";
+import { Users, UserCheck, Layers, Shield, LayoutGrid, ChevronDown } from "lucide-react";
 import { getWorkspaces } from "../api/workspaces";
 import { useAuth } from "../auth/AuthContext";
 import AdminUsers from "./AdminUsers";
@@ -8,8 +8,8 @@ import MembersManager from "../components/admin/MembersManager";
 import WsTabGroups from "../components/admin/WsTabGroups";
 import WsTabPermissions from "../components/admin/WsTabPermissions";
 import AppShell from "../components/chrome/AppShell";
-import { Select, EmptyState } from "../components/ui";
-import { IcUsers, IcGrid } from "../components/ui/icons";
+import { EmptyState } from "../components/ui";
+import { Avatar } from "../components/ui/kit";
 
 type Tab = "users" | "members" | "groups" | "accesos";
 
@@ -40,18 +40,20 @@ export default function AdminPeople({ initialTab }: { initialTab?: Tab } = {}) {
 
   type TabSpec = { key: Tab; label: string; icon: React.ReactNode };
   const tabs: TabSpec[] = [
-    ...(isAdmin ? [{ key: "users" as const, label: "Usuarios del sistema", icon: <Users /> }] : []),
-    { key: "members", label: "Miembros", icon: <UserCheck /> },
-    { key: "groups",  label: "Grupos",   icon: <Layers /> },
-    { key: "accesos", label: "Accesos a datasets", icon: <Shield /> },
+    ...(isAdmin ? [{ key: "users" as const, label: "Usuarios del sistema", icon: <Users size={15} /> }] : []),
+    { key: "members", label: "Miembros", icon: <UserCheck size={15} /> },
+    { key: "groups",  label: "Grupos",   icon: <Layers size={15} /> },
+    { key: "accesos", label: "Accesos a datasets", icon: <Shield size={15} /> },
   ];
 
   if (!canAccess) {
     return (
       <AppShell active="personas">
-        <main className="page-main" style={{ width: "100%" }}>
-          <EmptyState icon={<IcUsers size={24} />} title="Sin acceso"
-            subtitle="Necesitás ser owner o admin_ws de algún workspace (o admin global)." />
+        <main className="home-main" style={{ overflowY: "auto", padding: 0 }}>
+          <div style={{ maxWidth: 1160, margin: "0 auto", padding: "28px 32px 80px" }}>
+            <EmptyState icon={<Users size={24} />} title="Sin acceso"
+              subtitle="Necesitás ser owner o admin_ws de algún workspace (o admin global)." />
+          </div>
         </main>
       </AppShell>
     );
@@ -61,54 +63,75 @@ export default function AdminPeople({ initialTab }: { initialTab?: Tab } = {}) {
 
   return (
     <AppShell active="personas">
-      <main className="page-main" style={{ width: "100%" }}>
-        <div className="page-header">
-          <div>
-            <h1>Personas y accesos</h1>
-            <p>
-              Gestiona quién entra al workspace, en qué grupo está, y exactamente
-              qué puede hacer en cada dataset.
-            </p>
-          </div>
-        </div>
+      <main className="home-main" style={{ overflowY: "auto", padding: 0 }}>
+        <div style={{ maxWidth: 1160, margin: "0 auto", padding: "28px 32px 80px" }}>
+          {/* Header */}
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
+            <div>
+              <h1 style={{ margin: 0, font: "700 28px/1.1 var(--font-sans)", letterSpacing: "-.02em", color: "var(--text)", display: "flex", alignItems: "center", gap: 10 }}>
+                <Users size={26} style={{ color: "var(--accent-pri)" }} /> Personas y accesos
+              </h1>
+              <p style={{ margin: "7px 0 0", font: "400 15px/1.4 var(--font-sans)", color: "var(--text-soft)", maxWidth: 540 }}>
+                Gestiona quién entra al workspace, en qué grupo está, y exactamente qué puede hacer en cada dataset.
+              </p>
+            </div>
 
-        <div className="page-tabs-row">
-          <div className="tabs" style={{ borderBottom: 0 }}>
-            {tabs.map((t) => (
-              <span
-                key={t.key}
-                className={`tab${tab === t.key ? " is-active" : ""}`}
-                onClick={() => setTab(t.key)}
-                role="tab"
-                aria-selected={tab === t.key}
-              >
-                {t.icon} {t.label}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {tab === "users" && isAdmin && <AdminUsers embedded />}
-
-        {needsWs && (
-          <>
-            {workspaces.length > 1 && (
-              <div
-                style={{
-                  display: "flex", alignItems: "center", gap: 10,
-                  marginBottom: "var(--sp-4)",
-                }}
-              >
-                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-soft)", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  <IcGrid size={15} /> Workspace
+            {/* Selector de workspace */}
+            {needsWs && workspaces.length > 1 && (
+              <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+                <span style={{
+                  display: "flex", alignItems: "center", gap: 9, padding: "8px 12px", borderRadius: "var(--r-2)",
+                  border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", boxShadow: "var(--shadow-1)",
+                }}>
+                  <span style={{ font: "400 13px/1 var(--font-sans)", color: "var(--text-mute)" }}>Workspace</span>
+                  <Avatar name={selected?.name ?? ""} size={22} square />
+                  <span style={{ font: "600 14px/1 var(--font-sans)" }}>{selected?.name ?? "—"}</span>
+                  <ChevronDown size={15} style={{ color: "var(--text-mute)" }} />
                 </span>
-                <Select value={effectiveWsId} onChange={setWsId} aria-label="Workspace" style={{ maxWidth: 420 }}>
+                {/* select transparente encima para conservar el control nativo accesible */}
+                <select
+                  value={effectiveWsId}
+                  onChange={(e) => setWsId(e.target.value)}
+                  aria-label="Workspace"
+                  style={{
+                    position: "absolute", inset: 0, width: "100%", height: "100%",
+                    opacity: 0, cursor: "pointer", border: "none", appearance: "none",
+                  }}
+                >
                   {workspaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-                </Select>
+                </select>
               </div>
             )}
+          </div>
 
-            {selected ? (
+          {/* Tabs */}
+          <div style={{ display: "flex", gap: 2, borderBottom: "1px solid var(--border)", marginTop: 22, marginBottom: 22 }}>
+            {tabs.map((t) => {
+              const on = tab === t.key;
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => setTab(t.key)}
+                  role="tab"
+                  aria-selected={on}
+                  style={{
+                    font: `${on ? 600 : 500} 13.5px/1 var(--font-sans)`, padding: "11px 14px",
+                    color: on ? "var(--text)" : "var(--text-soft)", background: "transparent", border: "none", cursor: "pointer",
+                    borderBottom: on ? "2px solid var(--accent-pri)" : "2px solid transparent", marginBottom: -1,
+                    display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap",
+                    transition: "color var(--t-fast)",
+                  }}
+                >
+                  {t.icon} {t.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {tab === "users" && isAdmin && <AdminUsers embedded />}
+
+          {needsWs && (
+            selected ? (
               tab === "members" ? (
                 <MembersManager workspaceId={selected.id} workspaceName={selected.name} canAssignOwner={canAssignOwner} />
               ) : tab === "groups" ? (
@@ -117,13 +140,16 @@ export default function AdminPeople({ initialTab }: { initialTab?: Tab } = {}) {
                 <WsTabPermissions workspaceId={selected.id} workspaceName={selected.name} editable />
               )
             ) : (
-              <div className="matrix-wrap" style={{ padding: 24 }}>
+              <div style={{
+                background: "var(--surface)", border: "1px solid var(--border)",
+                borderRadius: "var(--r-3)", boxShadow: "var(--shadow-1)", padding: 24,
+              }}>
                 <EmptyState icon={<LayoutGrid size={22} />} title="Elegí un workspace"
                   subtitle="Seleccioná un workspace para gestionar sus miembros, grupos o accesos." />
               </div>
-            )}
-          </>
-        )}
+            )
+          )}
+        </div>
       </main>
     </AppShell>
   );

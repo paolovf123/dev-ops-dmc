@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { Users, CreditCard, ScrollText, Settings, LogOut, ChevronDown } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { getWorkspaces } from "../api/workspaces";
-import { IcUsers, IcList, IcSettings, IcCreditCard } from "./ui/icons";
+import { Avatar, Badge, type Tone } from "./ui/kit";
 
 export default function UserMenu() {
   const { user, isAdmin, logout } = useAuth();
@@ -11,7 +12,6 @@ export default function UserMenu() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Personas/Accesos también para owner/admin_ws (no solo admin global).
   const { data: workspaces = [] } = useQuery({ queryKey: ["workspaces"], queryFn: getWorkspaces });
   const isManager = isAdmin || workspaces.some((w) => w.my_role === "owner" || w.my_role === "admin_ws");
 
@@ -25,100 +25,59 @@ export default function UserMenu() {
 
   if (!user) return null;
 
-  const ROLE_COLOR: Record<string, { bg: string; color: string; border: string }> = {
-    admin:  { bg: "var(--pm-violet-50)",  color: "var(--pm-violet-600)", border: "#C4B5FD" },
-    editor: { bg: "#EFF6FF",              color: "#2563EB",               border: "#BFDBFE" },
-    viewer: { bg: "#F1F5F9",              color: "#64748B",               border: "#CBD5E1" },
-  };
-  const rc = ROLE_COLOR[user.role] ?? ROLE_COLOR.viewer;
+  const tone: Tone = user.role === "admin" ? "violet" : user.role === "editor" ? "primary" : "neutral";
+  const go = (to: string) => { setOpen(false); navigate(to); };
 
-  const AVATAR_GRAD: Record<string, string> = {
-    admin:  "linear-gradient(135deg,#7C3AED,#5B21B6)",
-    editor: "linear-gradient(135deg,#0EA5E9,#0284C7)",
-    viewer: "linear-gradient(135deg,#94A3B8,#64748B)",
-  };
+  const item = (icon: React.ReactNode, label: string, sub: string, onClick: () => void, danger = false) => (
+    <button className="og-menu-item" onClick={onClick} style={{
+      display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: "var(--r-2)",
+      cursor: "pointer", border: "none", background: "transparent", width: "100%", textAlign: "left",
+      color: danger ? "var(--danger)" : "var(--text)",
+    }}>
+      <span style={{ display: "grid", placeItems: "center", width: 28, height: 28, borderRadius: 8, flex: "none", color: danger ? "var(--danger)" : "var(--text-soft)", background: "var(--surface-alt)" }}>{icon}</span>
+      <span style={{ flex: 1 }}>
+        <span style={{ display: "block", font: "600 13.5px/1.2 var(--font-sans)" }}>{label}</span>
+        {sub && <span style={{ display: "block", font: "400 11.5px/1.3 var(--font-sans)", color: "var(--text-mute)" }}>{sub}</span>}
+      </span>
+    </button>
+  );
+
+  const divider = <div style={{ height: 1, background: "var(--border)", margin: "6px 0" }} />;
 
   return (
-    <div className="um-root" ref={ref}>
-      {/* Trigger pill */}
-      <button className={`um-trigger${open ? " um-trigger--open" : ""}`} onClick={() => setOpen((v) => !v)}>
-        <div className="um-avatar" style={{ background: AVATAR_GRAD[user.role] }}>
-          {user.username.charAt(0).toUpperCase()}
-        </div>
-        <div className="um-info">
-          <span className="um-name">{user.username}</span>
-          <span className="um-role" style={{ color: rc.color, background: rc.bg, borderColor: rc.border }}>
-            {user.role === "admin" ? "★ Admin" : user.role === "editor" ? "✎ Editor" : "◉ Viewer"}
-          </span>
-        </div>
-        <svg className="um-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none">
-          <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
+    <div ref={ref} style={{ position: "relative" }}>
+      <button onClick={() => setOpen((v) => !v)} style={{
+        display: "flex", alignItems: "center", gap: 8, padding: "3px 10px 3px 3px",
+        borderRadius: "var(--r-pill)", border: "1px solid var(--border)", background: "var(--surface)",
+        cursor: "pointer", color: "var(--text)",
+      }}>
+        <Avatar name={user.username} size={28} />
+        <span style={{ font: "600 13.5px/1 var(--font-sans)" }}>{user.username}</span>
+        <Badge tone={tone}>{user.role}</Badge>
+        <ChevronDown size={13} style={{ color: "var(--text-mute)", transform: open ? "rotate(180deg)" : "none", transition: "transform var(--t-mid)" }} />
       </button>
 
-      {/* Dropdown */}
       {open && (
-        <div className="um-dropdown">
-          {/* Header */}
-          <div className="um-dropdown-header">
-            <div className="um-dropdown-avatar" style={{ background: AVATAR_GRAD[user.role] }}>
-              {user.username.charAt(0).toUpperCase()}
-            </div>
-            <div>
-              <div className="um-dropdown-name">{user.username}</div>
-              <div className="um-dropdown-email">{user.email}</div>
-            </div>
+        <div className="og-pop" style={{
+          position: "absolute", top: "calc(100% + 8px)", right: 0, minWidth: 248, zIndex: 1000,
+          background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-3)",
+          boxShadow: "var(--shadow-3)", padding: 6,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px 12px" }}>
+            <Avatar name={user.username} size={36} />
+            <span style={{ minWidth: 0 }}>
+              <span style={{ display: "block", font: "600 14px/1.2 var(--font-sans)" }}>{user.username}</span>
+              <span style={{ display: "block", font: "400 12px/1.2 var(--font-sans)", color: "var(--text-mute)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</span>
+            </span>
           </div>
-
-          <div className="um-dropdown-divider" />
-
-          {/* Personas y accesos — para admin global y owner/admin_ws */}
-          {isManager && (
-            <button className="um-item" onClick={() => { setOpen(false); navigate("/admin/personas"); }}>
-              <span className="um-item-icon um-item-icon--violet" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--pm-violet-600)" }}><IcUsers size={15} /></span>
-              <div>
-                <div className="um-item-label">Personas y accesos</div>
-                <div className="um-item-sub">Usuarios, roles, miembros, grupos y permisos</div>
-              </div>
-            </button>
-          )}
-          {isManager && (
-            <button className="um-item" onClick={() => { setOpen(false); navigate("/billing"); }}>
-              <span className="um-item-icon" style={{ background:"#FFF3E8", display: "flex", alignItems: "center", justifyContent: "center", color: "#D96C10" }}><IcCreditCard size={15} /></span>
-              <div>
-                <div className="um-item-label">Planes y facturación</div>
-                <div className="um-item-sub">Plan del workspace, uso y pagos</div>
-              </div>
-            </button>
-          )}
-          {isAdmin && (
-            <button className="um-item" onClick={() => { setOpen(false); navigate("/admin/audit"); }}>
-              <span className="um-item-icon" style={{ background:"#EFF6FF", display: "flex", alignItems: "center", justifyContent: "center", color: "#2563EB" }}><IcList size={15} /></span>
-              <div>
-                <div className="um-item-label">Registro de auditoría</div>
-                <div className="um-item-sub">Historial de todos los cambios</div>
-              </div>
-            </button>
-          )}
-
-          <div className="um-dropdown-divider" />
-
-          <button className="um-item" onClick={() => { setOpen(false); navigate("/settings"); }}>
-            <span className="um-item-icon" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-secondary)" }}><IcSettings size={15} /></span>
-            <div>
-              <div className="um-item-label">Integraciones</div>
-              <div className="um-item-sub">API tokens y webhooks</div>
-            </div>
-          </button>
-
-          <div className="um-dropdown-divider" />
-
-          <button className="um-item um-item--danger" onClick={() => { setOpen(false); logout(); }}>
-            <span className="um-item-icon um-item-icon--danger">⎋</span>
-            <div>
-              <div className="um-item-label">Cerrar sesión</div>
-            </div>
-          </button>
+          {divider}
+          {isManager && item(<Users size={15} />, "Personas y accesos", "Usuarios, roles, miembros, grupos y permisos", () => go("/admin/personas"))}
+          {isManager && item(<CreditCard size={15} />, "Planes y facturación", "Plan del workspace, uso y pagos", () => go("/billing"))}
+          {isAdmin && item(<ScrollText size={15} />, "Registro de auditoría", "Historial de todos los cambios", () => go("/admin/audit"))}
+          {divider}
+          {item(<Settings size={15} />, "Integraciones", "API tokens y webhooks", () => go("/settings"))}
+          {divider}
+          {item(<LogOut size={15} />, "Cerrar sesión", "", () => { setOpen(false); logout(); }, true)}
         </div>
       )}
     </div>

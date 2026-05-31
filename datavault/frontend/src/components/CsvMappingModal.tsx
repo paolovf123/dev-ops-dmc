@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { Upload, Check, X, ArrowRight, AlertTriangle } from "lucide-react";
 import type { ColumnDefinition } from "../types";
 import { parseCsv } from "../utils/csvImport";
 import { useEscapeKey } from "../utils/useEscapeKey";
-import { IcUpload, IcCheck } from "./ui/icons";
+import { Btn, TONE, type Tone } from "./ui/kit";
 
 interface Props {
   file: File;
@@ -11,10 +12,15 @@ interface Props {
   onClose: () => void;
 }
 
-const TYPE_COLORS: Record<ColumnDefinition["data_type"], string> = {
-  text: "#64748B", number: "#2563EB", date: "#7C3AED", enum: "#D97706", boolean: "#10B981", relation: "#64748B",
-  url: "#0EA5E9", email: "#0EA5E9", phone: "#0EA5E9", long_text: "#64748B",
-  multiselect: "#D97706", rating: "#F59E0B", currency: "#10B981", percent: "#10B981",
+// data_type → tono semántico (sin hex, salvo el frame de tokens del kit)
+const TYPE_TONE: Record<ColumnDefinition["data_type"], Tone> = {
+  text: "neutral", long_text: "neutral",
+  number: "primary", currency: "success", percent: "success", rating: "warn",
+  date: "violet",
+  enum: "warn", multiselect: "warn",
+  boolean: "success",
+  relation: "rel",
+  url: "primary", email: "primary", phone: "primary",
 };
 
 export default function CsvMappingModal({ file, columns, onConfirm, onClose }: Props) {
@@ -45,161 +51,196 @@ export default function CsvMappingModal({ file, columns, onConfirm, onClose }: P
   const preview = parsed?.rows.slice(0, 3) ?? [];
   const autoMapped = Object.values(mapping).filter(Boolean).length;
 
-  return (
-    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal modal-v2" style={{ maxWidth: 680, width: "100%" }}>
-        <div className="modal-accent" style={{ background: "linear-gradient(90deg, #0EA5E9, #0EA5E9)" }} />
+  const [pri, priSoft] = TONE.primary;
 
-        <div className="modal-header">
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div className="modal-header-icon" style={{ background: "#E0F2FE", color: "#0EA5E9", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <IcUpload size={18} />
-            </div>
-            <div>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Importar CSV</h3>
-              <p style={{ margin: 0, fontSize: 11.5, color: "var(--color-text-muted)" }}>
-                {file.name}
-                {parsed && <> · <strong style={{ color: "var(--color-text-secondary)" }}>{parsed.rows.length}</strong> filas detectadas</>}
-              </p>
+  return (
+    <div
+      onMouseDown={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 200, background: "var(--overlay)",
+        backdropFilter: "blur(5px)", display: "grid", placeItems: "center", padding: 24,
+      }}
+    >
+      <div
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{
+          width: "100%", maxWidth: 680, maxHeight: "90vh", display: "flex", flexDirection: "column",
+          background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-4)",
+          boxShadow: "var(--shadow-4)", overflow: "hidden", animation: "ogPop var(--t-slow)",
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "18px 20px", borderBottom: "1px solid var(--border)" }}>
+          <span style={{ display: "grid", placeItems: "center", width: 38, height: 38, borderRadius: "var(--r-2)", background: priSoft, color: pri, flex: "none" }}>
+            <Upload size={20} />
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ font: "700 17px/1.2 var(--font-sans)", color: "var(--text)" }}>Mapear columnas del CSV</div>
+            <div style={{ font: "400 13px/1.4 var(--font-sans)", color: "var(--text-soft)", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <span className="mono">{file.name}</span>
+              {parsed && (
+                <> · <strong style={{ color: "var(--text)" }}>{parsed.headers.length}</strong> columnas · <strong style={{ color: "var(--text)" }}>{parsed.rows.length}</strong> filas</>
+              )}
             </div>
           </div>
-          <button className="modal-close-btn" onClick={onClose} title="Cerrar">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
-            </svg>
+          <button
+            onClick={onClose}
+            className="og-iconbtn"
+            title="Cerrar"
+            style={{ width: 32, height: 32, display: "grid", placeItems: "center", border: "none", background: "transparent", borderRadius: 8, cursor: "pointer", color: "var(--text-mute)", flex: "none" }}
+          >
+            <X size={18} />
           </button>
         </div>
 
         {loading || !parsed ? (
-          <div style={{ padding: "48px 32px", textAlign: "center" }}>
-            <div className="csv-loading-spinner" />
-            <p style={{ marginTop: 14, color: "var(--color-text-muted)", fontSize: 13 }}>Leyendo archivo…</p>
+          <div style={{ padding: "56px 32px", textAlign: "center" }}>
+            <div className="csv-loading-spinner" style={{ margin: "0 auto" }} />
+            <p style={{ marginTop: 16, color: "var(--text-soft)", font: "400 13.5px/1 var(--font-sans)" }}>Leyendo archivo…</p>
           </div>
         ) : (
           <>
-            <div className="modal-body" style={{ padding: 0 }}>
+            <div style={{ padding: 20, overflow: "auto" }}>
+              {/* Aviso auto-mapeo */}
               {autoMapped > 0 && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8,
-                  padding: "10px 20px", background: "var(--pm-green-50)",
-                  borderBottom: "1px solid var(--color-primary-border)" }}>
-                  <span style={{ display: "inline-flex", color: "var(--pm-green-600)" }}><IcCheck size={14} /></span>
-                  <span style={{ fontSize: 12.5, color: "var(--pm-green-600)" }}>
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 8, marginBottom: 14,
+                  padding: "9px 12px", borderRadius: "var(--r-2)",
+                  background: "var(--success-soft)", border: "1px solid color-mix(in srgb, var(--success) 30%, transparent)",
+                  color: "var(--success)", font: "500 12.5px/1.3 var(--font-sans)",
+                }}>
+                  <Check size={15} style={{ flex: "none" }} />
+                  <span>
                     <strong>{autoMapped}</strong> columna{autoMapped !== 1 ? "s" : ""} mapeada{autoMapped !== 1 ? "s" : ""} automáticamente
                   </span>
                 </div>
               )}
 
-              <div style={{ overflowY: "auto", maxHeight: 340 }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                  <thead>
-                    <tr>
-                      {["Columna en el CSV", "→ Columna del dataset", "Vista previa"].map((h) => (
-                        <th key={h} style={{
-                          textAlign: "left", padding: "10px 16px",
-                          background: "var(--color-bg)",
-                          borderBottom: "2px solid var(--color-border)",
-                          fontWeight: 700, fontSize: 10.5,
-                          textTransform: "uppercase", letterSpacing: "0.6px",
-                          color: "var(--color-text-muted)",
-                          position: "sticky", top: 0, zIndex: 1,
-                        }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {parsed.headers.map((h, idx) => {
-                      const mapped = !!mapping[h];
-                      const targetCol = columns.find((c) => c.field_key === mapping[h]);
-                      return (
-                        <tr key={h} style={{
-                          borderBottom: "1px solid var(--color-border-light)",
-                          background: idx % 2 === 0 ? "var(--color-surface)" : "#FAFBFC",
-                        }}>
-                          <td style={{ padding: "9px 16px" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                              <span style={{
-                                display: "inline-block", width: 7, height: 7, borderRadius: "50%",
-                                background: mapped ? "var(--pm-green-500)" : "var(--color-border)",
-                                flexShrink: 0,
-                              }} />
-                              <code style={{
-                                fontFamily: "var(--font-mono)", fontSize: 12,
-                                background: "var(--color-border-light)",
-                                padding: "2px 7px", borderRadius: 4,
-                                color: "var(--color-text-secondary)",
-                              }}>{h}</code>
-                            </div>
-                          </td>
-                          <td style={{ padding: "7px 16px" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                              <select
-                                value={mapping[h] ?? ""}
-                                onChange={(e) => setMapping((p) => ({ ...p, [h]: e.target.value }))}
-                                style={{
-                                  flex: 1, fontSize: 12.5,
-                                  borderColor: mapped ? "var(--color-primary-border)" : undefined,
-                                  background: mapped ? "var(--pm-green-50)" : undefined,
-                                }}>
-                                <option value="">— ignorar —</option>
-                                {columns.map((c) => (
-                                  <option key={c.field_key} value={c.field_key}>{c.name}</option>
-                                ))}
-                              </select>
-                              {targetCol && (
-                                <span style={{
-                                  fontSize: 10, fontWeight: 700,
-                                  padding: "2px 6px", borderRadius: 99, flexShrink: 0,
-                                  color: TYPE_COLORS[targetCol.data_type],
-                                  background: TYPE_COLORS[targetCol.data_type] + "15",
-                                  border: `1px solid ${TYPE_COLORS[targetCol.data_type]}30`,
-                                }}>{targetCol.data_type}</span>
-                              )}
-                            </div>
-                          </td>
-                          <td style={{ padding: "9px 16px", color: "var(--color-text-muted)", fontSize: 12, maxWidth: 160 }}>
-                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>
-                              {preview.map((r) => r[h]).filter(Boolean).slice(0, 2).join(", ") || <em>sin datos</em>}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Summary bar */}
-              <div style={{
-                display: "flex", alignItems: "center", gap: 12,
-                padding: "12px 20px", background: "var(--color-bg)",
-                borderTop: "1px solid var(--color-border-light)",
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: 18, fontWeight: 800, color: "var(--color-text)" }}>{mappedCount}</span>
-                  <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
-                    / {parsed.headers.length} columnas mapeadas
-                  </span>
+              {/* Tabla de mapeo */}
+              <div style={{ border: "1px solid var(--border)", borderRadius: "var(--r-2)", overflow: "hidden" }}>
+                <div style={{
+                  display: "grid", gridTemplateColumns: "1fr 26px minmax(0, 1.1fr)",
+                  alignItems: "center", padding: "9px 12px",
+                  background: "var(--surface-2)", borderBottom: "1px solid var(--border)",
+                  font: "600 11.5px/1 var(--font-sans)", color: "var(--text-mute)",
+                  textTransform: "uppercase", letterSpacing: ".04em",
+                }}>
+                  <span>Columna del CSV</span>
+                  <span />
+                  <span>Campo del dataset</span>
                 </div>
-                <div style={{ width: 1, height: 16, background: "var(--color-border)" }} />
-                <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
-                  <strong style={{ color: "var(--color-text)" }}>{parsed.rows.length}</strong> filas a importar
-                </span>
-                {mappedCount === 0 && (
-                  <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--pm-orange-600)",
-                    background: "var(--pm-orange-50)", padding: "3px 10px",
-                    borderRadius: 99, border: "1px solid #FDE68A" }}>
-                    Mapea al menos una columna para continuar
+
+                <div style={{ maxHeight: 320, overflowY: "auto" }}>
+                  {parsed.headers.map((h, idx) => {
+                    const mapped = !!mapping[h];
+                    const targetCol = columns.find((c) => c.field_key === mapping[h]);
+                    const [tfg, tbg] = targetCol ? TONE[TYPE_TONE[targetCol.data_type]] : TONE.neutral;
+                    const sample = preview.map((r) => r[h]).filter(Boolean).slice(0, 2).join(", ");
+                    return (
+                      <div
+                        key={h}
+                        style={{
+                          display: "grid", gridTemplateColumns: "1fr 26px minmax(0, 1.1fr)",
+                          alignItems: "center", gap: 4, padding: "9px 12px",
+                          borderBottom: idx < parsed.headers.length - 1 ? "1px solid var(--border)" : "none",
+                          opacity: mapped ? 1 : 0.62,
+                        }}
+                      >
+                        {/* Columna CSV */}
+                        <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+                          <span style={{
+                            width: 7, height: 7, borderRadius: "var(--r-pill)", flex: "none",
+                            background: mapped ? "var(--success)" : "var(--border-strong)",
+                          }} />
+                          <code className="mono" style={{
+                            font: "500 12.5px/1 var(--font-mono)", color: "var(--text)",
+                            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                          }}>{h}</code>
+                        </div>
+
+                        <ArrowRight size={14} color="var(--text-mute)" style={{ justifySelf: "center" }} />
+
+                        {/* Campo destino: select + chip de tipo + preview */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+                            <select
+                              value={mapping[h] ?? ""}
+                              onChange={(e) => setMapping((p) => ({ ...p, [h]: e.target.value }))}
+                              style={{
+                                flex: 1, minWidth: 0, height: 34, padding: "0 10px",
+                                borderRadius: "var(--r-2)", outline: "none",
+                                font: "500 12.5px/1 var(--font-sans)",
+                                color: mapped ? "var(--text)" : "var(--text-mute)",
+                                border: `1px solid ${mapped ? "color-mix(in srgb, var(--success) 40%, transparent)" : "var(--border)"}`,
+                                background: mapped ? "var(--success-soft)" : "var(--surface)",
+                              }}
+                            >
+                              <option value="">— ignorar —</option>
+                              {columns.map((c) => (
+                                <option key={c.field_key} value={c.field_key}>{c.name}</option>
+                              ))}
+                            </select>
+                            {targetCol && (
+                              <span className="mono" style={{
+                                font: "600 10px/1 var(--font-mono)", flex: "none",
+                                padding: "3px 7px", borderRadius: "var(--r-pill)",
+                                color: tfg, background: tbg,
+                                border: `1px solid color-mix(in srgb, ${tfg} 30%, transparent)`,
+                              }}>{targetCol.data_type}</span>
+                            )}
+                          </div>
+                          <span style={{
+                            font: "400 11.5px/1.3 var(--font-sans)", color: "var(--text-mute)",
+                            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                          }}>
+                            {sample ? sample : <em>sin datos</em>}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Resumen X/Y mapeadas + Z filas */}
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 12,
+                  padding: "11px 12px", background: "var(--surface-2)", borderTop: "1px solid var(--border)",
+                }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                    <span style={{ font: "800 17px/1 var(--font-sans)", color: "var(--text)" }}>{mappedCount}</span>
+                    <span style={{ font: "400 12px/1 var(--font-sans)", color: "var(--text-soft)" }}>
+                      / {parsed.headers.length} columnas mapeadas
+                    </span>
+                  </div>
+                  <span style={{ width: 1, height: 16, background: "var(--border)" }} />
+                  <span style={{ font: "400 12px/1 var(--font-sans)", color: "var(--text-soft)" }}>
+                    <strong style={{ color: "var(--text)" }}>{parsed.rows.length}</strong> filas a importar
                   </span>
-                )}
+                  {mappedCount === 0 && (
+                    <span style={{
+                      marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6,
+                      font: "500 11.5px/1 var(--font-sans)", color: "var(--warning)",
+                      background: "var(--warning-soft)", padding: "4px 10px", borderRadius: "var(--r-pill)",
+                      border: "1px solid color-mix(in srgb, var(--warning) 30%, transparent)",
+                    }}>
+                      <AlertTriangle size={13} /> Mapea al menos una columna
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-              <button className="btn btn-primary" disabled={mappedCount === 0}
-                onClick={() => onConfirm(mapping, parsed.rows)}>
+            {/* Footer */}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, padding: "14px 20px", borderTop: "1px solid var(--border)", background: "var(--surface-2)" }}>
+              <Btn variant="ghost" onClick={onClose}>Cancelar</Btn>
+              <Btn
+                variant="primary"
+                icon={<Check size={16} />}
+                disabled={mappedCount === 0}
+                onClick={() => onConfirm(mapping, parsed.rows)}
+              >
                 Importar {parsed.rows.length} filas
-              </button>
+              </Btn>
             </div>
           </>
         )}

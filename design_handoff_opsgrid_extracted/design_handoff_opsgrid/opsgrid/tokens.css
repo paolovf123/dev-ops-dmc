@@ -1,0 +1,125 @@
+/* OpsGrid — design tokens (derived from DESIGN_BRIEF §3)
+   Light + dark, 6 swappable palettes, 3 semantic accents.
+   Set on <html>: data-theme="light|dark"  data-palette="citrus|electric|mint|dusk|tropic|y2k"  data-density="compact|regular|comfy" */
+
+:root {
+  /* ---- type ---- */
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* ---- radii ---- */
+  --r-1: 4px;  --r-2: 8px;  --r-3: 12px;  --r-4: 16px;  --r-5: 24px;  --r-pill: 999px;
+
+  /* ---- motion ---- */
+  --t-fast: 120ms cubic-bezier(.2,.6,.3,1);
+  --t-mid: 150ms cubic-bezier(.2,.6,.3,1);
+  --t-slow: 240ms cubic-bezier(.2,.6,.3,1);
+
+  /* ---- status (constant across palettes) ---- */
+  --success: #0fb583;  --warning: #f4a300;  --danger: #e8455a;
+  --violet: #7a5ae0;
+
+  /* ---- density ---- */
+  --row-h: 38px;
+
+  /* ---- neutrals: LIGHT (cool) ---- */
+  --bg: #f3f5f9;
+  --surface: #ffffff;
+  --surface-alt: #eef1f6;
+  --surface-2: #f8fafc;
+  --border: #e4e8ef;
+  --border-strong: #d0d7e2;
+  --text: #161b24;
+  --text-soft: #586173;
+  --text-mute: #98a1b2;
+  --shadow-1: 0 1px 2px rgba(20,28,46,.07);
+  --shadow-2: 0 3px 8px rgba(20,28,46,.09);
+  --shadow-3: 0 10px 28px rgba(20,28,46,.12);
+  --shadow-4: 0 20px 52px rgba(20,28,46,.18);
+  --overlay: rgba(22,27,36,.42);
+}
+
+:root[data-density="compact"] { --row-h: 30px; }
+:root[data-density="comfy"]   { --row-h: 44px; }
+
+/* ---- neutrals: DARK ---- */
+:root[data-theme="dark"] {
+  --bg: #0b0e14;
+  --surface: #141922;
+  --surface-alt: #1b212c;
+  --surface-2: #10151d;
+  --border: #29313e;
+  --border-strong: #3a4452;
+  --text: #e9edf4;
+  --text-soft: #9ba6b6;
+  --text-mute: #647082;
+  --shadow-1: 0 1px 2px rgba(0,0,0,.4);
+  --shadow-2: 0 3px 10px rgba(0,0,0,.45);
+  --shadow-3: 0 12px 32px rgba(0,0,0,.55);
+  --shadow-4: 0 22px 56px rgba(0,0,0,.65);
+  --overlay: rgba(4,7,12,.6);
+}
+
+/* ====== PALETTES — 3 semantic accents each ======
+   --accent-pri  : brand / CTA / focus / "Live"
+   --accent-rel  : relations / lookups / chips between tables
+   --accent-calc : scripts / computed / derived columns        */
+
+:root, :root[data-palette="citrus"] {
+  --accent-pri: #1e4cff;  --accent-rel: #ff6a18;  --accent-calc: #e436b6;
+}
+:root[data-palette="electric"] {
+  --accent-pri: #4361ff;  --accent-rel: #ff4d6d;  --accent-calc: #b14dff;
+}
+:root[data-palette="mint"] {
+  --accent-pri: #0ea371;  --accent-rel: #ff8a3d;  --accent-calc: #c44ddb;
+}
+:root[data-palette="dusk"] {
+  --accent-pri: #7b6cff;  --accent-rel: #f0875a;  --accent-calc: #d96bb4;
+}
+:root[data-palette="tropic"] {
+  --accent-pri: #0bb3c9;  --accent-rel: #ff7a45;  --accent-calc: #f25c8a;
+}
+:root[data-palette="y2k"] {
+  --accent-pri: #3b5bff;  --accent-rel: #ff5fb0;  --accent-calc: #9b6bff;
+}
+
+/* derived soft tints + inks (work on any bg via alpha) */
+:root {
+  --pri-soft:  color-mix(in srgb, var(--accent-pri) 12%, transparent);
+  --pri-soft2: color-mix(in srgb, var(--accent-pri) 22%, transparent);
+  --rel-soft:  color-mix(in srgb, var(--accent-rel) 14%, transparent);
+  --calc-soft: color-mix(in srgb, var(--accent-calc) 14%, transparent);
+  --violet-soft: color-mix(in srgb, var(--violet) 16%, transparent);
+  --success-soft: color-mix(in srgb, var(--success) 16%, transparent);
+  --warning-soft: color-mix(in srgb, var(--warning) 18%, transparent);
+  --danger-soft: color-mix(in srgb, var(--danger) 14%, transparent);
+  --shadow-focus: 0 0 0 3px color-mix(in srgb, var(--accent-pri) 32%, transparent);
+}
+:root[data-theme="dark"] {
+  --pri-soft:  color-mix(in srgb, var(--accent-pri) 24%, transparent);
+  --pri-soft2: color-mix(in srgb, var(--accent-pri) 34%, transparent);
+  --rel-soft:  color-mix(in srgb, var(--accent-rel) 26%, transparent);
+  --calc-soft: color-mix(in srgb, var(--accent-calc) 26%, transparent);
+  --violet-soft: color-mix(in srgb, var(--violet) 30%, transparent);
+  --success-soft: color-mix(in srgb, var(--success) 26%, transparent);
+  --warning-soft: color-mix(in srgb, var(--warning) 28%, transparent);
+  --danger-soft: color-mix(in srgb, var(--danger) 26%, transparent);
+}
+
+/* ---- base ---- */
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.mono { font-family: var(--font-mono); font-feature-settings: "tnum" 1; }
+::selection { background: var(--pri-soft2); }
+:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-mute); }

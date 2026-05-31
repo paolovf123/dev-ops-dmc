@@ -1,4 +1,8 @@
 import { createContext, useCallback, useContext, useRef, useState } from "react";
+import { CheckCircle2, XCircle, AlertTriangle, Info } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { TONE } from "./ui/kit";
+import type { Tone } from "./ui/kit";
 
 export type ToastVariant = "success" | "error" | "info" | "warning";
 
@@ -14,11 +18,12 @@ interface ToastContextValue {
 
 const ToastContext = createContext<ToastContextValue>({ toast: () => {} });
 
-const ICONS: Record<ToastVariant, string> = {
-  success: "✓",
-  error:   "✕",
-  warning: "⚠",
-  info:    "ℹ",
+// variant → [icono lucide, tono del kit]
+const META: Record<ToastVariant, [LucideIcon, Tone]> = {
+  success: [CheckCircle2, "success"],
+  error:   [XCircle, "danger"],
+  warning: [AlertTriangle, "warn"],
+  info:    [Info, "primary"],
 };
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
@@ -38,14 +43,43 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      <div className="toast-stack">
-        {toasts.map((t) => (
-          <div key={t.id} className={`toast toast--${t.variant}`} onClick={() => dismiss(t.id)}>
-            <span className={`toast-icon toast-icon--${t.variant}`}>{ICONS[t.variant]}</span>
-            <span className="toast-message">{t.message}</span>
-            <button className="toast-close">✕</button>
-          </div>
-        ))}
+      <div
+        style={{
+          position: "fixed", right: 20, bottom: 20, zIndex: 240,
+          display: "flex", flexDirection: "column", gap: 10,
+          pointerEvents: "none",
+        }}
+      >
+        {toasts.map((t) => {
+          const [IconCmp, tone] = META[t.variant] || META.info;
+          const [fg] = TONE[tone];
+          return (
+            <div
+              key={t.id}
+              className="og-slide"
+              onClick={() => dismiss(t.id)}
+              style={{
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "12px 15px", minWidth: 240, maxWidth: 360,
+                borderRadius: "var(--r-3)", background: "var(--surface)",
+                border: "1px solid var(--border)", boxShadow: "var(--shadow-3)",
+                cursor: "pointer", pointerEvents: "auto",
+              }}
+            >
+              <span
+                style={{
+                  display: "grid", placeItems: "center", width: 22, height: 22,
+                  borderRadius: 999, background: fg, color: "#fff", flex: "none",
+                }}
+              >
+                <IconCmp size={13} />
+              </span>
+              <span style={{ font: "500 13px var(--font-sans)", color: "var(--text)", flex: 1 }}>
+                {t.message}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </ToastContext.Provider>
   );

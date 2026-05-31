@@ -1,11 +1,11 @@
 import api from "./client";
 import type { UserGroup, GroupMember } from "../types";
 
-export const getGroups = () =>
-  api.get<UserGroup[]>("/groups").then((r) => r.data);
+export const getGroups = (workspaceId?: string) =>
+  api.get<UserGroup[]>("/groups", workspaceId ? { params: { workspace_id: workspaceId } } : undefined).then((r) => r.data);
 
-export const createGroup = (name: string, description?: string) =>
-  api.post<UserGroup>("/groups", { name, description }).then((r) => r.data);
+export const createGroup = (body: { name: string; description?: string | null; workspace_id?: string | null }) =>
+  api.post<UserGroup>("/groups", body).then((r) => r.data);
 
 export const updateGroup = (id: string, body: { name?: string; description?: string }) =>
   api.patch<UserGroup>(`/groups/${id}`, body).then((r) => r.data);

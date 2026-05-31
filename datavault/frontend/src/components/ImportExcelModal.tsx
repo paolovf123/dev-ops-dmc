@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
   previewExcelImport,
@@ -8,18 +9,22 @@ import {
 import type { ExcelPreview } from "../api/datasets";
 import { useEscapeKey } from "../utils/useEscapeKey";
 import {
-  IcUpload,
-  IcFile,
-  IcArrowRight,
-  IcSparkles,
-  IcCheck,
-  IcLock,
-  IcShield,
-  IcTrash,
-  IcTable,
-  IcList,
-  IcLink,
-} from "./ui/icons";
+  Upload,
+  FileSpreadsheet,
+  ArrowRight,
+  Sparkles,
+  Check,
+  CheckCircle2,
+  Lock,
+  Shield,
+  Trash2,
+  Table2,
+  List,
+  Link2,
+  AlertTriangle,
+  X,
+} from "lucide-react";
+import { Btn } from "./ui/kit";
 
 const TYPE_GLYPH: Record<string, string> = {
   text: "A", long_text: "A", url: "@", email: "@", phone: "#",
@@ -63,6 +68,19 @@ const STEPS = [
   { n: 3, label: "Mapear columnas" },
   { n: 4, label: "Confirmar" },
 ];
+
+// ── tokens de estilo compartidos ───────────────────────────────────────────────
+const bodyHeadTitle: CSSProperties = {
+  margin: 0, font: "700 17px/1.2 var(--font-sans)", letterSpacing: "-.01em", color: "var(--text)",
+};
+const bodyHeadSub: CSSProperties = {
+  margin: "5px 0 18px", font: "400 13px/1.55 var(--font-sans)", color: "var(--text-soft)",
+};
+const sheetTile: CSSProperties = {
+  display: "inline-flex", alignItems: "center", justifyContent: "center",
+  width: 30, height: 30, borderRadius: "var(--r-2)",
+  background: "var(--success-soft)", color: "var(--success)", flexShrink: 0,
+};
 
 export default function ImportExcelModal({ open, onClose, workspaceId, onSuccess, onMultiSuccess, initialFile }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -232,531 +250,617 @@ export default function ImportExcelModal({ open, onClose, workspaceId, onSuccess
   };
 
   return (
-    // El modal se renderiza FUERA del AppShell, por lo que envolvemos en `.og`
-    // para que las clases del design system (.wiz-*, .btn--*, .input, etc.) apliquen.
-    <div className="og">
-      {/* Overlay/backdrop — clicable para cerrar */}
+    // El modal vive FUERA del AppShell — usamos el frame inline del handoff
+    // (tokens), no las clases del primer rebrand. Cierra con Esc (useEscapeKey)
+    // y con click en el backdrop.
+    <div
+      onMouseDown={handleClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 1000, padding: 24,
+        background: "var(--overlay)", backdropFilter: "blur(5px)",
+        WebkitBackdropFilter: "blur(5px)",
+        display: "grid", placeItems: "center", animation: "ogFade var(--t-mid)",
+      }}
+    >
       <div
-        className="wiz-overlay"
-        style={{ zIndex: 1000 }}
-        onClick={(e) => e.target === e.currentTarget && handleClose()}
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{
+          width: "100%", maxWidth: 660, maxHeight: "92vh",
+          display: "flex", flexDirection: "column",
+          background: "var(--surface)", border: "1px solid var(--border)",
+          borderRadius: "var(--r-4)", boxShadow: "var(--shadow-4)",
+          animation: "ogPop var(--t-slow)", overflow: "hidden",
+        }}
       >
-        <div className="wiz" onClick={(e) => e.stopPropagation()}>
-
-          {/* Head */}
-          <div className="wiz-head">
-            <div className="wiz-head__title">
-              <span style={{ display: "inline-flex", color: "var(--accent-pri)" }}><IcUpload size={16} /></span>
+        {/* ── Header ── */}
+        <div style={{
+          display: "flex", alignItems: "flex-start", gap: 12,
+          padding: "18px 20px", borderBottom: "1px solid var(--border)",
+        }}>
+          <span style={{
+            display: "grid", placeItems: "center", width: 38, height: 38, flex: "none",
+            borderRadius: "var(--r-2)", background: "var(--pri-soft)", color: "var(--accent-pri)",
+          }}>
+            <Upload size={20} />
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ font: "700 17px/1.2 var(--font-sans)", color: "var(--text)" }}>
               Importar Excel
-              {preview && (
-                <span className="file">
-                  <span style={{ display: "inline-flex", verticalAlign: -1, color: "#1da462" }}><IcFile size={11} /></span>{" "}
-                  {preview.filename}
+            </div>
+            <div style={{ font: "400 13px/1.4 var(--font-sans)", color: "var(--text-soft)", marginTop: 3 }}>
+              {preview ? (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <FileSpreadsheet size={13} style={{ color: "var(--success)", flex: "none" }} />
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {preview.filename}
+                  </span>
                 </span>
+              ) : (
+                "Convierte tus hojas en datasets relacionados"
               )}
             </div>
-            <button className="wiz-head__close" title="Cerrar" onClick={handleClose}>
-              <span style={{ display: "inline-flex" }}>✕</span>
-            </button>
           </div>
+          <button
+            type="button" onClick={handleClose} title="Cerrar" aria-label="Cerrar"
+            className="og-iconbtn"
+            style={{
+              width: 32, height: 32, display: "grid", placeItems: "center", flex: "none",
+              border: "none", background: "transparent", borderRadius: 8, cursor: "pointer",
+              color: "var(--text-mute)",
+            }}
+          >
+            <X size={18} />
+          </button>
+        </div>
 
-          {/* Stepper */}
-          <div className="wiz-steps">
-            {STEPS.map((s) => {
-              const isDone = s.n < step;
-              const isActive = s.n === step;
-              const reachable = s.n === 1 || !!preview;
-              return (
-                <div
-                  key={s.n}
-                  className={`wiz-step${isDone ? " is-done" : ""}${isActive ? " is-active" : ""}`}
+        {/* ── Stepper ── */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "16px 20px 4px",
+        }}>
+          {STEPS.map((s, i) => {
+            const isDone = s.n < step;
+            const isActive = s.n === step;
+            const reachable = s.n === 1 || !!preview;
+            const on = isActive, done = isDone;
+            return (
+              <div key={s.n} style={{ display: "contents" }}>
+                <button
+                  type="button"
                   onClick={() => reachable && goToStep(s.n)}
-                  style={{ cursor: reachable ? "pointer" : "default" }}
-                >
-                  <span className="wiz-step__n">
-                    {isDone ? <IcCheck size={11} /> : s.n}
-                  </span>
-                  {s.n} · {s.label}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Body */}
-          <div className="wiz-body">
-
-            {/* ─────────── STEP 1 — Subir archivo ─────────── */}
-            {step === 1 && (
-              <>
-                <div className="wiz-body__head">
-                  <h2>Sube tu Excel</h2>
-                  <p>
-                    Soportamos <b>.xlsx</b>, <b>.xls</b> y <b>.xlsm</b>. Detectamos automáticamente
-                    las hojas, los encabezados y el tipo de cada columna. Cada hoja se puede
-                    importar como un dataset independiente.
-                  </p>
-                </div>
-
-                <div
-                  className="drop-zone"
-                  onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                  onDragLeave={() => setDragOver(false)}
-                  onDrop={(e) => {
-                    e.preventDefault(); setDragOver(false);
-                    const f = e.dataTransfer.files[0];
-                    if (f) handleFile(f);
-                  }}
-                  onClick={() => fileRef.current?.click()}
+                  disabled={!reachable}
                   style={{
-                    border: `2px dashed ${dragOver ? "var(--accent-pri)" : "color-mix(in oklab, var(--accent-pri) 35%, var(--border))"}`,
-                    background: dragOver
-                      ? "color-mix(in oklab, var(--accent-pri) 6%, var(--surface))"
-                      : "color-mix(in oklab, var(--accent-pri) 3%, var(--surface))",
-                    borderRadius: "var(--r-4)",
-                    padding: "var(--sp-12) var(--sp-6)",
-                    textAlign: "center",
-                    cursor: "pointer",
-                    transition: "var(--t-base)",
+                    display: "inline-flex", alignItems: "center", gap: 7,
+                    font: `${on ? 600 : 500} 12.5px var(--font-sans)`,
+                    color: on ? "var(--text)" : "var(--text-mute)", whiteSpace: "nowrap",
+                    border: "none", background: "transparent", padding: 0,
+                    cursor: reachable ? "pointer" : "default",
                   }}
                 >
-                  <input
-                    ref={fileRef} type="file" accept=".xlsx,.xlsm,.xls" style={{ display: "none" }}
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
-                  />
-                  {previewMut.isPending ? (
-                    <p style={{ margin: 0, color: "var(--text-soft)", fontSize: "var(--fs-14)" }}>Analizando archivo…</p>
-                  ) : (
-                    <>
-                      <div
-                        style={{
-                          width: 64, height: 64, borderRadius: "var(--r-3)",
-                          background: "var(--accent-pri-soft)", color: "var(--accent-pri)",
-                          display: "inline-flex", alignItems: "center", justifyContent: "center",
-                          marginBottom: "var(--sp-3)",
-                        }}
-                      >
-                        <IcUpload size={30} />
-                      </div>
-                      <h3 style={{ margin: "0 0 var(--sp-1)", fontSize: "var(--fs-18)", fontWeight: 600 }}>
-                        Arrastra el archivo aquí
-                      </h3>
-                      <p style={{ margin: 0, fontSize: "var(--fs-13)", color: "var(--text-soft)" }}>
-                        … o haz click para buscarlo en tu equipo
-                      </p>
-                      <button
-                        className="btn btn--primary"
-                        style={{ marginTop: "var(--sp-3)" }}
-                        onClick={(e) => { e.stopPropagation(); fileRef.current?.click(); }}
-                      >
-                        Seleccionar archivo
-                      </button>
-                      <div
-                        style={{
-                          display: "flex", gap: "var(--sp-3)", justifyContent: "center",
-                          marginTop: "var(--sp-5)", fontSize: "var(--fs-11)", color: "var(--text-mute)",
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><IcLock size={12} /> Tu archivo nunca sale de tu workspace</span>
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><IcShield size={12} /> Cifrado en tránsito y en reposo</span>
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><IcTrash size={12} /> Lo eliminamos cuando confirmes</span>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {previewErr && (
-                  <p
-                    style={{
-                      margin: "var(--sp-4) 0 0", color: "var(--danger)", fontSize: "var(--fs-13)",
-                      padding: "var(--sp-2) var(--sp-3)",
-                      background: "color-mix(in oklab, var(--danger) 8%, var(--surface))",
-                      borderRadius: "var(--r-2)",
-                      border: "1px solid color-mix(in oklab, var(--danger) 30%, var(--border))",
-                    }}
-                  >
-                    ⚠ {previewErr}
-                  </p>
-                )}
-              </>
-            )}
-
-            {/* ─────────── STEP 2 — Vista previa ─────────── */}
-            {step === 2 && preview && (
-              <>
-                <div className="wiz-body__head">
-                  <h2>Vista previa · ¿se ve bien?</h2>
-                  <p>
-                    Detectamos <b>{preview.sheets.length} hoja{preview.sheets.length !== 1 ? "s" : ""}</b> en el archivo.
-                    Elige cuáles importar y, si quieres, renómbralas. Cada hoja seleccionada se creará
-                    como un dataset.
-                  </p>
-                </div>
-
-                {/* Selector de hojas (segmentos) */}
-                <div className="preview-controls" style={{
-                  display: "flex", alignItems: "center", gap: "var(--sp-2)",
-                  padding: "var(--sp-2) var(--sp-3)", background: "var(--surface-alt)",
-                  border: "1px solid var(--border-soft)", borderRadius: "var(--r-2)",
-                  marginBottom: "var(--sp-3)", flexWrap: "wrap",
-                }}>
                   <span style={{
-                    display: "inline-flex", background: "var(--surface)", borderRadius: "var(--r-1)",
-                    border: "1px solid var(--border-soft)", padding: 2, flexWrap: "wrap",
+                    display: "grid", placeItems: "center", width: 22, height: 22, borderRadius: 999,
+                    background: on || done ? "var(--accent-pri)" : "var(--surface-alt)",
+                    color: on || done ? "#fff" : "var(--text-mute)",
+                    font: "700 11px var(--font-sans)", flex: "none",
                   }}>
-                    {preview.sheets.map((s) => {
-                      const active = focusedSheet === s.name;
-                      return (
-                        <button
-                          key={s.name}
-                          onClick={() => setFocusedSheet(s.name)}
-                          style={{
-                            border: 0, background: active ? "var(--accent-pri)" : "transparent",
-                            color: active ? "#fff" : "var(--text-soft)",
-                            padding: "2px var(--sp-2)", fontSize: "var(--fs-11)", borderRadius: 3,
-                            cursor: "pointer", fontFamily: "inherit", fontWeight: 500,
-                          }}
-                        >
-                          {s.name} <span style={{ opacity: 0.7 }}>{s.row_count}</span>
-                        </button>
-                      );
-                    })}
+                    {done ? <Check size={12} /> : s.n}
                   </span>
-                  {preview.sheets.length > 1 && (
-                    <button
-                      className="btn btn--ghost btn--sm"
-                      style={{ marginLeft: "auto" }}
-                      onClick={selectAll}
-                    >
-                      {preview.sheets.every((s) => sheetState[s.name]?.selected) ? "Quitar todas" : "Seleccionar todas"}
-                    </button>
-                  )}
-                </div>
+                  {s.label}
+                </button>
+                {i < STEPS.length - 1 && (
+                  <span style={{ flex: 1, height: 2, minWidth: 14, background: "var(--border)" }} />
+                )}
+              </div>
+            );
+          })}
+        </div>
 
-                {/* Lista de hojas con checkbox + nombre editable */}
-                <div style={{
-                  border: "1px solid var(--border-soft)", borderRadius: "var(--r-2)",
-                  overflow: "hidden", marginBottom: "var(--sp-4)",
-                }}>
-                  {preview.sheets.map((s) => {
-                    const st = sheetState[s.name];
-                    const isFocused = focusedSheet === s.name;
-                    return (
-                      <div
-                        key={s.name}
-                        onClick={() => setFocusedSheet(s.name)}
-                        style={{
-                          display: "flex", alignItems: "center", gap: "var(--sp-3)",
-                          padding: "var(--sp-2) var(--sp-3)",
-                          borderBottom: "1px solid var(--border-soft)",
-                          background: isFocused ? "var(--accent-pri-soft)" : "transparent",
-                          cursor: "pointer",
-                        }}
-                      >
-                        <input
-                          type="checkbox" checked={!!st?.selected}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={() => toggleSheet(s.name)}
-                          style={{ width: 16, height: 16, cursor: "pointer" }}
-                        />
-                        <span style={{
-                          display: "inline-flex", alignItems: "center", justifyContent: "center",
-                          width: 28, height: 28, borderRadius: "var(--r-1)",
-                          background: "color-mix(in oklab, #1da462 14%, var(--surface))", color: "#1da462",
-                          flexShrink: 0,
-                        }}>
-                          <IcTable size={14} />
-                        </span>
-                        <div style={{ minWidth: 0, flex: "0 0 30%" }}>
-                          <div style={{ fontSize: "var(--fs-13)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {s.name}
-                          </div>
-                          <div style={{ fontSize: "var(--fs-11)", color: "var(--text-mute)", fontFamily: "var(--font-mono)" }}>
-                            {s.row_count} filas · {s.columns.length} col
-                          </div>
-                        </div>
-                        <input
-                          type="text"
-                          className="input"
-                          value={st?.name ?? ""}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => renameSheet(s.name, e.target.value)}
-                          placeholder="Nombre del dataset"
-                          disabled={!st?.selected}
-                          style={{ flex: 1, height: 32 }}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
+        {/* ── Body ── */}
+        <div style={{ padding: 20, overflow: "auto" }}>
 
-                {/* Vista previa de columnas de la hoja enfocada */}
-                {currentSheet && (
+          {/* ─────────── STEP 1 — Subir archivo ─────────── */}
+          {step === 1 && (
+            <>
+              <div>
+                <h2 style={bodyHeadTitle}>Sube tu Excel</h2>
+                <p style={bodyHeadSub}>
+                  Soportamos <b style={{ color: "var(--text)" }}>.xlsx</b>, <b style={{ color: "var(--text)" }}>.xls</b> y{" "}
+                  <b style={{ color: "var(--text)" }}>.xlsm</b>. Detectamos automáticamente las hojas, los
+                  encabezados y el tipo de cada columna. Cada hoja se puede importar como un dataset
+                  independiente.
+                </p>
+              </div>
+
+              <div
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault(); setDragOver(false);
+                  const f = e.dataTransfer.files[0];
+                  if (f) handleFile(f);
+                }}
+                onClick={() => fileRef.current?.click()}
+                style={{
+                  border: `2px dashed ${dragOver ? "var(--accent-pri)" : "var(--border-strong)"}`,
+                  background: dragOver ? "var(--pri-soft)" : "var(--surface-2)",
+                  borderRadius: "var(--r-3)",
+                  padding: "40px 24px",
+                  textAlign: "center",
+                  cursor: "pointer",
+                  transition: "all var(--t-mid)",
+                }}
+              >
+                <input
+                  ref={fileRef} type="file" accept=".xlsx,.xlsm,.xls" style={{ display: "none" }}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+                />
+                {previewMut.isPending ? (
+                  <p style={{ margin: 0, color: "var(--text-soft)", font: "400 14px var(--font-sans)" }}>
+                    Analizando archivo…
+                  </p>
+                ) : (
                   <>
-                    <p style={{ margin: "0 0 var(--sp-2)", fontSize: "var(--fs-12)", color: "var(--text-soft)" }}>
-                      Columnas detectadas en{" "}
-                      <b style={{ color: "var(--text)" }}>{currentSheet.name}</b>{" "}
-                      <span style={{ color: "var(--text-mute)" }}>({currentSheet.columns.length})</span>
+                    <span style={{
+                      display: "grid", placeItems: "center", width: 56, height: 56,
+                      margin: "0 auto 14px", borderRadius: "var(--r-3)",
+                      background: "var(--pri-soft)", color: "var(--accent-pri)",
+                    }}>
+                      <Upload size={26} />
+                    </span>
+                    <h3 style={{ margin: "0 0 4px", font: "600 15px var(--font-sans)", color: "var(--text)" }}>
+                      Arrastra el archivo aquí
+                    </h3>
+                    <p style={{ margin: 0, font: "400 13px var(--font-sans)", color: "var(--text-soft)" }}>
+                      … o haz click para buscarlo en tu equipo
                     </p>
-                    <div style={{ overflowX: "auto", border: "1px solid var(--border-soft)", borderRadius: "var(--r-2)" }}>
-                      <table style={{
-                        width: "100%", borderCollapse: "separate", borderSpacing: 0,
-                        fontSize: "var(--fs-12)", background: "var(--surface)",
-                      }}>
-                        <thead>
-                          <tr>
-                            {currentSheet.columns.map((col, i) => (
-                              <th key={i} style={{
-                                padding: "var(--sp-1) var(--sp-2)", textAlign: "left",
-                                borderBottom: "1px solid var(--border-soft)",
-                                borderRight: "1px solid var(--border-soft)",
-                                background: "var(--surface-alt)", fontWeight: 600,
-                                whiteSpace: "nowrap", color: "var(--text)", fontSize: "var(--fs-11)",
-                              }}>
-                                {col.header}
-                                <span style={{
-                                  display: "block", fontFamily: "var(--font-mono)", fontSize: 9.5,
-                                  color: "var(--text-mute)", fontWeight: 500, marginTop: 1,
-                                }}>
-                                  {TYPE_GLYPH[col.data_type] ?? "A"} {TYPE_LABELS[col.data_type] ?? col.data_type}
-                                </span>
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr>
-                            {currentSheet.columns.map((col, i) => (
-                              <td key={i} style={{
-                                padding: "var(--sp-1) var(--sp-2)",
-                                borderRight: "1px solid var(--border-soft)",
-                                color: "var(--text-mute)", fontFamily: "var(--font-mono)",
-                                whiteSpace: "nowrap", fontSize: "var(--fs-11)",
-                              }}>
-                                {col.options && col.options.length > 0
-                                  ? col.options.slice(0, 3).join(" · ")
-                                  : col.field_key}
-                              </td>
-                            ))}
-                          </tr>
-                        </tbody>
-                      </table>
+                    <div style={{ display: "inline-flex", marginTop: 16 }} onClick={(e) => e.stopPropagation()}>
+                      <Btn variant="primary" onClick={() => fileRef.current?.click()}>
+                        Seleccionar archivo
+                      </Btn>
+                    </div>
+                    <div style={{
+                      display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap",
+                      marginTop: 20, font: "400 11.5px var(--font-sans)", color: "var(--text-mute)",
+                    }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                        <Lock size={12} /> Tu archivo nunca sale de tu workspace
+                      </span>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                        <Shield size={12} /> Cifrado en tránsito y en reposo
+                      </span>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                        <Trash2 size={12} /> Lo eliminamos cuando confirmes
+                      </span>
                     </div>
                   </>
                 )}
-              </>
-            )}
+              </div>
 
-            {/* ─────────── STEP 3 — Mapear columnas ─────────── */}
-            {step === 3 && preview && currentSheet && (
-              <>
-                <div className="wiz-body__head">
-                  <h2>Revisa el tipo de cada columna</h2>
-                  <p>
-                    Adivinamos el tipo de cada columna por su nombre y sus datos. Mostramos la hoja{" "}
-                    <b>{currentSheet.name}</b>
-                    {selectedCount > 1 ? " — las demás hojas seleccionadas también traen sus tipos sugeridos." : "."}
-                  </p>
-                </div>
+              {previewErr && (
+                <p style={{
+                  display: "flex", alignItems: "center", gap: 7,
+                  margin: "16px 0 0", color: "var(--danger)", font: "500 13px var(--font-sans)",
+                  padding: "10px 12px",
+                  background: "var(--danger-soft)",
+                  borderRadius: "var(--r-2)",
+                  border: "1px solid color-mix(in srgb, var(--danger) 30%, transparent)",
+                }}>
+                  <AlertTriangle size={15} style={{ flex: "none" }} /> {previewErr}
+                </p>
+              )}
+            </>
+          )}
 
-                {/* Selector rápido de hoja enfocada */}
-                {selectedCount > 1 && (
-                  <div style={{
-                    display: "inline-flex", background: "var(--surface)", borderRadius: "var(--r-1)",
-                    border: "1px solid var(--border-soft)", padding: 2, marginBottom: "var(--sp-3)",
-                    flexWrap: "wrap",
-                  }}>
-                    {selectedSheets.map((s) => {
-                      const active = focusedSheet === s.name;
-                      return (
-                        <button
-                          key={s.name}
-                          onClick={() => setFocusedSheet(s.name)}
-                          style={{
-                            border: 0, background: active ? "var(--accent-pri)" : "transparent",
-                            color: active ? "#fff" : "var(--text-soft)",
-                            padding: "2px var(--sp-2)", fontSize: "var(--fs-11)", borderRadius: 3,
-                            cursor: "pointer", fontFamily: "inherit", fontWeight: 500,
-                          }}
-                        >
-                          {sheetState[s.name]?.name?.trim() || s.name}
-                        </button>
-                      );
-                    })}
+          {/* ─────────── STEP 2 — Vista previa ─────────── */}
+          {step === 2 && preview && (
+            <>
+              <div>
+                <h2 style={bodyHeadTitle}>Vista previa · ¿se ve bien?</h2>
+                <p style={bodyHeadSub}>
+                  Detectamos <b style={{ color: "var(--text)" }}>{preview.sheets.length} hoja{preview.sheets.length !== 1 ? "s" : ""}</b> en el
+                  archivo. Elige cuáles importar y, si quieres, renómbralas. Cada hoja seleccionada se
+                  creará como un dataset.
+                </p>
+              </div>
+
+              {/* Selector de hojas (segmentos) */}
+              <div style={{
+                display: "flex", alignItems: "center", gap: 8,
+                padding: "8px 10px", background: "var(--surface-alt)",
+                border: "1px solid var(--border)", borderRadius: "var(--r-2)",
+                marginBottom: 12, flexWrap: "wrap",
+              }}>
+                <span style={{
+                  display: "inline-flex", background: "var(--surface)", borderRadius: "var(--r-1)",
+                  border: "1px solid var(--border)", padding: 2, flexWrap: "wrap", gap: 2,
+                }}>
+                  {preview.sheets.map((s) => {
+                    const active = focusedSheet === s.name;
+                    return (
+                      <button
+                        key={s.name}
+                        type="button"
+                        onClick={() => setFocusedSheet(s.name)}
+                        style={{
+                          border: 0, background: active ? "var(--accent-pri)" : "transparent",
+                          color: active ? "#fff" : "var(--text-soft)",
+                          padding: "3px 9px", font: "500 11.5px var(--font-sans)", borderRadius: 5,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {s.name} <span style={{ opacity: 0.7 }}>{s.row_count}</span>
+                      </button>
+                    );
+                  })}
+                </span>
+                {preview.sheets.length > 1 && (
+                  <div style={{ marginLeft: "auto" }}>
+                    <Btn variant="ghost" size="sm" onClick={selectAll}>
+                      {preview.sheets.every((s) => sheetState[s.name]?.selected) ? "Quitar todas" : "Seleccionar todas"}
+                    </Btn>
                   </div>
                 )}
+              </div>
 
-                <table className="map-table">
+              {/* Lista de hojas con checkbox + nombre editable */}
+              <div style={{
+                border: "1px solid var(--border)", borderRadius: "var(--r-2)",
+                overflow: "hidden", marginBottom: 16,
+              }}>
+                {preview.sheets.map((s, idx) => {
+                  const st = sheetState[s.name];
+                  const isFocused = focusedSheet === s.name;
+                  return (
+                    <div
+                      key={s.name}
+                      onClick={() => setFocusedSheet(s.name)}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 12,
+                        padding: "10px 12px",
+                        borderBottom: idx < preview.sheets.length - 1 ? "1px solid var(--border)" : "none",
+                        background: isFocused ? "var(--pri-soft)" : "var(--surface)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <input
+                        type="checkbox" checked={!!st?.selected}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={() => toggleSheet(s.name)}
+                        style={{ accentColor: "var(--accent-pri)", width: 15, height: 15, cursor: "pointer" }}
+                      />
+                      <span style={sheetTile}>
+                        <Table2 size={15} />
+                      </span>
+                      <div style={{ minWidth: 0, flex: "0 0 30%" }}>
+                        <div style={{ font: "600 13px var(--font-sans)", color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {s.name}
+                        </div>
+                        <div className="mono" style={{ font: "400 11px var(--font-mono)", color: "var(--text-mute)" }}>
+                          {s.row_count} filas · {s.columns.length} col
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        value={st?.name ?? ""}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => renameSheet(s.name, e.target.value)}
+                        placeholder="Nombre del dataset"
+                        disabled={!st?.selected}
+                        style={{
+                          flex: 1, height: 34, padding: "0 11px", borderRadius: "var(--r-2)",
+                          border: "1px solid var(--border)", background: "var(--surface)",
+                          color: "var(--text)", font: "400 13px var(--font-sans)", outline: "none",
+                          opacity: st?.selected ? 1 : 0.5,
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Vista previa de columnas de la hoja enfocada */}
+              {currentSheet && (
+                <>
+                  <p style={{ margin: "0 0 8px", font: "400 12px var(--font-sans)", color: "var(--text-soft)" }}>
+                    Columnas detectadas en{" "}
+                    <b style={{ color: "var(--text)" }}>{currentSheet.name}</b>{" "}
+                    <span style={{ color: "var(--text-mute)" }}>({currentSheet.columns.length})</span>
+                  </p>
+                  <div style={{ overflowX: "auto", border: "1px solid var(--border)", borderRadius: "var(--r-2)" }}>
+                    <table style={{
+                      width: "100%", borderCollapse: "separate", borderSpacing: 0,
+                      font: "400 12px var(--font-sans)", background: "var(--surface)",
+                    }}>
+                      <thead>
+                        <tr>
+                          {currentSheet.columns.map((col, i) => (
+                            <th key={i} style={{
+                              padding: "6px 10px", textAlign: "left",
+                              borderBottom: "1px solid var(--border)",
+                              borderRight: i < currentSheet.columns.length - 1 ? "1px solid var(--border)" : "none",
+                              background: "var(--surface-alt)", color: "var(--text)",
+                              font: "600 11px var(--font-sans)", whiteSpace: "nowrap",
+                            }}>
+                              {col.header}
+                              <span className="mono" style={{
+                                display: "block", font: "500 9.5px var(--font-mono)",
+                                color: "var(--text-mute)", marginTop: 1,
+                              }}>
+                                {TYPE_GLYPH[col.data_type] ?? "A"} {TYPE_LABELS[col.data_type] ?? col.data_type}
+                              </span>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          {currentSheet.columns.map((col, i) => (
+                            <td key={i} className="mono" style={{
+                              padding: "6px 10px",
+                              borderRight: i < currentSheet.columns.length - 1 ? "1px solid var(--border)" : "none",
+                              color: "var(--text-mute)", font: "400 11px var(--font-mono)",
+                              whiteSpace: "nowrap",
+                            }}>
+                              {col.options && col.options.length > 0
+                                ? col.options.slice(0, 3).join(" · ")
+                                : col.field_key}
+                            </td>
+                          ))}
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {/* ─────────── STEP 3 — Mapear columnas ─────────── */}
+          {step === 3 && preview && currentSheet && (
+            <>
+              <div>
+                <h2 style={bodyHeadTitle}>Revisa el tipo de cada columna</h2>
+                <p style={bodyHeadSub}>
+                  Adivinamos el tipo de cada columna por su nombre y sus datos. Mostramos la hoja{" "}
+                  <b style={{ color: "var(--text)" }}>{currentSheet.name}</b>
+                  {selectedCount > 1 ? " — las demás hojas seleccionadas también traen sus tipos sugeridos." : "."}
+                </p>
+              </div>
+
+              {/* Selector rápido de hoja enfocada */}
+              {selectedCount > 1 && (
+                <div style={{
+                  display: "inline-flex", background: "var(--surface)", borderRadius: "var(--r-1)",
+                  border: "1px solid var(--border)", padding: 2, marginBottom: 12,
+                  flexWrap: "wrap", gap: 2,
+                }}>
+                  {selectedSheets.map((s) => {
+                    const active = focusedSheet === s.name;
+                    return (
+                      <button
+                        key={s.name}
+                        type="button"
+                        onClick={() => setFocusedSheet(s.name)}
+                        style={{
+                          border: 0, background: active ? "var(--accent-pri)" : "transparent",
+                          color: active ? "#fff" : "var(--text-soft)",
+                          padding: "3px 9px", font: "500 11.5px var(--font-sans)", borderRadius: 5,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {sheetState[s.name]?.name?.trim() || s.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div style={{ border: "1px solid var(--border)", borderRadius: "var(--r-2)", overflow: "hidden" }}>
+                <table style={{
+                  width: "100%", borderCollapse: "separate", borderSpacing: 0,
+                  font: "400 12.5px var(--font-sans)",
+                }}>
                   <thead>
                     <tr>
-                      <th style={{ width: "30%" }}>Columna del Excel</th>
-                      <th style={{ width: "26%" }}>Detalle</th>
-                      <th style={{ width: "4%" }}></th>
-                      <th>Tipo en DataVault</th>
+                      {["Columna del Excel", "Detalle", "", "Tipo en OpsGrid"].map((h, i) => (
+                        <th key={i} style={{
+                          padding: "9px 12px", textAlign: "left",
+                          width: i === 0 ? "30%" : i === 1 ? "26%" : i === 2 ? "4%" : undefined,
+                          borderBottom: "1px solid var(--border)", background: "var(--surface-alt)",
+                          color: "var(--text-soft)", font: "600 11px var(--font-sans)",
+                          textTransform: "uppercase", letterSpacing: ".03em",
+                        }}>
+                          {h}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
                     {currentSheet.columns.map((col, i) => {
                       const isRel = col.data_type === "relation";
-                      const isNew = false;
-                      const cls = isRel ? "is-rel" : isNew ? "is-new" : "";
+                      const [tFg, tBg] = isRel
+                        ? ["var(--accent-rel)", "var(--rel-soft)"]
+                        : ["var(--accent-pri)", "var(--pri-soft)"];
                       return (
                         <tr key={i}>
-                          <td>
-                            <div className="src-name">{col.header}</div>
-                            <div className="src-sample">{col.field_key}</div>
+                          <td style={{ padding: "9px 12px", borderBottom: "1px solid var(--border)" }}>
+                            <div style={{ font: "600 12.5px var(--font-sans)", color: "var(--text)" }}>{col.header}</div>
+                            <div className="mono" style={{ font: "400 11px var(--font-mono)", color: "var(--text-mute)" }}>
+                              {col.field_key}
+                            </div>
                           </td>
-                          <td>
-                            <span className="src-sample">
+                          <td style={{ padding: "9px 12px", borderBottom: "1px solid var(--border)" }}>
+                            <span className="mono" style={{ font: "400 11px var(--font-mono)", color: "var(--text-mute)" }}>
                               {col.options && col.options.length > 0
                                 ? col.options.slice(0, 3).join(", ") + (col.options.length > 3 ? "…" : "")
                                 : "—"}
                             </span>
                           </td>
-                          <td className="arrow"><IcArrowRight size={14} /></td>
-                          <td>
-                            <div className={`map-target ${cls}`.trim()}>
-                              <span className="glyph">{TYPE_GLYPH[col.data_type] ?? "A"}</span>
-                              <div className="map-target__main">
-                                <b>{TYPE_LABELS[col.data_type] ?? col.data_type}</b>
-                                {col.options && col.options.length > 0 && (
-                                  <span className="map-target__sub"> · {col.options.length} valores</span>
-                                )}
-                              </div>
-                            </div>
+                          <td style={{ padding: "9px 4px", borderBottom: "1px solid var(--border)", textAlign: "center", color: "var(--text-mute)" }}>
+                            <ArrowRight size={14} />
+                          </td>
+                          <td style={{ padding: "9px 12px", borderBottom: "1px solid var(--border)" }}>
+                            <span style={{
+                              display: "inline-flex", alignItems: "center", gap: 8,
+                              padding: "5px 10px", borderRadius: "var(--r-2)",
+                              background: tBg, color: tFg,
+                              border: `1px solid color-mix(in srgb, ${tFg} 30%, transparent)`,
+                            }}>
+                              <span style={{ font: "700 12px var(--font-mono)", lineHeight: 1 }}>
+                                {isRel ? "" : (TYPE_GLYPH[col.data_type] ?? "A")}
+                              </span>
+                              {isRel && <Link2 size={13} />}
+                              <span style={{ font: "600 12.5px var(--font-sans)" }}>
+                                {TYPE_LABELS[col.data_type] ?? col.data_type}
+                              </span>
+                              {col.options && col.options.length > 0 && (
+                                <span style={{ font: "400 11px var(--font-sans)", opacity: 0.8 }}>
+                                  · {col.options.length} valores
+                                </span>
+                              )}
+                            </span>
                           </td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
-              </>
-            )}
+              </div>
+            </>
+          )}
 
-            {/* ─────────── STEP 4 — Confirmar ─────────── */}
-            {step === 4 && preview && (
-              <>
-                <div className="wiz-body__head">
-                  <h2>Todo listo para importar</h2>
-                  <p>
-                    Revisa el resumen. Cuando confirmes, procesamos
-                    {selectedCount === 1 ? " la hoja seleccionada" : ` las ${selectedCount} hojas seleccionadas`}
-                    {" "}y creamos
-                    {selectedCount === 1 ? " un dataset" : ` ${selectedCount} datasets`} en DataVault.
-                  </p>
-                </div>
+          {/* ─────────── STEP 4 — Confirmar ─────────── */}
+          {step === 4 && preview && (
+            <>
+              <div>
+                <h2 style={bodyHeadTitle}>Todo listo para importar</h2>
+                <p style={bodyHeadSub}>
+                  Revisa el resumen. Cuando confirmes, procesamos
+                  {selectedCount === 1 ? " la hoja seleccionada" : ` las ${selectedCount} hojas seleccionadas`}
+                  {" "}y creamos
+                  {selectedCount === 1 ? " un dataset" : ` ${selectedCount} datasets`} en OpsGrid.
+                </p>
+              </div>
 
-                <div className="summary-grid">
-                  <div className="summary-card">
-                    <span className="summary-card__icon is-pri"><IcTable size={16} /></span>
-                    <div className="summary-card__val">{selectedCount}</div>
-                    <div className="summary-card__label">{selectedCount === 1 ? "tabla nueva" : "tablas nuevas"}</div>
-                  </div>
-                  <div className="summary-card">
-                    <span className="summary-card__icon"><IcList size={16} /></span>
-                    <div className="summary-card__val">{totalSelectedCols}</div>
-                    <div className="summary-card__label">columnas mapeadas</div>
-                  </div>
-                  <div className="summary-card">
-                    <span className="summary-card__icon is-rel"><IcLink size={16} /></span>
-                    <div className="summary-card__val">{preview.sheets.length}</div>
-                    <div className="summary-card__label">hojas en el archivo</div>
-                  </div>
-                  <div className="summary-card">
-                    <span className="summary-card__icon is-calc"><IcSparkles size={16} /></span>
-                    <div className="summary-card__val">{totalSelectedRows.toLocaleString()}</div>
-                    <div className="summary-card__label">filas totales</div>
-                  </div>
-                </div>
-
-                {/* Lista de datasets a crear */}
-                <div style={{
-                  border: "1px solid var(--border-soft)", borderRadius: "var(--r-2)", overflow: "hidden",
-                }}>
-                  {selectedSheets.map((s) => (
-                    <div key={s.name} style={{
-                      display: "flex", alignItems: "center", gap: "var(--sp-3)",
-                      padding: "var(--sp-2) var(--sp-3)", borderBottom: "1px solid var(--border-soft)",
-                      fontSize: "var(--fs-13)",
+              <div style={{
+                display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 16,
+              }}>
+                {([
+                  { icon: <Table2 size={16} />, fg: "var(--accent-pri)", bg: "var(--pri-soft)", val: selectedCount, label: selectedCount === 1 ? "tabla nueva" : "tablas nuevas" },
+                  { icon: <List size={16} />, fg: "var(--text-soft)", bg: "var(--surface-alt)", val: totalSelectedCols, label: "columnas mapeadas" },
+                  { icon: <Link2 size={16} />, fg: "var(--accent-rel)", bg: "var(--rel-soft)", val: preview.sheets.length, label: "hojas en el archivo" },
+                  { icon: <Sparkles size={16} />, fg: "var(--accent-calc)", bg: "var(--calc-soft)", val: totalSelectedRows.toLocaleString(), label: "filas totales" },
+                ] as const).map((c, i) => (
+                  <div key={i} style={{
+                    padding: "14px 12px", borderRadius: "var(--r-3)",
+                    border: "1px solid var(--border)", background: "var(--surface)",
+                    textAlign: "center", boxShadow: "var(--shadow-1)",
+                  }}>
+                    <span style={{
+                      display: "grid", placeItems: "center", width: 32, height: 32, margin: "0 auto 8px",
+                      borderRadius: "var(--r-2)", background: c.bg, color: c.fg,
                     }}>
-                      <span style={{
-                        display: "inline-flex", alignItems: "center", justifyContent: "center",
-                        width: 28, height: 28, borderRadius: "var(--r-1)",
-                        background: "color-mix(in oklab, #1da462 14%, var(--surface))", color: "#1da462",
-                        flexShrink: 0,
-                      }}>
-                        <IcTable size={14} />
-                      </span>
-                      <b>{sheetState[s.name]?.name?.trim() || s.name}</b>
-                      <span style={{ marginLeft: "auto", color: "var(--text-mute)", fontFamily: "var(--font-mono)", fontSize: "var(--fs-11)" }}>
-                        {s.row_count} filas · {s.columns.length} col
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                      {c.icon}
+                    </span>
+                    <div style={{ font: "700 20px var(--font-sans)", color: "var(--text)" }}>{c.val}</div>
+                    <div style={{ font: "400 11px var(--font-sans)", color: "var(--text-mute)", marginTop: 2 }}>{c.label}</div>
+                  </div>
+                ))}
+              </div>
 
-                {hasDupName && (
-                  <p style={{ margin: "var(--sp-3) 0 0", color: "var(--danger)", fontSize: "var(--fs-12)" }}>
-                    ⚠ Dos hojas tienen el mismo nombre de dataset. Edítalos en el paso 2 para que sean únicos.
-                  </p>
-                )}
+              {/* Lista de datasets a crear */}
+              <div style={{ border: "1px solid var(--border)", borderRadius: "var(--r-2)", overflow: "hidden" }}>
+                {selectedSheets.map((s, idx) => (
+                  <div key={s.name} style={{
+                    display: "flex", alignItems: "center", gap: 12,
+                    padding: "11px 13px",
+                    borderBottom: idx < selectedSheets.length - 1 ? "1px solid var(--border)" : "none",
+                    background: "var(--success-soft)",
+                    font: "400 13px var(--font-sans)",
+                  }}>
+                    <CheckCircle2 size={16} style={{ color: "var(--success)", flex: "none" }} />
+                    <b style={{ font: "600 13.5px var(--font-sans)", color: "var(--text)" }}>
+                      {sheetState[s.name]?.name?.trim() || s.name}
+                    </b>
+                    <span className="mono" style={{ marginLeft: "auto", color: "var(--text-soft)", font: "400 11.5px var(--font-mono)" }}>
+                      {s.row_count} filas · {s.columns.length} col
+                    </span>
+                  </div>
+                ))}
+              </div>
 
-                {importMut.isError && (
-                  <p style={{ margin: "var(--sp-3) 0 0", color: "var(--danger)", fontSize: "var(--fs-13)" }}>
-                    ⚠ {(importMut.error as Error)?.message ?? "Error al importar"}
-                  </p>
-                )}
+              {hasDupName && (
+                <p style={{
+                  display: "flex", alignItems: "center", gap: 7,
+                  margin: "12px 0 0", color: "var(--danger)", font: "500 12px var(--font-sans)",
+                }}>
+                  <AlertTriangle size={14} style={{ flex: "none" }} />
+                  Dos hojas tienen el mismo nombre de dataset. Edítalos en el paso 2 para que sean únicos.
+                </p>
+              )}
+
+              {importMut.isError && (
+                <p style={{
+                  display: "flex", alignItems: "center", gap: 7,
+                  margin: "12px 0 0", color: "var(--danger)", font: "500 13px var(--font-sans)",
+                }}>
+                  <AlertTriangle size={15} style={{ flex: "none" }} />
+                  {(importMut.error as Error)?.message ?? "Error al importar"}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* ── Footer ── */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10,
+          padding: "14px 20px", borderTop: "1px solid var(--border)", background: "var(--surface-2)",
+        }}>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 7, minWidth: 0,
+            font: "400 12px var(--font-sans)", color: "var(--text-mute)",
+          }}>
+            {preview ? (
+              <>
+                <Check size={13} style={{ color: "var(--success)", flex: "none" }} />
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <b style={{ color: "var(--text-soft)" }}>{preview.filename}</b> · {footMeta[step]}
+                </span>
               </>
+            ) : (
+              <span>{footMeta[step]}</span>
             )}
           </div>
-
-          {/* Footer */}
-          <div className="wiz-foot">
-            <div className="wiz-foot__meta">
-              {preview ? (
-                <>
-                  <IcCheck size={12} />
-                  <span><b>{preview.filename}</b> · {footMeta[step]}</span>
-                </>
-              ) : (
-                <span>{footMeta[step]}</span>
-              )}
-            </div>
-            <div className="wiz-foot__actions">
-              <button className="btn btn--ghost" onClick={handleClose}>Cancelar</button>
-              {step > 1 && (
-                <button className="btn btn--secondary" onClick={goBack}>
-                  Atrás
-                </button>
-              )}
-              {step < 4 ? (
-                <button
-                  className="btn btn--primary"
-                  disabled={!canGoNext()}
-                  onClick={step === 1 ? () => fileRef.current?.click() : goNext}
-                >
-                  {step === 1 ? "Selecciona un archivo" : (
-                    <>
-                      {nextLabel[step]} <IcArrowRight size={14} />
-                    </>
-                  )}
-                </button>
-              ) : (
-                <button
-                  className="btn btn--primary"
-                  disabled={importMut.isPending || selectedCount === 0 || hasDupName}
-                  onClick={() => importMut.mutate()}
-                >
-                  {importMut.isPending
-                    ? "Importando…"
-                    : selectedCount > 1
-                      ? `Crear ${selectedCount} datasets`
-                      : "Crear dataset"}
-                </button>
-              )}
-            </div>
+          <div style={{ display: "flex", gap: 10, marginLeft: "auto" }}>
+            <Btn variant="ghost" onClick={handleClose}>Cancelar</Btn>
+            {step > 1 && (
+              <Btn variant="soft" onClick={goBack}>Atrás</Btn>
+            )}
+            {step < 4 ? (
+              <Btn
+                variant="primary"
+                disabled={!canGoNext()}
+                iconR={step === 1 ? undefined : <ArrowRight size={14} />}
+                onClick={step === 1 ? () => fileRef.current?.click() : goNext}
+              >
+                {step === 1 ? "Selecciona un archivo" : nextLabel[step]}
+              </Btn>
+            ) : (
+              <Btn
+                variant="primary"
+                icon={<Check size={15} />}
+                disabled={importMut.isPending || selectedCount === 0 || hasDupName}
+                onClick={() => importMut.mutate()}
+              >
+                {importMut.isPending
+                  ? "Importando…"
+                  : selectedCount > 1
+                    ? `Crear ${selectedCount} datasets`
+                    : "Crear dataset"}
+              </Btn>
+            )}
           </div>
-
         </div>
       </div>
     </div>

@@ -4,6 +4,7 @@ import { useQuery, useQueries } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { getDatasets, getRecords } from "../../api/datasets";
 import { useWorkspace } from "../../workspace/WorkspaceContext";
+import { Kbd } from "../ui/kit";
 
 /** Buscador global del topbar: busca registros en todos los datasets accesibles
  *  (server-side, debounced) y muestra un dropdown de resultados agrupados por dataset. */
@@ -17,13 +18,11 @@ export default function GlobalSearch() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Debounce del término que dispara las queries
   useEffect(() => {
     const id = setTimeout(() => setTerm(q.trim()), 250);
     return () => clearTimeout(id);
   }, [q]);
 
-  // Cerrar al click fuera
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
@@ -62,7 +61,6 @@ export default function GlobalSearch() {
 
   const go = (dsId: string) => { setOpen(false); setQ(""); setTerm(""); navigate(`/datasets/${dsId}`); };
 
-  // Agrupar por dataset
   const grouped = new Map<string, { name: string; items: typeof results }>();
   for (const r of results) {
     const g = grouped.get(r.ds.id) ?? { name: r.ds.name, items: [] };
@@ -76,12 +74,14 @@ export default function GlobalSearch() {
   };
 
   return (
-    <div ref={wrapRef} style={{ position: "relative", display: "inline-flex" }}>
-      <span
-        className="search"
-        style={{ background: "var(--surface-alt)", border: `1px solid ${open ? "var(--accent-pri)" : "transparent"}`, maxWidth: 320, minWidth: 240 }}
-      >
-        <Search />
+    <div ref={wrapRef} style={{ position: "relative", flex: "1 1 420px", maxWidth: 520, minWidth: 200 }}>
+      <div style={{
+        display: "flex", alignItems: "center", gap: 9, height: 38, padding: "0 12px",
+        borderRadius: "var(--r-2)", border: `1px solid ${open ? "var(--accent-pri)" : "var(--border)"}`,
+        background: "var(--surface-2)", boxShadow: open ? "var(--shadow-focus)" : "none",
+        transition: "all var(--t-fast)",
+      }}>
+        <Search size={17} style={{ color: "var(--text-mute)", flex: "none" }} />
         <input
           ref={inputRef}
           value={q}
@@ -89,32 +89,38 @@ export default function GlobalSearch() {
           onFocus={() => { setOpen(true); place(); }}
           onKeyDown={(e) => { if (e.key === "Escape") { setOpen(false); inputRef.current?.blur(); } }}
           placeholder="Buscar dataset, registro…"
-          style={{ flex: 1, background: "transparent", border: 0, outline: 0, font: "inherit", color: "var(--text)", minWidth: 0 }}
+          style={{ flex: 1, background: "transparent", border: 0, outline: 0, font: "400 14px/1 var(--font-sans)", color: "var(--text)", minWidth: 0 }}
         />
-      </span>
+        <Kbd>⌘K</Kbd>
+      </div>
 
       {open && term.length >= 2 && pos && (
-        <div
-          className="global-search-results"
-          style={{ position: "fixed", left: pos.x, top: pos.y, width: pos.w, maxWidth: 460, maxHeight: 420, overflowY: "auto", zIndex: 600 }}
-        >
+        <div className="og-pop" style={{
+          position: "fixed", left: pos.x, top: pos.y, width: pos.w, maxWidth: 460, maxHeight: 420,
+          overflowY: "auto", zIndex: 600, background: "var(--surface)", border: "1px solid var(--border)",
+          borderRadius: "var(--r-3)", boxShadow: "var(--shadow-3)", padding: 6,
+        }}>
           {results.length === 0 ? (
-            <div style={{ padding: "14px 16px", fontSize: 13, color: "var(--text-mute)" }}>
+            <div style={{ padding: "14px 16px", font: "400 13px/1 var(--font-sans)", color: "var(--text-mute)" }}>
               {loading ? "Buscando…" : "Sin resultados"}
             </div>
           ) : (
             <>
               {[...grouped.values()].map((g) => (
-                <div key={g.name} className="global-search-group">
-                  <div className="global-search-group-header">{g.name}</div>
+                <div key={g.name}>
+                  <div style={{ font: "600 11px/1 var(--font-sans)", letterSpacing: ".06em", color: "var(--text-mute)", textTransform: "uppercase", padding: "8px 10px 6px" }}>{g.name}</div>
                   {g.items.map(({ rec, ds }) => (
-                    <button key={rec.id} className="global-search-item" onClick={() => go(ds.id)}>
-                      <span className="global-search-item-name">{label(rec.data)}</span>
+                    <button key={rec.id} className="og-menu-item" onClick={() => go(ds.id)} style={{
+                      display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: "var(--r-2)",
+                      cursor: "pointer", border: "none", background: "transparent", width: "100%", textAlign: "left",
+                      font: "500 13.5px/1.3 var(--font-sans)", color: "var(--text)",
+                    }}>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label(rec.data)}</span>
                     </button>
                   ))}
                 </div>
               ))}
-              <div style={{ padding: "6px 14px 8px", borderTop: "1px solid var(--border-soft)", fontSize: 11, color: "var(--text-mute)" }}>
+              <div style={{ padding: "6px 14px 8px", borderTop: "1px solid var(--border-soft)", font: "400 11px/1 var(--font-sans)", color: "var(--text-mute)" }}>
                 {results.length} resultado{results.length !== 1 ? "s" : ""}{results.length === 24 ? " (máx)" : ""}
               </div>
             </>

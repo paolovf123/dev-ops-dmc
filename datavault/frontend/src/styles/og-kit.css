@@ -1,0 +1,81 @@
+/* OpsGrid kit — interacciones/animaciones del prototipo (PORT VERBATIM del
+   <style> global de design_handoff_opsgrid/OpsGrid.html). Acompaña a los
+   primitivos inline-styled (ui/kit.tsx) y a las pantallas portadas.
+   El :hover CSS solo aplica donde el `background`/`border`/`color` inline es
+   `undefined` (no `transparent`) — por eso kit/AppShell usan `undefined`. */
+
+input::placeholder { color: var(--text-mute); }
+button { font-family: var(--font-sans); }
+
+/* Cards */
+.og-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-3); transform: translateY(-2px); }
+.og-card:focus-visible { box-shadow: var(--shadow-focus); border-color: var(--accent-pri); }
+.og-newcard:hover { border-color: var(--accent-pri); color: var(--accent-pri); background: var(--pri-soft); }
+
+/* Menús / dropdowns */
+.og-menu-item:hover { background: var(--surface-alt); }
+
+/* Botones del kit */
+.og-btn:hover { filter: brightness(1.04); transform: translateY(-1px); box-shadow: var(--shadow-2); }
+.og-btn[data-variant="ghost"]:hover { background: var(--surface-alt); transform: none; box-shadow: none; }
+.og-btn[data-variant="primary"]:hover { box-shadow: var(--shadow-2); }
+
+/* Icon buttons */
+.og-iconbtn:hover { background: var(--surface-alt); color: var(--text); }
+
+/* Heatmap de permisos */
+.og-heatcell:hover { filter: brightness(1.05); box-shadow: var(--shadow-1); transform: translateY(-1px); }
+
+/* Filas de grilla con acciones al hover */
+.og-gridrow:hover { background: var(--surface-alt) !important; }
+.og-rowact { opacity: 0; transition: opacity var(--t-fast); }
+.og-gridrow:hover .og-rowact { opacity: 1; }
+.og-rowact .og-iconbtn:hover { background: var(--surface) !important; color: var(--text) !important; }
+
+/* Riel / nav */
+.og-navitem:hover { background: var(--surface-alt); }
+
+/* Badge "Live" pulsante */
+@keyframes ogLive { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.8); } }
+.og-live { animation: ogLive 1.6s ease-in-out infinite; }
+
+/* Popovers */
+@keyframes ogPop { from { opacity: 0; transform: translateY(-6px) scale(.99); } to { opacity: 1; transform: none; } }
+.og-pop { will-change: transform; transform-origin: top; }
+
+/* Fade de overlay (modales) */
+@keyframes ogFade { from { opacity: 0; } to { opacity: 1; } }
+
+/* Slide-overs (paneles laterales) */
+@keyframes ogSlide { from { transform: translateX(16px); opacity: 0; } to { transform: none; opacity: 1; } }
+.og-slide { animation: ogSlide var(--t-mid) cubic-bezier(.2,.7,.3,1); }
+
+/* Burbuja de validación de celda */
+.og-bubble {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 12;
+  display: flex; align-items: center; gap: 4px; padding: 5px 9px;
+  border-radius: var(--r-2); background: var(--danger); color: #fff;
+  font: 600 11.5px/1.3 var(--font-sans); white-space: nowrap; box-shadow: var(--shadow-2);
+}
+
+/* Shake (intento de confirmar celda inválida) */
+@keyframes ogShake { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }
+.og-shake { animation: ogShake 380ms; }
+
+/* Flash verde al guardar una celda */
+@keyframes ogFlash { from { background-color: var(--success-soft); } to { background-color: transparent; } }
+.og-flash { animation: ogFlash 650ms ease-out; }
+
+/* Skeleton shimmer */
+.og-shimmer { background: linear-gradient(90deg, var(--surface-alt) 25%, var(--border) 38%, var(--surface-alt) 62%); background-size: 300% 100%; animation: ogShimmer 1.3s ease-in-out infinite; }
+@keyframes ogShimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+
+/* Entrada en cascada */
+@keyframes ogRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.og-rise { animation: ogRise .42s cubic-bezier(.2,.7,.3,1) both; }
+
+/* Cross-fade de tema/paleta */
+html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *::after {
+  transition: background-color .32s ease, border-color .32s ease, color .26s ease, fill .26s ease, box-shadow .32s ease !important;
+}
+.og-wsbtn:hover, .og-pop { will-change: transform; }

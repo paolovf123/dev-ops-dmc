@@ -1,255 +1,173 @@
-/* OpsGrid · Design Tokens
- * ─────────────────────────────────────────────────────────────
- * Pega este archivo en tu proyecto e impórtalo como tu hoja
- * base de tokens. Todo lo demás (componentes, utilidades) debe
- * leer estas variables; NUNCA hardcodear hex en componentes.
- *
- * Modo de uso:
- *   <link rel="stylesheet" href="tokens.css">
- *   <html data-palette="electric">  ← cambia la paleta global
- *   <html data-palette="electric" data-theme="dark">
- * ─────────────────────────────────────────────────────────────
- */
+/* OpsGrid — design tokens (rebrand hi-fi, derived from design handoff §Design Tokens)
+   Light + dark · 6 swappable palettes · 3 semantic accents.
+   Set on <html>:  data-theme="light|dark"  data-palette="citrus|electric|mint|dusk|tropic|y2k"  data-density="compact|regular|comfy"
+
+   NOTE: este archivo es un SUPERSET. Trae los valores finales del handoff (neutros,
+   paletas, acentos, densidad, tints, sombras) Y conserva la escala tipográfica/espaciado
+   (`--fs-*`, `--lh-*`, `--sp-*`, `--fw-*`, `--z-*`) + alias de compatibilidad
+   (`--accent-pri-soft`, `--border-soft`, `--info`…) que el resto de la app y el bridge
+   `index.css` ya consumen. No hardcodear hex en componentes: usar `var(--*)`. */
 
 :root {
-  /* ── Tipografía ───────────────────────────────────────────── */
-  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
-  --font-display: 'Inter', system-ui, sans-serif; /* mismo Inter, pesos altos */
+  /* ---- type ---- */
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-display: var(--font-sans);
 
-  /* Escala tipográfica (px / line-height) */
-  --fs-11: 11px;   --lh-11: 16px;   /* meta, captions */
-  --fs-12: 12px;   --lh-12: 18px;   /* table cells, helper */
-  --fs-13: 13px;   --lh-13: 20px;   /* body small */
-  --fs-14: 14px;   --lh-14: 22px;   /* body */
-  --fs-15: 15px;   --lh-15: 24px;   /* body emphasized */
-  --fs-18: 18px;   --lh-18: 26px;   /* h4 / section title */
-  --fs-22: 22px;   --lh-22: 30px;   /* h3 */
-  --fs-28: 28px;   --lh-28: 36px;   /* h2 */
-  --fs-36: 36px;   --lh-36: 44px;   /* h1 */
-  --fs-48: 48px;   --lh-48: 56px;   /* display */
+  /* Escala tipográfica (px / line-height) — conservada para compatibilidad */
+  --fs-11: 11px;   --lh-11: 16px;
+  --fs-12: 12px;   --lh-12: 18px;
+  --fs-13: 13px;   --lh-13: 20px;
+  --fs-14: 14px;   --lh-14: 22px;
+  --fs-15: 15px;   --lh-15: 24px;
+  --fs-18: 18px;   --lh-18: 26px;
+  --fs-22: 22px;   --lh-22: 30px;
+  --fs-28: 28px;   --lh-28: 36px;
+  --fs-36: 36px;   --lh-36: 44px;
+  --fs-48: 48px;   --lh-48: 56px;
 
-  /* Pesos */
-  --fw-regular: 400;
-  --fw-medium:  500;
-  --fw-semibold: 600;
-  --fw-bold:    700;
+  --fw-regular: 400;  --fw-medium: 500;  --fw-semibold: 600;  --fw-bold: 700;
 
-  /* ── Espaciado (escala 4px) ───────────────────────────────── */
-  --sp-0: 0;
-  --sp-1: 4px;
-  --sp-2: 8px;
-  --sp-3: 12px;
-  --sp-4: 16px;
-  --sp-5: 20px;
-  --sp-6: 24px;
-  --sp-8: 32px;
-  --sp-10: 40px;
-  --sp-12: 48px;
-  --sp-16: 64px;
-  --sp-20: 80px;
+  /* ---- spacing (escala 4px) — conservada ---- */
+  --sp-0: 0;   --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px;  --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px; --sp-12: 48px;
+  --sp-16: 64px; --sp-20: 80px;
 
-  /* ── Radios ───────────────────────────────────────────────── */
-  --r-1: 4px;     /* inputs pequeños, badges */
-  --r-2: 8px;     /* botones, chips */
-  --r-3: 12px;    /* cards, modales pequeños */
-  --r-4: 16px;    /* cards grandes, modales */
-  --r-5: 24px;    /* contenedores hero */
-  --r-pill: 999px;
+  /* ---- radii ---- */
+  --r-1: 4px;  --r-2: 8px;  --r-3: 12px;  --r-4: 16px;  --r-5: 24px;  --r-pill: 999px;
 
-  /* ── Sombras ──────────────────────────────────────────────── */
-  --shadow-1: 0 1px 2px rgba(15, 18, 30, 0.04), 0 1px 1px rgba(15, 18, 30, 0.03);
-  --shadow-2: 0 2px 6px rgba(15, 18, 30, 0.06), 0 1px 2px rgba(15, 18, 30, 0.04);
-  --shadow-3: 0 8px 24px rgba(15, 18, 30, 0.10), 0 2px 4px rgba(15, 18, 30, 0.05);
-  --shadow-4: 0 20px 48px rgba(15, 18, 30, 0.14), 0 4px 8px rgba(15, 18, 30, 0.06);
-  --shadow-focus: 0 0 0 3px color-mix(in oklab, var(--accent-pri) 30%, transparent);
+  /* ---- motion ---- */
+  --t-fast: 120ms cubic-bezier(.2,.6,.3,1);
+  --t-mid:  150ms cubic-bezier(.2,.6,.3,1);
+  --t-slow: 240ms cubic-bezier(.2,.6,.3,1);
+  --t-base: var(--t-mid);              /* alias legacy */
 
-  /* ── Transiciones ─────────────────────────────────────────── */
-  --t-fast: 120ms cubic-bezier(0.2, 0, 0, 1);
-  --t-base: 150ms cubic-bezier(0.2, 0, 0, 1);
-  --t-slow: 240ms cubic-bezier(0.2, 0, 0, 1);
+  /* ---- z-index ---- */
+  --z-sticky: 100;  --z-overlay: 200;  --z-modal: 300;  --z-toast: 400;  --z-tooltip: 500;
 
-  /* ── Z-index ──────────────────────────────────────────────── */
-  --z-sticky: 100;
-  --z-overlay: 200;
-  --z-modal:   300;
-  --z-toast:   400;
-  --z-tooltip: 500;
+  /* ---- status (constant across palettes) ---- */
+  --success: #0fb583;  --warning: #f4a300;  --danger: #e8455a;  --violet: #7a5ae0;
+  --info: var(--accent-pri);           /* alias legacy */
 
-  /* ── Grid de filas (densidades) ───────────────────────────── */
-  --row-h-compact: 28px;
-  --row-h-regular: 34px;
-  --row-h-comfy:   42px;
+  /* ---- density ---- */
+  --row-h: 38px;
+  --row-h-compact: 30px;  --row-h-regular: 38px;  --row-h-comfy: 44px;   /* alias legacy */
 
-  /* ── Neutros base (modo claro) ────────────────────────────── */
-  /* Estos se pueden sobrescribir por paleta si la dirección
-     elegida es muy cálida o muy fría. Por defecto: neutros fríos. */
-  --neutral-0:  #ffffff;
-  --neutral-50: #f7f8fa;
-  --neutral-100: #eef0f4;
-  --neutral-200: #dde0e6;
-  --neutral-300: #c4c8d1;
-  --neutral-400: #9ea3b0;
-  --neutral-500: #6b7180;
-  --neutral-600: #4a4f5d;
-  --neutral-700: #2f333e;
-  --neutral-800: #1a1d27;
-  --neutral-900: #0e111a;
-
-  /* ── Roles semánticos (modo claro, default) ───────────────── */
-  --bg:           var(--neutral-50);
-  --surface:      var(--neutral-0);
-  --surface-alt:  var(--neutral-100);
-  --border:       var(--neutral-200);
-  --border-soft:  var(--neutral-100);
-  --border-strong: var(--neutral-300);
-
-  --text:         var(--neutral-900);
-  --text-soft:    var(--neutral-600);
-  --text-mute:    var(--neutral-500);
-  --text-on-accent: #ffffff;
-
-  /* Estados */
-  --success: #0fb583;
-  --warning: #f4a300;
-  --danger:  #e8455a;
-  --info:    var(--accent-pri);
-
-  /* Status pill backgrounds (se mezclan con surface) */
-  --success-soft: color-mix(in oklab, var(--success) 12%, var(--surface));
-  --warning-soft: color-mix(in oklab, var(--warning) 14%, var(--surface));
-  --danger-soft:  color-mix(in oklab, var(--danger)  12%, var(--surface));
+  /* ---- neutrals: LIGHT (cool) ---- */
+  --bg: #f3f5f9;
+  --surface: #ffffff;
+  --surface-alt: #eef1f6;
+  --surface-2: #f8fafc;
+  --border: #e4e8ef;
+  --border-strong: #d0d7e2;
+  --border-soft: color-mix(in srgb, var(--border) 55%, var(--surface));   /* alias legacy */
+  --text: #161b24;
+  --text-soft: #586173;
+  --text-mute: #98a1b2;
+  --text-on-accent: #ffffff;           /* alias legacy */
+  --shadow-1: 0 1px 2px rgba(20,28,46,.07);
+  --shadow-2: 0 3px 8px rgba(20,28,46,.09);
+  --shadow-3: 0 10px 28px rgba(20,28,46,.12);
+  --shadow-4: 0 20px 52px rgba(20,28,46,.18);
+  --overlay: rgba(22,27,36,.42);
 }
 
-/* ───────────────────────────────────────────────────────────────
- * Paletas — cambia la paleta global con data-palette="…" en <html>
- * Define los TRES acentos semánticos del producto:
- *   --accent-pri   marca / CTA primario / foco / "Live"
- *   --accent-rel   relaciones, lookups, chips entre tablas (naranja por defecto)
- *   --accent-calc  scripts, columnas calculadas, derivadas (violeta por defecto)
- * ─────────────────────────────────────────────────────────────── */
+:root[data-density="compact"] { --row-h: 30px; }
+:root[data-density="comfy"]   { --row-h: 44px; }
 
-/* Default: Citrus pop (decisión firme · fase wireframe → hi-fi) */
-:root,
-[data-palette="citrus"] {
-  --accent-pri:  #1e4cff;
-  --accent-rel:  #ff6a18;
-  --accent-calc: #e436b6;
-  --accent-pri-soft:  color-mix(in oklab, var(--accent-pri)  14%, var(--surface));
-  --accent-rel-soft:  color-mix(in oklab, var(--accent-rel)  16%, var(--surface));
-  --accent-calc-soft: color-mix(in oklab, var(--accent-calc) 14%, var(--surface));
-  --accent-pri-ink:  #ffffff;
-  --accent-rel-ink:  #ffffff;
-  --accent-calc-ink: #ffffff;
+/* ---- neutrals: DARK ---- */
+:root[data-theme="dark"] {
+  --bg: #0b0e14;
+  --surface: #141922;
+  --surface-alt: #1b212c;
+  --surface-2: #10151d;
+  --border: #29313e;
+  --border-strong: #3a4452;
+  --border-soft: color-mix(in srgb, var(--border) 70%, var(--surface));
+  --text: #e9edf4;
+  --text-soft: #9ba6b6;
+  --text-mute: #647082;
+  --shadow-1: 0 1px 2px rgba(0,0,0,.4);
+  --shadow-2: 0 3px 10px rgba(0,0,0,.45);
+  --shadow-3: 0 12px 32px rgba(0,0,0,.55);
+  --shadow-4: 0 22px 56px rgba(0,0,0,.65);
+  --overlay: rgba(4,7,12,.6);
 }
 
-[data-palette="electric"] {
-  --accent-pri:  #4f3cff;
-  --accent-rel:  #ff3b8a;
-  --accent-calc: #a8ff2a;
-  --accent-pri-soft:  color-mix(in oklab, var(--accent-pri)  16%, var(--surface));
-  --accent-rel-soft:  color-mix(in oklab, var(--accent-rel)  16%, var(--surface));
-  --accent-calc-soft: color-mix(in oklab, var(--accent-calc) 18%, var(--surface));
-  --accent-pri-ink:   #ffffff;
-  --accent-rel-ink:   #ffffff;
-  --accent-calc-ink:  #0e0a2a;
+/* ====== PALETTES — 3 semantic accents each ======
+   --accent-pri  : brand / CTA / focus / "Live"
+   --accent-rel  : relations / lookups / chips between tables
+   --accent-calc : scripts / computed / derived columns        */
+
+:root, :root[data-palette="citrus"] {
+  --accent-pri: #1e4cff;  --accent-rel: #ff6a18;  --accent-calc: #e436b6;
+}
+:root[data-palette="electric"] {
+  --accent-pri: #4361ff;  --accent-rel: #ff4d6d;  --accent-calc: #b14dff;
+}
+:root[data-palette="mint"] {
+  --accent-pri: #0ea371;  --accent-rel: #ff8a3d;  --accent-calc: #c44ddb;
+}
+:root[data-palette="dusk"] {
+  --accent-pri: #7b6cff;  --accent-rel: #f0875a;  --accent-calc: #d96bb4;
+}
+:root[data-palette="tropic"] {
+  --accent-pri: #0bb3c9;  --accent-rel: #ff7a45;  --accent-calc: #f25c8a;
+}
+:root[data-palette="y2k"] {
+  --accent-pri: #3b5bff;  --accent-rel: #ff5fb0;  --accent-calc: #9b6bff;
 }
 
-[data-palette="mint"] {
-  --accent-pri:  #0fb583;
-  --accent-rel:  #ff5a6c;
-  --accent-calc: #8b3df0;
-  --accent-pri-soft:  color-mix(in oklab, var(--accent-pri)  16%, var(--surface));
-  --accent-rel-soft:  color-mix(in oklab, var(--accent-rel)  14%, var(--surface));
-  --accent-calc-soft: color-mix(in oklab, var(--accent-calc) 14%, var(--surface));
-  --accent-pri-ink:  #ffffff;
-  --accent-rel-ink:  #ffffff;
-  --accent-calc-ink: #ffffff;
+/* derived soft tints + inks (work on any bg via alpha) */
+:root {
+  --pri-soft:  color-mix(in srgb, var(--accent-pri) 12%, transparent);
+  --pri-soft2: color-mix(in srgb, var(--accent-pri) 22%, transparent);
+  --rel-soft:  color-mix(in srgb, var(--accent-rel) 14%, transparent);
+  --calc-soft: color-mix(in srgb, var(--accent-calc) 14%, transparent);
+  --violet-soft: color-mix(in srgb, var(--violet) 16%, transparent);
+  --success-soft: color-mix(in srgb, var(--success) 16%, transparent);
+  --warning-soft: color-mix(in srgb, var(--warning) 18%, transparent);
+  --danger-soft: color-mix(in srgb, var(--danger) 14%, transparent);
+  --shadow-focus: 0 0 0 3px color-mix(in srgb, var(--accent-pri) 32%, transparent);
+
+  /* ---- alias legacy de tints de acento (consumidos por index.css + og.css) ---- */
+  --accent-pri-soft:  var(--pri-soft);
+  --accent-rel-soft:  var(--rel-soft);
+  --accent-calc-soft: var(--calc-soft);
+  /* inks legacy */
+  --accent-pri-ink: #ffffff;  --accent-rel-ink: #ffffff;  --accent-calc-ink: #ffffff;
+}
+:root[data-theme="dark"] {
+  --pri-soft:  color-mix(in srgb, var(--accent-pri) 24%, transparent);
+  --pri-soft2: color-mix(in srgb, var(--accent-pri) 34%, transparent);
+  --rel-soft:  color-mix(in srgb, var(--accent-rel) 26%, transparent);
+  --calc-soft: color-mix(in srgb, var(--accent-calc) 26%, transparent);
+  --violet-soft: color-mix(in srgb, var(--violet) 30%, transparent);
+  --success-soft: color-mix(in srgb, var(--success) 26%, transparent);
+  --warning-soft: color-mix(in srgb, var(--warning) 28%, transparent);
+  --danger-soft: color-mix(in srgb, var(--danger) 26%, transparent);
 }
 
-[data-palette="dusk"] {
-  --accent-pri:  #a020e0;
-  --accent-rel:  #ff2d8b;
-  --accent-calc: #00d8d8;
-  --accent-pri-soft:  color-mix(in oklab, var(--accent-pri)  14%, var(--surface));
-  --accent-rel-soft:  color-mix(in oklab, var(--accent-rel)  14%, var(--surface));
-  --accent-calc-soft: color-mix(in oklab, var(--accent-calc) 16%, var(--surface));
-  --accent-pri-ink:  #ffffff;
-  --accent-rel-ink:  #ffffff;
-  --accent-calc-ink: #0a1818;
-}
-
-[data-palette="tropic"] {
-  --accent-pri:  #00a8a8;
-  --accent-rel:  #ff7a1a;
-  --accent-calc: #f4c000;
-  --accent-pri-soft:  color-mix(in oklab, var(--accent-pri)  14%, var(--surface));
-  --accent-rel-soft:  color-mix(in oklab, var(--accent-rel)  16%, var(--surface));
-  --accent-calc-soft: color-mix(in oklab, var(--accent-calc) 18%, var(--surface));
-  --accent-pri-ink:  #ffffff;
-  --accent-rel-ink:  #ffffff;
-  --accent-calc-ink: #1a1408;
-}
-
-[data-palette="y2k"] {
-  --accent-pri:  #ff2eb3;
-  --accent-rel:  #00c4ff;
-  --accent-calc: #caff00;
-  --accent-pri-soft:  color-mix(in oklab, var(--accent-pri)  14%, var(--surface));
-  --accent-rel-soft:  color-mix(in oklab, var(--accent-rel)  14%, var(--surface));
-  --accent-calc-soft: color-mix(in oklab, var(--accent-calc) 18%, var(--surface));
-  --accent-pri-ink:  #ffffff;
-  --accent-rel-ink:  #ffffff;
-  --accent-calc-ink: #1a1408;
-}
-
-/* ───────────────────────────────────────────────────────────────
- * Modo oscuro — override de neutros + roles.
- * Aplica con: <html data-theme="dark">
- * ─────────────────────────────────────────────────────────────── */
-[data-theme="dark"] {
-  --neutral-0:  #0e111a;
-  --neutral-50: #14171f;
-  --neutral-100: #1b1f29;
-  --neutral-200: #262b38;
-  --neutral-300: #3a4051;
-  --neutral-400: #5a6172;
-  --neutral-500: #8a91a3;
-  --neutral-600: #b5bbc9;
-  --neutral-700: #d4d8e2;
-  --neutral-800: #e8eaf0;
-  --neutral-900: #f4f5f9;
-
-  --bg:           #0a0d15;
-  --surface:      #14171f;
-  --surface-alt:  #1b1f29;
-  --border:       #262b38;
-  --border-soft:  #1b1f29;
-  --border-strong: #3a4051;
-
-  --text:        #f4f5f9;
-  --text-soft:   #b5bbc9;
-  --text-mute:   #8a91a3;
-}
-
-/* ───────────────────────────────────────────────────────────────
- * Reset mínimo + base
- * ─────────────────────────────────────────────────────────────── */
-html, body {
-  margin: 0;
+/* ---- base ---- */
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
   font-family: var(--font-sans);
-  font-size: var(--fs-14);
-  line-height: var(--lh-14);
-  color: var(--text);
   background: var(--bg);
+  color: var(--text);
   -webkit-font-smoothing: antialiased;
-  font-feature-settings: 'cv11', 'ss01', 'ss03';  /* Inter tweaks */
+  text-rendering: optimizeLegibility;
 }
+.mono { font-family: var(--font-mono); font-feature-settings: "tnum" 1; }
+::selection { background: var(--pri-soft2); }
+:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-mute); }
 
-*, *::before, *::after { box-sizing: border-box; }
-
-:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus);
-  border-radius: var(--r-2);
+/* Cross-fade al cambiar tema/paleta (clase temporal en <html>, ~420ms) */
+:root.theme-anim,
+:root.theme-anim * {
+  transition: background-color var(--t-slow), border-color var(--t-slow),
+              color var(--t-slow), box-shadow var(--t-slow) !important;
 }

@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
+import { Search, X, Check, ArrowRight } from "lucide-react";
 import type { ColumnDefinition, Record as DRecord } from "../types";
+import { Btn } from "./ui/kit";
 
 interface Match {
   recordId: string;
@@ -14,6 +16,16 @@ interface Props {
   onApply: (recordId: string, fieldKey: string, newValue: string) => void;
   onClose: () => void;
 }
+
+// ── estilos compartidos (frame del handoff) ───────────────────────────────────
+const fieldLabel: React.CSSProperties = {
+  font: "500 12.5px/1 var(--font-sans)", color: "var(--text-soft)", marginBottom: 6, display: "block",
+};
+const fieldInput: React.CSSProperties = {
+  width: "100%", height: 38, padding: "0 11px", borderRadius: "var(--r-2)",
+  border: "1px solid var(--border)", background: "var(--surface)",
+  font: "400 13.5px/1 var(--font-mono)", color: "var(--text)", outline: "none",
+};
 
 export default function SearchReplaceModal({ columns, records, onApply, onClose }: Props) {
   const [find, setFind] = useState("");
@@ -88,105 +100,178 @@ export default function SearchReplaceModal({ columns, records, onApply, onClose 
   };
 
   return (
-    <div style={{
-      position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000,
-      display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: 80,
-    }} onClick={onClose}>
+    <div
+      onMouseDown={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 200, background: "var(--overlay)",
+        backdropFilter: "blur(5px)", WebkitBackdropFilter: "blur(5px)",
+        display: "grid", placeItems: "center", padding: 24, animation: "ogFade var(--t-mid)",
+      }}
+    >
       <div
-        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
         style={{
-          background: "var(--color-surface)", borderRadius: 8,
-          padding: 20, width: 560, maxWidth: "95%",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
-        }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-          <h3 style={{ margin: 0 }}>Buscar y reemplazar</h3>
-          <button className="btn btn-ghost" onClick={onClose} style={{ padding: "2px 8px" }}>✕</button>
+          width: "100%", maxWidth: 500, maxHeight: "90vh", display: "flex", flexDirection: "column",
+          background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-4)",
+          boxShadow: "var(--shadow-4)", animation: "ogPop var(--t-slow)", overflow: "hidden",
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "18px 20px", borderBottom: "1px solid var(--border)" }}>
+          <span style={{
+            display: "grid", placeItems: "center", width: 38, height: 38, borderRadius: "var(--r-2)",
+            background: "var(--pri-soft)", color: "var(--accent-pri)", flex: "none",
+          }}>
+            <Search size={20} />
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ font: "700 17px/1.2 var(--font-sans)", color: "var(--text)" }}>Buscar y reemplazar</div>
+            <div style={{ font: "400 13px/1.4 var(--font-sans)", color: "var(--text-soft)", marginTop: 3 }}>
+              En toda la tabla o una columna
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="og-iconbtn"
+            style={{ width: 32, height: 32, display: "grid", placeItems: "center", border: "none", background: "transparent", borderRadius: 8, cursor: "pointer", color: "var(--text-mute)" }}
+            title="Cerrar"
+          >
+            <X size={18} />
+          </button>
         </div>
 
-        <div className="form-group">
-          <label className="form-label">Buscar</label>
-          <input autoFocus placeholder="Texto a buscar"
-            value={find} onChange={(e) => { setFind(e.target.value); setFeedback(""); }} />
-        </div>
-
-        <div className="form-group" style={{ marginTop: 10 }}>
-          <label className="form-label">Reemplazar con</label>
-          <input placeholder="Nuevo valor (puede estar vacío)"
-            value={repl} onChange={(e) => { setRepl(e.target.value); setFeedback(""); }} />
-        </div>
-
-        <div style={{ display: "flex", gap: 14, marginTop: 12, flexWrap: "wrap" }}>
-          <label className="checkbox-row" style={{ gap: 5 }}>
-            <input type="checkbox" checked={caseSensitive} onChange={(e) => setCaseSensitive(e.target.checked)} />
-            <span style={{ fontSize: 12 }}>Distinguir mayús/minús</span>
+        {/* Body */}
+        <div style={{ padding: 20, overflow: "auto", display: "flex", flexDirection: "column", gap: 14 }}>
+          <label style={{ display: "block" }}>
+            <span style={fieldLabel}>Buscar</span>
+            <input
+              autoFocus placeholder="Texto a buscar" style={fieldInput}
+              value={find} onChange={(e) => { setFind(e.target.value); setFeedback(""); }}
+            />
           </label>
-          <label className="checkbox-row" style={{ gap: 5 }}>
-            <input type="checkbox" checked={wholeCell} onChange={(e) => setWholeCell(e.target.checked)} />
-            <span style={{ fontSize: 12 }}>Coincidir celda completa</span>
+
+          <label style={{ display: "block" }}>
+            <span style={fieldLabel}>Reemplazar con</span>
+            <input
+              placeholder="Nuevo valor (puede estar vacío)" style={fieldInput}
+              value={repl} onChange={(e) => { setRepl(e.target.value); setFeedback(""); }}
+            />
           </label>
-        </div>
 
-        <div className="form-group" style={{ marginTop: 12 }}>
-          <label className="form-label">Ámbito</label>
-          <select value={scopeKey} onChange={(e) => setScopeKey(e.target.value)}>
-            <option value="">Toda la tabla</option>
-            {editableCols.map((c) => (
-              <option key={c.field_key} value={c.field_key}>Solo columna: {c.name}</option>
-            ))}
-          </select>
-        </div>
+          {/* Opciones de coincidencia */}
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer", font: "400 12.5px var(--font-sans)", color: "var(--text-soft)" }}>
+              <input type="checkbox" checked={caseSensitive} onChange={(e) => setCaseSensitive(e.target.checked)} style={{ accentColor: "var(--accent-pri)" }} />
+              Distinguir mayús/minús
+            </label>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer", font: "400 12.5px var(--font-sans)", color: "var(--text-soft)" }}>
+              <input type="checkbox" checked={wholeCell} onChange={(e) => setWholeCell(e.target.checked)} style={{ accentColor: "var(--accent-pri)" }} />
+              Coincidir celda completa
+            </label>
+          </div>
 
-        {/* Preview */}
-        <div style={{
-          marginTop: 14, padding: 10, borderRadius: 6,
-          background: "var(--color-bg)", border: "1px solid var(--color-border-light)",
-          maxHeight: 180, overflowY: "auto", fontSize: 12,
-        }}>
-          {!find ? (
-            <span style={{ color: "var(--color-text-muted)" }}>Escribí en "Buscar" para ver coincidencias.</span>
-          ) : matches.length === 0 ? (
-            <span style={{ color: "var(--color-text-muted)" }}>Sin coincidencias.</span>
-          ) : (
-            <>
-              <div style={{ fontWeight: 600, color: "var(--color-primary)", marginBottom: 6 }}>
-                {matches.length} coincidencia{matches.length !== 1 ? "s" : ""}
-              </div>
-              {matches.slice(0, 8).map((m, i) => {
-                const col = columns.find((c) => c.field_key === m.fieldKey);
+          {/* Ámbito (segmentos seleccionables) */}
+          <div>
+            <div style={fieldLabel}>Ámbito</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {[{ key: "", label: "Toda la tabla" }, ...editableCols.map((c) => ({ key: c.field_key, label: `Columna: ${c.name}` }))].map((o) => {
+                const on = scopeKey === o.key;
                 return (
-                  <div key={i} style={{ marginBottom: 4, fontFamily: "var(--font-mono)", fontSize: 11 }}>
-                    <span style={{ color: "var(--color-text-muted)" }}>{col?.name ?? m.fieldKey}: </span>
-                    <span style={{ background: "#FEE2E2", color: "#991B1B", padding: "0 3px", borderRadius: 2 }}>{m.oldValue}</span>
-                    <span style={{ margin: "0 5px", color: "var(--color-text-muted)" }}>→</span>
-                    <span style={{ background: "#DCFCE7", color: "#166534", padding: "0 3px", borderRadius: 2 }}>{m.newValue}</span>
-                  </div>
+                  <button
+                    key={o.key || "__all__"}
+                    type="button"
+                    onClick={() => setScopeKey(o.key)}
+                    style={{
+                      flex: "1 1 auto", minWidth: 0, textAlign: "center", cursor: "pointer",
+                      font: "600 12.5px var(--font-sans)", padding: "9px 11px", borderRadius: "var(--r-2)",
+                      border: `1px solid ${on ? "var(--accent-pri)" : "var(--border)"}`,
+                      background: on ? "var(--pri-soft)" : "var(--surface)",
+                      color: on ? "var(--accent-pri)" : "var(--text-soft)",
+                      transition: "all var(--t-fast)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                    }}
+                  >
+                    {o.label}
+                  </button>
                 );
               })}
-              {matches.length > 8 && (
-                <div style={{ color: "var(--color-text-muted)", fontStyle: "italic", marginTop: 4 }}>
-                  …y {matches.length - 8} más
+            </div>
+          </div>
+
+          {/* Preview de coincidencias */}
+          <div style={{
+            padding: 12, borderRadius: "var(--r-2)",
+            background: "var(--surface-alt)", border: "1px solid var(--border)",
+            maxHeight: 200, overflowY: "auto",
+          }}>
+            {!find ? (
+              <span style={{ font: "400 12.5px var(--font-sans)", color: "var(--text-mute)" }}>
+                Escribí en "Buscar" para ver coincidencias.
+              </span>
+            ) : matches.length === 0 ? (
+              <span style={{ font: "400 12.5px var(--font-sans)", color: "var(--text-mute)" }}>Sin coincidencias.</span>
+            ) : (
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10, font: "400 12.5px var(--font-sans)", color: "var(--text-soft)" }}>
+                  <Check size={14} color="var(--success)" />
+                  <strong className="mono" style={{ color: "var(--text)" }}>{matches.length}</strong>
+                  coincidencia{matches.length !== 1 ? "s" : ""}
+                  {scopeKey && (() => {
+                    const sc = columns.find((c) => c.field_key === scopeKey);
+                    return sc ? <>en la columna {sc.name}</> : null;
+                  })()}
                 </div>
-              )}
-            </>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {matches.slice(0, 8).map((m, i) => {
+                    const col = columns.find((c) => c.field_key === m.fieldKey);
+                    return (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        <span style={{ font: "500 11.5px var(--font-sans)", color: "var(--text-mute)" }}>
+                          {col?.name ?? m.fieldKey}:
+                        </span>
+                        <span className="mono" style={{
+                          font: "500 11.5px var(--font-mono)", padding: "2px 6px", borderRadius: 5,
+                          background: "var(--danger-soft)", color: "var(--danger)",
+                        }}>
+                          {m.oldValue}
+                        </span>
+                        <ArrowRight size={13} color="var(--text-mute)" />
+                        <span className="mono" style={{
+                          font: "500 11.5px var(--font-mono)", padding: "2px 6px", borderRadius: 5,
+                          background: "var(--success-soft)", color: "var(--success)",
+                        }}>
+                          {m.newValue || "(vacío)"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {matches.length > 8 && (
+                    <div style={{ font: "400 11.5px var(--font-sans)", fontStyle: "italic", color: "var(--text-mute)", marginTop: 2 }}>
+                      …y {matches.length - 8} más
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          {feedback && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 7, padding: "8px 11px", borderRadius: "var(--r-2)",
+              background: "var(--success-soft)", color: "var(--success)",
+              border: "1px solid color-mix(in srgb, var(--success) 30%, transparent)",
+              font: "600 12.5px var(--font-sans)",
+            }}>
+              <Check size={14} /> {feedback}
+            </div>
           )}
         </div>
 
-        {feedback && (
-          <div style={{
-            marginTop: 10, padding: "6px 10px", borderRadius: 4, fontSize: 12,
-            background: "var(--color-primary-bg)", color: "var(--pm-green-600)",
-            border: "1px solid var(--color-primary-border)", fontWeight: 600,
-          }}>
-            ✓ {feedback}
-          </div>
-        )}
-
-        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--color-border-light)" }}>
-          <button className="btn btn-secondary" onClick={onClose}>Cerrar</button>
-          <button className="btn btn-primary" disabled={matches.length === 0} onClick={applyAll}>
+        {/* Footer */}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, padding: "14px 20px", borderTop: "1px solid var(--border)", background: "var(--surface-2)" }}>
+          <Btn variant="ghost" onClick={onClose}>Cerrar</Btn>
+          <Btn variant="primary" icon={<Check size={15} />} disabled={matches.length === 0} onClick={applyAll}>
             Reemplazar todo ({matches.length})
-          </button>
+          </Btn>
         </div>
       </div>
     </div>

@@ -24,6 +24,11 @@ import "./styles/tokens.css";
 import "./index.css";
 import "./styles/og.css";
 import "./styles/og-grid.css";
+import "./styles/og-kit.css";
+import { bootstrapTheme } from "./utils/theme";
+
+// Aplica tema/paleta/densidad persistidos en <html> antes del primer render
+bootstrapTheme();
 
 const qc = new QueryClient({
   defaultOptions: {

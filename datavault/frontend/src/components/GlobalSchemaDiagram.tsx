@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { getDatasets, getColumns } from "../api/datasets";
 import type { ColumnDefinition, Dataset } from "../types";

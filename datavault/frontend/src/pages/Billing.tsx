@@ -1,51 +1,60 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, X, Hourglass, ShieldCheck, CreditCard } from "lucide-react";
+import {
+  Check, X, Hourglass, ShieldCheck, CreditCard, Bell, Upload, ChevronDown,
+} from "lucide-react";
 import { getWorkspaces } from "../api/workspaces";
 import { getPlans, getWorkspaceBilling, reportTransfer, mpCheckout, listClaims, approveClaim, rejectClaim, type Plan } from "../api/billing";
 import { useAuth } from "../auth/AuthContext";
 import { useToast } from "../components/Toast";
 import AppShell from "../components/chrome/AppShell";
+import { Avatar, Badge, Btn } from "../components/ui/kit";
 
 const STATUS_LABEL: Record<string, string> = {
   active: "Activo", trialing: "Prueba", past_due: "Pago vencido", canceled: "Cancelado", pending: "Pendiente",
 };
-const STATUS_BADGE: Record<string, string> = {
-  active: "badge--success", trialing: "badge--pri", past_due: "badge--danger", canceled: "badge--danger", pending: "badge--danger",
+const STATUS_TONE: Record<string, "success" | "primary" | "danger"> = {
+  active: "success", trialing: "primary", past_due: "danger", canceled: "danger", pending: "danger",
 };
 
 const fmtLimit = (n: number | null) => (n === null ? "ilimitados" : n.toLocaleString("es-PE"));
 
-/** Barra de uso con modificadores warn/danger según porcentaje. */
+const sectionTitle: React.CSSProperties = {
+  font: "600 15px/1 var(--font-sans)", color: "var(--text)", display: "flex", alignItems: "center", gap: 8,
+};
+
+/** Barra de uso con tono warn/danger y aviso al 80/95%. */
 function UsageCard({ label, used, max }: { label: string; used: number; max: number | null }) {
   const pct = max === null ? 12 : Math.min(100, Math.round((used / Math.max(max, 1)) * 100));
-  const tone = max === null ? "" : pct >= 95 ? " usage--danger" : pct >= 80 ? " usage--warn" : "";
-  const remaining = max === null ? null : Math.max(0, max - used);
+  const tone = max === null
+    ? "var(--accent-pri)"
+    : pct >= 95 ? "var(--danger)" : pct >= 80 ? "var(--warning)" : "var(--accent-pri)";
   return (
-    <div className="ds-card" style={{ marginBottom: 0 }}>
-      <div className={`usage${tone}`}>
-        <div className="usage__head">
-          <span className="usage__label">{label}</span>
-          <span className="usage__val">
-            {used.toLocaleString("es-PE")} <em>/ {fmtLimit(max)}</em>
+    <div style={{
+      background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-3)",
+      padding: 18, boxShadow: "var(--shadow-1)",
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <span style={{ font: "500 13px var(--font-sans)", color: "var(--text-soft)" }}>{label}</span>
+        {max !== null && pct >= 80 && (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, font: "600 11px var(--font-sans)", color: tone }}>
+            <Bell size={12} /> {pct >= 95 ? "casi al tope" : "uso alto"}
           </span>
-        </div>
-        <div className="usage__bar"><div className="usage__fill" style={{ width: `${pct}%` }} /></div>
-        {max !== null && (
-          <p
-            style={{
-              margin: "var(--sp-2) 0 0",
-              fontSize: "var(--fs-11)",
-              color: pct >= 95 ? "var(--danger)" : pct >= 80 ? "color-mix(in oklab, var(--warning) 70%, var(--text))" : "var(--text-mute)",
-            }}
-          >
-            {pct >= 95
-              ? `⚠ Estás casi al tope (${remaining!.toLocaleString("es-PE")} disponibles).`
-              : pct >= 80
-                ? `⚠ ${remaining!.toLocaleString("es-PE")} ${label.toLowerCase()} antes del tope.`
-                : `${remaining!.toLocaleString("es-PE")} disponibles.`}
-          </p>
         )}
+      </div>
+      <div style={{ margin: "8px 0 12px", display: "flex", alignItems: "baseline", gap: 6 }}>
+        <span className="mono" style={{ font: "700 24px var(--font-mono)", color: "var(--text)" }}>
+          {used.toLocaleString("es-PE")}
+        </span>
+        <span className="mono" style={{ font: "500 14px var(--font-mono)", color: "var(--text-mute)" }}>
+          / {fmtLimit(max)}
+        </span>
+      </div>
+      <div style={{ height: 8, background: "var(--surface-alt)", borderRadius: 999, overflow: "hidden" }}>
+        <div style={{ width: `${pct}%`, height: "100%", background: tone, borderRadius: 999, transition: "width var(--t-mid)" }} />
+      </div>
+      <div style={{ font: "400 11.5px var(--font-mono)", color: "var(--text-mute)", marginTop: 6 }}>
+        {max === null ? "límite ilimitado" : `${pct}% usado`}
       </div>
     </div>
   );
@@ -60,6 +69,7 @@ export default function Billing() {
   const workspaces = isAdmin ? allWorkspaces : allWorkspaces.filter((w) => w.my_role === "owner" || w.my_role === "admin_ws");
   const [wsId, setWsId] = useState("");
   const effectiveWsId = wsId || (workspaces[0]?.id ?? "");
+  const activeWs = workspaces.find((w) => w.id === effectiveWsId);
 
   const { data: plansData } = useQuery({ queryKey: ["billing-plans"], queryFn: getPlans });
   const { data: billing } = useQuery({
@@ -101,35 +111,64 @@ export default function Billing() {
     else transferMut.mutate();
   };
 
+  const status = billing?.subscription.status ?? "active";
+  const statusActive = status === "active";
+
   return (
-    <>
-      <AppShell active="billing">
-        <main className="page page-main" style={{ overflowY: "auto", maxWidth: "none", width: "100%" }}>
-          <div className="page-header">
+    <AppShell active="billing">
+      <main className="home-main" style={{ overflowY: "auto", padding: 0 }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 32px 80px" }}>
+          {/* ─── Header ─── */}
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
             <div>
-              <h1>Planes y facturación</h1>
-              <p>Pago en soles peruanos · Mercado Pago o transferencia bancaria. Sin contratos, cancela cuando quieras.</p>
+              <h1 style={{ margin: 0, font: "700 28px/1.1 var(--font-sans)", letterSpacing: "-.02em", color: "var(--text)", display: "flex", alignItems: "center", gap: 10 }}>
+                <CreditCard size={25} style={{ color: "var(--accent-pri)" }} /> Planes y facturación
+              </h1>
+              <p style={{ margin: "7px 0 0", font: "400 15px var(--font-sans)", color: "var(--text-soft)" }}>
+                {billing ? (
+                  <>
+                    Workspace <strong style={{ color: "var(--text)" }}>{activeWs?.name ?? "—"}</strong>
+                    {" · "}plan <strong style={{ color: "var(--text)" }}>{billing.plan.name}</strong>{" "}
+                    <span style={{ color: statusActive ? "var(--success)" : "var(--warning)" }}>
+                      ● {STATUS_LABEL[status]?.toLowerCase() ?? status}
+                    </span>
+                  </>
+                ) : (
+                  "Pago en soles peruanos · Mercado Pago o transferencia bancaria. Sin contratos, cancela cuando quieras."
+                )}
+              </p>
             </div>
-            <div className="page-header__actions">
-              {workspaces.length > 1 && (
+            {workspaces.length > 1 && (
+              <label style={{
+                position: "relative", display: "flex", alignItems: "center", gap: 9, padding: "8px 12px",
+                borderRadius: "var(--r-2)", border: "1px solid var(--border)", background: "var(--surface)",
+                cursor: "pointer", color: "var(--text)", boxShadow: "var(--shadow-1)",
+              }}>
+                <span style={{ font: "400 13px var(--font-sans)", color: "var(--text-mute)" }}>Workspace</span>
+                <Avatar name={activeWs?.name ?? ""} size={22} square />
+                <span style={{ font: "600 14px var(--font-sans)" }}>{activeWs?.name ?? "—"}</span>
+                <ChevronDown size={15} style={{ color: "var(--text-mute)" }} />
                 <select
-                  className="btn btn--secondary"
                   value={effectiveWsId}
                   onChange={(e) => { setWsId(e.target.value); setPayPlan(null); }}
                   aria-label="Workspace"
-                  style={{ minWidth: 200 }}
+                  style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }}
                 >
                   {workspaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
                 </select>
-              )}
-            </div>
+              </label>
+            )}
           </div>
 
           {workspaces.length === 0 ? (
-            <div className="ds-card" style={{ textAlign: "center", color: "var(--text-mute)" }}>
-              <CreditCard style={{ width: 24, height: 24, margin: "0 auto var(--sp-2)" }} />
-              <p style={{ margin: 0, fontWeight: "var(--fw-semibold)", color: "var(--text)" }}>Sin workspaces</p>
-              <p style={{ margin: "var(--sp-1) 0 0", fontSize: "var(--fs-13)" }}>
+            <div style={{
+              marginTop: 28, textAlign: "center", color: "var(--text-mute)",
+              background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-3)",
+              padding: "34px 24px", boxShadow: "var(--shadow-1)",
+            }}>
+              <CreditCard size={26} style={{ margin: "0 auto 10px", display: "block" }} />
+              <p style={{ margin: 0, font: "600 15px var(--font-sans)", color: "var(--text)" }}>Sin workspaces</p>
+              <p style={{ margin: "6px 0 0", font: "400 13px var(--font-sans)" }}>
                 Necesitás ser owner o admin de un workspace para gestionar su plan.
               </p>
             </div>
@@ -138,67 +177,74 @@ export default function Billing() {
               {/* ─── Uso del plan actual ─── */}
               {billing && (
                 <>
-                  <h3 className="t-h4" style={{ margin: "0 0 var(--sp-3)" }}>
-                    Uso del plan actual · <span style={{ color: "var(--accent-pri)" }}>{billing.plan.name}</span>
-                    {billing.subscription.status !== "active" && (
-                      <span className={`badge ${STATUS_BADGE[billing.subscription.status] ?? "badge--pri"}`} style={{ marginLeft: "var(--sp-2)" }}>
-                        {STATUS_LABEL[billing.subscription.status] ?? billing.subscription.status}
-                      </span>
+                  <div style={{ ...sectionTitle, margin: "28px 0 14px" }}>
+                    Uso del plan actual
+                    {!statusActive && (
+                      <Badge tone={STATUS_TONE[status] ?? "primary"} dot>{STATUS_LABEL[status] ?? status}</Badge>
                     )}
-                  </h3>
-                  <div className="bill-usage-grid">
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
                     <UsageCard label="Miembros" used={billing.usage.members} max={billing.plan.max_members} />
                     <UsageCard label="Datasets" used={billing.usage.datasets} max={billing.plan.max_datasets} />
-                    <UsageCard label="Registros totales" used={billing.usage.records} max={billing.plan.max_records} />
+                    <UsageCard label="Registros" used={billing.usage.records} max={billing.plan.max_records} />
                   </div>
                 </>
               )}
 
               {/* ─── Elegir plan ─── */}
-              <h3 className="t-h4" style={{ margin: "var(--sp-6) 0 var(--sp-3)" }}>Elegir plan</h3>
-              <div className="bill-grid">
+              <div style={{ ...sectionTitle, margin: "32px 0 18px" }}>Elegir plan</div>
+              <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(plans.length, 1)}, 1fr)`, gap: 16 }}>
                 {plans.map((p) => {
                   const current = billing?.plan_key === p.key;
                   const recommended = !current && p.key === recommendedKey;
-                  const selected = payPlan?.key === p.key;
                   return (
-                    <div key={p.key} className={`bill-card${current ? " is-current" : ""}${recommended ? " is-recommended" : ""}`}>
-                      {current && <span className="bill-card__pill">PLAN ACTUAL</span>}
-                      <div>
-                        <div className="bill-card__name" style={recommended ? { color: "var(--accent-rel)" } : current ? undefined : { color: "var(--text-mute)" }}>
-                          {p.name}
-                        </div>
-                        <div className="bill-card__price">
-                          S/ {p.price_pen} <small>/ mes</small>
-                        </div>
+                    <div key={p.key} style={{
+                      position: "relative",
+                      background: "var(--surface)",
+                      border: `1.5px solid ${current ? "var(--accent-pri)" : recommended ? "var(--accent-rel)" : "var(--border)"}`,
+                      borderRadius: "var(--r-3)", padding: 22,
+                      boxShadow: current || recommended ? "var(--shadow-2)" : "var(--shadow-1)",
+                    }}>
+                      {current ? (
+                        <span style={{
+                          position: "absolute", top: -11, left: 22, padding: "3px 10px", borderRadius: "var(--r-pill)",
+                          background: "var(--accent-pri)", color: "#fff", font: "700 10.5px var(--font-sans)", letterSpacing: ".04em",
+                        }}>PLAN ACTUAL</span>
+                      ) : recommended ? (
+                        <span style={{
+                          position: "absolute", top: -11, left: 22, padding: "3px 10px", borderRadius: "var(--r-pill)",
+                          background: "var(--accent-rel)", color: "#fff", font: "700 10.5px var(--font-sans)", letterSpacing: ".04em",
+                        }}>RECOMENDADO</span>
+                      ) : null}
+
+                      <div style={{ font: "700 17px var(--font-sans)", color: "var(--text)" }}>{p.name}</div>
+                      <div style={{ margin: "10px 0 18px", display: "flex", alignItems: "baseline", gap: 4 }}>
+                        <span className="mono" style={{ font: "800 30px var(--font-mono)", color: "var(--text)" }}>S/ {p.price_pen}</span>
+                        <span style={{ font: "400 13px var(--font-sans)", color: "var(--text-mute)" }}>/mes</span>
                       </div>
-                      <ul className="bill-card__features">
-                        <li><Check /> <b>{fmtLimit(p.max_members)}</b> miembros</li>
-                        <li><Check /> <b>{fmtLimit(p.max_datasets)}</b> datasets · <b>{fmtLimit(p.max_records)}</b> registros</li>
-                        <li style={{ opacity: p.scripts ? 1 : 0.45 }}>
-                          <Check /> Scripts / datasets calculados
-                        </li>
-                        <li style={{ opacity: p.api ? 1 : 0.45 }}>
-                          <Check /> API tokens y webhooks
-                        </li>
-                      </ul>
-                      <div className="bill-card__cta">
-                        {current ? (
-                          <button className="btn btn--ghost" style={{ width: "100%" }} disabled>Tu plan actual</button>
-                        ) : canManage ? (
-                          <button
-                            className={recommended ? "btn btn--primary" : "btn btn--secondary"}
-                            style={recommended
-                              ? { width: "100%", background: "var(--accent-rel)", borderColor: "var(--accent-rel)" }
-                              : { width: "100%" }}
-                            onClick={() => { setPayPlan(p); setReference(""); }}
-                          >
-                            {p.price_pen > 0 ? `Subir a ${p.name}` : `Cambiar a ${p.name}`}
-                          </button>
-                        ) : (
-                          <button className="btn btn--ghost" style={{ width: "100%" }} disabled>Solo admin</button>
-                        )}
+
+                      <div style={{ display: "flex", flexDirection: "column", gap: 9, marginBottom: 20 }}>
+                        <Feature ok>{fmtLimit(p.max_members)} miembros</Feature>
+                        <Feature ok>{fmtLimit(p.max_datasets)} datasets</Feature>
+                        <Feature ok>{fmtLimit(p.max_records)} registros</Feature>
+                        <Feature ok={p.scripts}>Scripts / datasets calculados</Feature>
+                        <Feature ok={p.api}>API tokens y webhooks</Feature>
                       </div>
+
+                      {current ? (
+                        <Btn variant="tint" full>Plan actual</Btn>
+                      ) : canManage ? (
+                        <Btn
+                          variant={recommended ? "primary" : "soft"}
+                          tone={recommended ? "rel" : "primary"}
+                          full
+                          onClick={() => { setPayPlan(p); setReference(""); }}
+                        >
+                          {p.price_pen > 0 ? `Cambiar a ${p.name}` : `Bajar a ${p.name}`}
+                        </Btn>
+                      ) : (
+                        <Btn variant="ghost" full disabled>Solo admin</Btn>
+                      )}
                     </div>
                   );
                 })}
@@ -207,89 +253,128 @@ export default function Billing() {
               {/* ─── Método de pago (aparece al elegir un plan) ─── */}
               {payPlan && (
                 <>
-                  <h3 className="t-h4" style={{ margin: "var(--sp-6) 0 var(--sp-3)", display: "flex", alignItems: "center", gap: "var(--sp-2)" }}>
-                    Método de pago · {payPlan.name} — S/ {payPlan.price_pen}/mes
-                    <button className="btn btn--ghost btn--sm" style={{ marginLeft: "auto" }} onClick={() => { setPayPlan(null); setReference(""); }}>
-                      <X /> Cancelar
-                    </button>
-                  </h3>
-                  <div className="bill-pay">
-                    <p style={{ margin: "0 0 var(--sp-3)", fontSize: "var(--fs-13)", color: "var(--text-soft)" }}>
-                      Elige cómo quieres pagar. Te enviamos la factura electrónica SUNAT en automático.
-                    </p>
-                    <div className="bill-pay-methods">
-                      {/* Mercado Pago */}
-                      <div className={`bill-method${method === "mp" ? " is-on" : ""}`} onClick={() => setMethod("mp")}>
-                        <span className="bill-method__radio" />
-                        <span className="bill-method__logo is-mp">MP</span>
-                        <div style={{ flex: 1 }}>
-                          <div className="bill-method__name">Mercado Pago</div>
-                          <div className="bill-method__desc">Tarjeta, Yape, Plin o efectivo en agente · cargo automático mensual</div>
-                        </div>
-                        {plansData?.mercadopago_enabled
-                          ? <span className="badge badge--success">DISPONIBLE</span>
-                          : <span className="badge badge--danger">NO CONFIGURADO</span>}
-                      </div>
-                      {/* Transferencia bancaria */}
-                      <div className={`bill-method${method === "transfer" ? " is-on" : ""}`} onClick={() => setMethod("transfer")}>
-                        <span className="bill-method__radio" />
-                        <span className="bill-method__logo is-bcp">BCP</span>
-                        <div style={{ flex: 1 }}>
-                          <div className="bill-method__name">Transferencia bancaria</div>
-                          <div className="bill-method__desc">
-                            {plansData?.bank_configured
-                              ? `${plansData.bank.bank} · sube el voucher y aprobamos en 24h`
-                              : "BCP, BBVA, Interbank · sube el voucher y aprobamos en 24h"}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Detalle del método elegido */}
-                    {method === "transfer" && (
-                      <div style={{ marginTop: "var(--sp-4)" }}>
-                        {plansData?.bank_configured && (
-                          <div style={{ fontSize: "var(--fs-13)", color: "var(--text-soft)", lineHeight: 1.6, marginBottom: "var(--sp-3)" }}>
-                            <div><strong>{plansData.bank.bank}</strong></div>
-                            <div>Cuenta: {plansData.bank.account}</div>
-                            {plansData.bank.cci && <div>CCI: {plansData.bank.cci}</div>}
-                            {plansData.bank.holder && <div>Titular: {plansData.bank.holder}</div>}
-                          </div>
-                        )}
-                        <input
-                          placeholder="N° de operación / referencia (opcional)"
-                          value={reference}
-                          onChange={(e) => setReference(e.target.value)}
-                          style={{
-                            width: "100%", maxWidth: 360, fontSize: "var(--fs-13)", padding: "8px 10px",
-                            border: "1px solid var(--border)", borderRadius: "var(--r-2)", marginBottom: "var(--sp-3)",
-                            background: "var(--surface)", color: "var(--text)",
-                          }}
-                        />
-                      </div>
-                    )}
-
-                    <div style={{ marginTop: "var(--sp-4)", display: "flex", gap: "var(--sp-2)", alignItems: "center" }}>
-                      {method === "mp" ? (
-                        <button
-                          className="btn btn--primary"
-                          disabled={mpMut.isPending || !plansData?.mercadopago_enabled}
-                          onClick={pay}
-                        >
-                          {mpMut.isPending ? "Redirigiendo…" : "Pagar con Mercado Pago"}
-                        </button>
-                      ) : (
-                        <button className="btn btn--primary" disabled={transferMut.isPending} onClick={pay}>
-                          {transferMut.isPending ? "Enviando…" : "Ya transferí — avisar pago"}
-                        </button>
-                      )}
-                    </div>
-
-                    <p style={{ margin: "var(--sp-4) 0 0", fontSize: "var(--fs-11)", color: "var(--text-mute)", display: "flex", alignItems: "center", gap: "var(--sp-2)" }}>
-                      <ShieldCheck style={{ width: 12, height: 12, color: "var(--success)" }} />
-                      Datos protegidos · pago procesado en infraestructura PCI-DSS. No guardamos tu tarjeta directamente.
-                    </p>
+                  <div style={{ ...sectionTitle, margin: "32px 0 14px" }}>
+                    Método de pago
+                    <span style={{ font: "400 13px var(--font-sans)", color: "var(--text-soft)" }}>
+                      · {payPlan.name} — <span className="mono">S/ {payPlan.price_pen}</span>/mes
+                    </span>
+                    <Btn variant="ghost" size="sm" icon={<X size={14} />} style={{ marginLeft: "auto" }} onClick={() => { setPayPlan(null); setReference(""); }}>
+                      Cancelar
+                    </Btn>
                   </div>
+
+                  <p style={{ margin: "0 0 14px", font: "400 13px var(--font-sans)", color: "var(--text-soft)" }}>
+                    Elige cómo quieres pagar. Te enviamos la factura electrónica SUNAT en automático.
+                  </p>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                    {/* Mercado Pago */}
+                    <button
+                      onClick={() => setMethod("mp")}
+                      style={{
+                        textAlign: "left", display: "flex", gap: 12, padding: 16, borderRadius: "var(--r-3)",
+                        border: `1.5px solid ${method === "mp" ? "var(--accent-pri)" : "var(--border)"}`,
+                        background: method === "mp" ? "var(--pri-soft)" : "var(--surface)",
+                        cursor: "pointer", boxShadow: "var(--shadow-1)",
+                      }}
+                    >
+                      <span style={{
+                        display: "grid", placeItems: "center", width: 38, height: 38, borderRadius: "var(--r-2)",
+                        background: "var(--surface)", border: "1px solid var(--border)", color: "var(--accent-pri)", flex: "none",
+                      }}><CreditCard size={19} /></span>
+                      <span style={{ flex: 1 }}>
+                        <span style={{ display: "flex", alignItems: "center", gap: 8, font: "600 14px var(--font-sans)", color: "var(--text)" }}>
+                          Mercado Pago
+                          {method === "mp" && <Check size={15} style={{ color: "var(--accent-pri)" }} />}
+                          {plansData && (
+                            <Badge tone={plansData.mercadopago_enabled ? "success" : "danger"} style={{ marginLeft: "auto" }}>
+                              {plansData.mercadopago_enabled ? "DISPONIBLE" : "NO CONFIGURADO"}
+                            </Badge>
+                          )}
+                        </span>
+                        <span style={{ display: "block", font: "400 12.5px/1.4 var(--font-sans)", color: "var(--text-soft)", marginTop: 4 }}>
+                          Tarjeta, Yape, Plin o efectivo en agente · cargo automático mensual.
+                        </span>
+                      </span>
+                    </button>
+
+                    {/* Transferencia bancaria */}
+                    <button
+                      onClick={() => setMethod("transfer")}
+                      style={{
+                        textAlign: "left", display: "flex", gap: 12, padding: 16, borderRadius: "var(--r-3)",
+                        border: `1.5px solid ${method === "transfer" ? "var(--accent-pri)" : "var(--border)"}`,
+                        background: method === "transfer" ? "var(--pri-soft)" : "var(--surface)",
+                        cursor: "pointer", boxShadow: "var(--shadow-1)",
+                      }}
+                    >
+                      <span style={{
+                        display: "grid", placeItems: "center", width: 38, height: 38, borderRadius: "var(--r-2)",
+                        background: "var(--surface)", border: "1px solid var(--border)", color: "var(--accent-pri)", flex: "none",
+                      }}><Upload size={19} /></span>
+                      <span style={{ flex: 1 }}>
+                        <span style={{ display: "flex", alignItems: "center", gap: 8, font: "600 14px var(--font-sans)", color: "var(--text)" }}>
+                          Transferencia bancaria
+                          {method === "transfer" && <Check size={15} style={{ color: "var(--accent-pri)" }} />}
+                        </span>
+                        <span style={{ display: "block", font: "400 12.5px/1.4 var(--font-sans)", color: "var(--text-soft)", marginTop: 4 }}>
+                          {plansData?.bank_configured
+                            ? `${plansData.bank.bank} · sube el voucher y aprobamos en 24h.`
+                            : "Sube tu comprobante; un admin lo aprueba en 24h."}
+                        </span>
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Detalle del método elegido (transferencia) */}
+                  {method === "transfer" && (
+                    <div style={{
+                      marginTop: 12, padding: 16, borderRadius: "var(--r-3)", background: "var(--surface-alt)",
+                      border: "1px dashed var(--border-strong)", font: "400 13px/1.7 var(--font-sans)", color: "var(--text-soft)",
+                    }}>
+                      {plansData?.bank_configured ? (
+                        <>
+                          <div className="mono" style={{ color: "var(--text)" }}>
+                            {plansData.bank.bank} · {plansData.bank.account}
+                            {plansData.bank.holder ? ` · ${plansData.bank.holder}` : ""}
+                          </div>
+                          {plansData.bank.cci && <div>CCI: <span className="mono">{plansData.bank.cci}</span></div>}
+                          <div>
+                            Monto <strong className="mono" style={{ color: "var(--accent-pri)" }}>S/ {payPlan.price_pen}.00</strong>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="mono" style={{ color: "var(--text)" }}>BCP, BBVA o Interbank · sube el voucher y aprobamos en 24h.</div>
+                      )}
+                      <input
+                        placeholder="N° de operación / referencia (opcional)"
+                        value={reference}
+                        onChange={(e) => setReference(e.target.value)}
+                        style={{
+                          width: "100%", maxWidth: 360, font: "400 13px var(--font-sans)", padding: "8px 10px",
+                          border: "1px solid var(--border)", borderRadius: "var(--r-2)", marginTop: 10,
+                          background: "var(--surface)", color: "var(--text)",
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  <div style={{ marginTop: 16, display: "flex", gap: 10, alignItems: "center" }}>
+                    {method === "mp" ? (
+                      <Btn variant="primary" disabled={mpMut.isPending || !plansData?.mercadopago_enabled} onClick={pay}>
+                        {mpMut.isPending ? "Redirigiendo…" : "Pagar con Mercado Pago"}
+                      </Btn>
+                    ) : (
+                      <Btn variant="primary" disabled={transferMut.isPending} onClick={pay}>
+                        {transferMut.isPending ? "Enviando…" : "Ya transferí — avisar pago"}
+                      </Btn>
+                    )}
+                  </div>
+
+                  <p style={{ margin: "16px 0 0", font: "400 11px var(--font-sans)", color: "var(--text-mute)", display: "flex", alignItems: "center", gap: 7 }}>
+                    <ShieldCheck size={12} style={{ color: "var(--success)" }} />
+                    Datos protegidos · pago procesado en infraestructura PCI-DSS. No guardamos tu tarjeta directamente.
+                  </p>
                 </>
               )}
 
@@ -297,9 +382,27 @@ export default function Billing() {
               {isAdmin && <AdminClaims />}
             </>
           )}
-        </main>
-      </AppShell>
-    </>
+        </div>
+      </main>
+    </AppShell>
+  );
+}
+
+function Feature({ ok, children }: { ok?: boolean; children: React.ReactNode }) {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 9,
+      font: "400 13px var(--font-sans)", color: ok ? "var(--text)" : "var(--text-mute)",
+    }}>
+      <span style={{
+        display: "grid", placeItems: "center", width: 18, height: 18, borderRadius: 999,
+        background: ok ? "var(--success-soft)" : "var(--surface-alt)",
+        color: ok ? "var(--success)" : "var(--text-mute)", flex: "none",
+      }}>
+        {ok ? <Check size={12} /> : <X size={12} />}
+      </span>
+      {children}
+    </div>
   );
 }
 
@@ -321,56 +424,50 @@ function AdminClaims() {
     onSuccess: () => { toast("Aviso rechazado", "success"); qc.invalidateQueries({ queryKey: ["billing-claims"] }); },
   });
 
-  const initials = (name: string) =>
-    name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?";
-
   return (
     <>
-      <h3 className="t-h4" style={{ margin: "var(--sp-6) 0 var(--sp-3)", display: "flex", alignItems: "center", gap: "var(--sp-2)" }}>
-        <Hourglass style={{ width: 16, height: 16, color: "var(--warning)" }} />
-        Solicitudes de pago pendientes
-        {claims.length > 0 && <span className="badge badge--danger">{claims.length}</span>}
-        <span style={{ fontSize: "var(--fs-11)", color: "var(--text-mute)", fontWeight: "var(--fw-regular)", marginLeft: "auto" }}>
-          vista admin
-        </span>
-      </h3>
+      <div style={{ ...sectionTitle, margin: "32px 0 14px" }}>
+        <Hourglass size={16} style={{ color: "var(--warning)" }} />
+        Avisos de pago
+        <Badge tone="warn">solo admin</Badge>
+        {claims.length > 0 && <Badge tone="danger" solid>{claims.length}</Badge>}
+      </div>
 
       {claims.length === 0 ? (
-        <div className="ds-card" style={{ textAlign: "center", color: "var(--text-mute)", fontSize: "var(--fs-13)" }}>
+        <div style={{
+          textAlign: "center", color: "var(--text-mute)", font: "400 13px var(--font-sans)",
+          background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-3)",
+          padding: "26px 24px", boxShadow: "var(--shadow-1)",
+        }}>
           Cuando alguien reporte una transferencia aparecerá acá.
         </div>
       ) : (
-        <div className="bill-pending">
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {claims.map((c) => (
-            <div className="bill-pending__row" key={c.id}>
-              <div className="who">
-                <span className="avatar avatar--sm avatar--violet">{initials(c.workspace_name)}</span>
-                <div>
-                  <b>{c.workspace_name}</b>
-                  <div style={{ fontSize: "var(--fs-11)", color: "var(--text-mute)" }}>{c.plan}</div>
-                </div>
-              </div>
-              <div>
-                <span className="amount">S/ {Number(c.amount).toFixed(2)}</span>
-                <div className="meta">
-                  {c.method === "transfer" ? "Transferencia" : c.method}
-                  {c.reference ? ` · ${c.reference}` : ""}
-                </div>
-              </div>
-              <div>
-                <div className="meta">
-                  {c.created_at ? new Date(c.created_at).toLocaleDateString("es-PE") : "—"}
-                </div>
-                <span className="status-pill status-pill--due"><span className="status-pill__dot" />Esperando aprobación</span>
-              </div>
-              <div className="actions">
-                <button className="btn btn--danger btn--sm" disabled={reject.isPending} onClick={() => reject.mutate(c.id)}>
-                  <X />
-                </button>
-                <button className="btn btn--primary btn--sm" disabled={approve.isPending} onClick={() => approve.mutate(c.id)}>
-                  <Check /> Aprobar
-                </button>
-              </div>
+            <div key={c.id} style={{
+              display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", borderRadius: "var(--r-3)",
+              background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow-1)", flexWrap: "wrap",
+            }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 7, font: "500 13px var(--font-sans)", color: "var(--text)" }}>
+                <span style={{ width: 8, height: 8, borderRadius: 9, background: "var(--warning)" }} /> Pendiente
+              </span>
+              <Avatar name={c.workspace_name} size={24} square />
+              <span style={{ font: "600 13.5px var(--font-sans)", color: "var(--text)" }}>{c.workspace_name}</span>
+              <span style={{ font: "400 13px var(--font-sans)", color: "var(--text-soft)" }}>
+                {c.plan} · <span className="mono">S/ {Number(c.amount).toFixed(2)}</span> ·{" "}
+                {c.method === "transfer" ? "transferencia" : c.method}
+                {c.reference ? <> <span className="mono">#{c.reference}</span></> : ""}
+              </span>
+              <span style={{ font: "400 12px var(--font-mono)", color: "var(--text-mute)" }}>
+                {c.created_at ? new Date(c.created_at).toLocaleDateString("es-PE") : "—"}
+              </span>
+              <div style={{ flex: 1 }} />
+              <Btn variant="danger" size="sm" icon={<X size={14} />} disabled={reject.isPending} onClick={() => reject.mutate(c.id)}>
+                Rechazar
+              </Btn>
+              <Btn variant="primary" size="sm" icon={<Check size={14} />} disabled={approve.isPending} onClick={() => approve.mutate(c.id)}>
+                Aprobar
+              </Btn>
             </div>
           ))}
         </div>

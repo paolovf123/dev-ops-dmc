@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { Sparkles, X, Plus, Trash2, Check } from "lucide-react";
+import { Btn, IconBtn, TONE } from "./ui/kit";
 import type { ColumnDefinition } from "../types";
 
 export type CondOperator = "gt" | "lt" | "between" | "eq" | "neq" | "contains" | "starts_with" | "is_empty" | "is_not_empty";
@@ -41,6 +43,18 @@ interface Props {
   onClose: () => void;
 }
 
+// Estilos compartidos de controles (selects / inputs) — token-driven, fieles al handoff.
+const fieldBase: React.CSSProperties = {
+  height: 34, borderRadius: "var(--r-2)", border: "1px solid var(--border)",
+  background: "var(--surface)", color: "var(--text)", outline: "none",
+};
+const selectStyle: React.CSSProperties = {
+  ...fieldBase, padding: "0 8px", font: "500 12.5px var(--font-sans)",
+};
+const inputStyle: React.CSSProperties = {
+  ...fieldBase, padding: "0 10px", font: "400 13px var(--font-mono)",
+};
+
 export default function ConditionalFormattingModal({ columns, rules, onChange, onClose }: Props) {
   const [draft, setDraft] = useState<CondRule[]>(rules);
 
@@ -78,114 +92,180 @@ export default function ConditionalFormattingModal({ columns, rules, onChange, o
     onClose();
   };
 
+  const [iconFg, iconBg] = TONE.calc;
+
   return (
-    <div style={{
-      position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000,
-      display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: 60,
-    }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()}
+    <div
+      onMouseDown={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 300, background: "var(--overlay)",
+        backdropFilter: "blur(5px)", WebkitBackdropFilter: "blur(5px)",
+        display: "grid", placeItems: "center", padding: 24,
+      }}
+    >
+      <div
+        onMouseDown={(e) => e.stopPropagation()}
         style={{
-          background: "var(--color-surface)", borderRadius: 8,
-          padding: 20, width: 760, maxWidth: "95%", maxHeight: "85vh",
-          overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
-        }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-          <h3 style={{ margin: 0 }}>Formato condicional</h3>
-          <button className="btn btn-ghost" onClick={onClose} style={{ padding: "2px 8px" }}>✕</button>
-        </div>
-        <p style={{ color: "var(--color-text-muted)", fontSize: 12, margin: "0 0 14px" }}>
-          Pintá celdas según su valor. Las reglas se evalúan en orden — la primera que coincide gana.
-        </p>
-
-        {draft.length === 0 && (
-          <div style={{
-            padding: 24, textAlign: "center", color: "var(--color-text-muted)",
-            border: "1px dashed var(--color-border)", borderRadius: 6, fontSize: 13,
-          }}>
-            Sin reglas. Agregá una abajo.
+          width: "100%", maxWidth: 720, maxHeight: "90vh", display: "flex", flexDirection: "column",
+          background: "var(--surface)", border: "1px solid var(--border)",
+          borderRadius: "var(--r-4)", boxShadow: "var(--shadow-4)",
+          animation: "ogPop var(--t-slow)", overflow: "hidden",
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "18px 20px", borderBottom: "1px solid var(--border)" }}>
+          <span style={{ display: "grid", placeItems: "center", width: 38, height: 38, borderRadius: "var(--r-2)", background: iconBg, color: iconFg, flex: "none" }}>
+            <Sparkles size={20} />
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ font: "700 17px/1.2 var(--font-sans)", color: "var(--text)" }}>Formato condicional</div>
+            <div style={{ font: "400 13px/1.4 var(--font-sans)", color: "var(--text-soft)", marginTop: 3 }}>
+              Pintá celdas según su valor — la primera regla que coincide gana.
+            </div>
           </div>
-        )}
+          <IconBtn onClick={onClose} title="Cerrar" style={{ width: 32, height: 32, color: "var(--text-mute)" }}>
+            <X size={18} />
+          </IconBtn>
+        </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {draft.map((rule, idx) => {
-            const opMeta = OPS.find((o) => o.value === rule.op)!;
-            return (
-              <div key={rule.id}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "30px 1.4fr 1.3fr 1.5fr 1fr 30px",
-                  gap: 8, alignItems: "center",
-                  padding: 10, border: "1px solid var(--color-border)",
-                  borderRadius: 6, background: "var(--color-bg)",
-                }}>
-                <span style={{ fontSize: 11, color: "var(--color-text-muted)", textAlign: "center" }}>{idx + 1}</span>
+        {/* Body */}
+        <div style={{ padding: 20, overflow: "auto" }}>
+          {draft.length === 0 && (
+            <div style={{
+              padding: 28, textAlign: "center", color: "var(--text-mute)",
+              border: "1px dashed var(--border-strong)", borderRadius: "var(--r-3)",
+              font: "500 13px var(--font-sans)",
+            }}>
+              Sin reglas. Agregá una abajo.
+            </div>
+          )}
 
-                <select value={rule.fieldKey} onChange={(e) => updateRule(rule.id, { fieldKey: e.target.value })}
-                  style={{ fontSize: 13 }}>
-                  {editableCols.map((c) => (
-                    <option key={c.field_key} value={c.field_key}>{c.name}</option>
-                  ))}
-                </select>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {draft.map((rule, idx) => {
+              const opMeta = OPS.find((o) => o.value === rule.op)!;
+              return (
+                <div
+                  key={rule.id}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "26px 1.3fr 1.3fr 1.4fr auto 28px",
+                    gap: 8, alignItems: "center",
+                    padding: "10px 12px", borderRadius: "var(--r-2)",
+                    border: "1px solid var(--border)", background: "var(--surface-2)",
+                  }}
+                >
+                  <span style={{ font: "600 11px var(--font-mono)", color: "var(--text-mute)", textAlign: "center" }}>{idx + 1}</span>
 
-                <select value={rule.op} onChange={(e) => updateRule(rule.id, { op: e.target.value as CondOperator })}
-                  style={{ fontSize: 13 }}>
-                  {OPS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
+                  <select
+                    value={rule.fieldKey}
+                    onChange={(e) => updateRule(rule.id, { fieldKey: e.target.value })}
+                    style={selectStyle}
+                  >
+                    {editableCols.map((c) => (
+                      <option key={c.field_key} value={c.field_key}>{c.name}</option>
+                    ))}
+                  </select>
 
-                <input
-                  disabled={!opMeta.needsValue}
-                  value={rule.value}
-                  placeholder={opMeta.needsTwo ? "min, max" : "valor"}
-                  onChange={(e) => updateRule(rule.id, { value: e.target.value })}
-                  style={{ fontSize: 13, opacity: opMeta.needsValue ? 1 : 0.4 }}
-                />
+                  <select
+                    value={rule.op}
+                    onChange={(e) => updateRule(rule.id, { op: e.target.value as CondOperator })}
+                    style={selectStyle}
+                  >
+                    {OPS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
 
-                {/* Color swatches */}
-                <div style={{ display: "flex", gap: 3, flexWrap: "wrap", alignItems: "center" }}>
-                  {PRESET_COLORS.map((c) => (
-                    <button key={c.bg} type="button"
-                      onClick={() => updateRule(rule.id, { background: c.bg, color: c.fg })}
-                      title={c.label}
+                  <input
+                    disabled={!opMeta.needsValue}
+                    value={rule.value}
+                    placeholder={opMeta.needsTwo ? "min, max" : "valor"}
+                    onChange={(e) => updateRule(rule.id, { value: e.target.value })}
+                    style={{ ...inputStyle, opacity: opMeta.needsValue ? 1 : 0.45 }}
+                  />
+
+                  {/* Color swatches + bold */}
+                  <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                    {PRESET_COLORS.map((c) => {
+                      const active = rule.background === c.bg;
+                      return (
+                        <button
+                          key={c.bg}
+                          type="button"
+                          onClick={() => updateRule(rule.id, { background: c.bg, color: c.fg })}
+                          title={c.label}
+                          style={{
+                            width: 24, height: 24, borderRadius: 6, cursor: "pointer",
+                            background: c.bg, display: "grid", placeItems: "center",
+                            border: active ? "2px solid var(--text)" : "2px solid transparent",
+                            boxShadow: active ? "none" : "inset 0 0 0 1px var(--border)",
+                            transition: "all var(--t-fast)",
+                          }}
+                        >
+                          <span style={{ color: c.fg, font: "700 11px var(--font-sans)" }}>A</span>
+                        </button>
+                      );
+                    })}
+                    <label
+                      title="Negrita"
                       style={{
-                        width: 22, height: 22, borderRadius: 4, cursor: "pointer",
-                        background: c.bg,
-                        border: rule.background === c.bg ? "2px solid var(--color-primary)" : "1px solid var(--color-border)",
-                      }}>
-                      <span style={{ color: c.fg, fontSize: 11, fontWeight: 700 }}>A</span>
-                    </button>
-                  ))}
-                  <label style={{ marginLeft: 4, fontSize: 11, display: "flex", alignItems: "center", gap: 3, cursor: "pointer" }}>
-                    <input type="checkbox" checked={!!rule.bold} onChange={(e) => updateRule(rule.id, { bold: e.target.checked })} />
-                    B
-                  </label>
+                        marginLeft: 4, width: 24, height: 24, borderRadius: 6, cursor: "pointer",
+                        display: "grid", placeItems: "center",
+                        background: rule.bold ? "var(--pri-soft)" : "var(--surface)",
+                        color: rule.bold ? "var(--accent-pri)" : "var(--text-mute)",
+                        border: `1px solid ${rule.bold ? "var(--accent-pri)" : "var(--border)"}`,
+                        font: "700 12px var(--font-sans)", transition: "all var(--t-fast)",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!rule.bold}
+                        onChange={(e) => updateRule(rule.id, { bold: e.target.checked })}
+                        style={{ position: "absolute", opacity: 0, width: 0, height: 0 }}
+                      />
+                      B
+                    </label>
+                  </div>
+
+                  <IconBtn onClick={() => removeRule(rule.id)} title="Eliminar regla" style={{ width: 28, height: 28, color: "var(--text-mute)" }}>
+                    <Trash2 size={15} />
+                  </IconBtn>
                 </div>
+              );
+            })}
+          </div>
 
-                <button onClick={() => removeRule(rule.id)} title="Eliminar regla"
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--pm-red-500)", fontSize: 16 }}>
-                  ✕
-                </button>
-              </div>
-            );
-          })}
-        </div>
-
-        <div style={{ marginTop: 12 }}>
-          <button className="btn btn-secondary" onClick={addRule} disabled={editableCols.length === 0}>
-            + Agregar regla
+          <button
+            type="button"
+            onClick={addRule}
+            disabled={editableCols.length === 0}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6, marginTop: 14,
+              border: "none", background: "transparent",
+              cursor: editableCols.length === 0 ? "not-allowed" : "pointer",
+              opacity: editableCols.length === 0 ? 0.5 : 1,
+              color: "var(--accent-pri)", font: "600 12.5px var(--font-sans)",
+            }}
+          >
+            <Plus size={14} /> Agregar regla
           </button>
+
+          {/* Tips */}
+          <div style={{
+            marginTop: 18, padding: "10px 12px", borderRadius: "var(--r-2)",
+            background: "var(--surface-alt)", color: "var(--text-soft)",
+            font: "400 11.5px/1.5 var(--font-sans)",
+          }}>
+            <strong style={{ color: "var(--text)" }}>Tips:</strong> Para "Entre", usá{" "}
+            <span className="mono" style={{ font: "500 11px var(--font-mono)" }}>min, max</span>{" "}
+            separados por coma (ej.{" "}
+            <span className="mono" style={{ font: "500 11px var(--font-mono)" }}>10, 50</span>).{" "}
+            Las reglas se guardan por dataset en este navegador (localStorage).
+          </div>
         </div>
 
-        <div style={{
-          marginTop: 18, padding: 10, borderRadius: 6, fontSize: 11,
-          background: "var(--color-bg)", color: "var(--color-text-muted)",
-        }}>
-          <strong>Tips:</strong> Para "Entre", usá <code>min, max</code> separados por coma (ej. <code>10, 50</code>).
-          Las reglas se guardan por dataset en este navegador (localStorage).
-        </div>
-
-        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--color-border-light)" }}>
-          <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-primary" onClick={save}>Guardar reglas</button>
+        {/* Footer */}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, padding: "14px 20px", borderTop: "1px solid var(--border)", background: "var(--surface-2)" }}>
+          <Btn variant="ghost" onClick={onClose}>Cancelar</Btn>
+          <Btn variant="primary" icon={<Check size={16} />} onClick={save}>Guardar reglas</Btn>
         </div>
       </div>
     </div>

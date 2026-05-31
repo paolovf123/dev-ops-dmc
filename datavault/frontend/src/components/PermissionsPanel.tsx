@@ -44,7 +44,7 @@ export default function PermissionsPanel({ datasetId, onClose }: Props) {
 
   const { data: groups = [] } = useQuery({
     queryKey: ["groups"],
-    queryFn: getGroups,
+    queryFn: () => getGroups(),
   });
 
   const { data: allUsers = [] } = useQuery({

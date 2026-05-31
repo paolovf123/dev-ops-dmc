@@ -1,14 +1,17 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+import {
+  Lock, X, Search, Plus, ArrowUpRight, Trash2, Check, Layers, GitBranch,
+} from "lucide-react";
 import {
   getGroupDatasetAccess, getUserDatasetAccess,
   setDatasetGroupPermission, removeDatasetGroupPermission,
   getDatasets,
 } from "../api/datasets";
-import type { GroupDatasetAccess, UserDatasetAccess } from "../api/datasets";
+import type { UserDatasetAccess } from "../api/datasets";
 import { useEscapeKey } from "../utils/useEscapeKey";
-import { DS_ROLE_STYLE as ROLE_STYLE, modalTh as th, modalTd as td } from "../utils/ui";
+import { Badge, Btn, type Tone } from "./ui/kit";
 import { useToast } from "./Toast";
 
 interface Props {
@@ -18,6 +21,66 @@ interface Props {
   subject: { kind: "group" | "user"; id: string; name: string };
   /** Workspace al que pertenece el grupo (necesario para listar candidatos al agregar). */
   workspaceId?: string;
+}
+
+// ── Segmentado de rol (Sin acceso / Ver / Editar / Admin) ─────────────────────
+// Mapea las claves del backend (none/viewer/editor/admin) a la paleta del handoff.
+type RoleKey = "none" | "viewer" | "editor" | "admin";
+const ROLE_SEG: { key: RoleKey; label: string; color: string }[] = [
+  { key: "none",   label: "Sin acceso", color: "var(--text-mute)" },
+  { key: "viewer", label: "Ver",        color: "var(--accent-pri)" },
+  { key: "editor", label: "Editar",     color: "var(--success)" },
+  { key: "admin",  label: "Admin",      color: "var(--violet)" },
+];
+
+function RoleSeg({
+  value, onChange, lock,
+}: {
+  value: string;
+  onChange?: (next: RoleKey) => void;
+  lock?: boolean;
+}) {
+  return (
+    <span style={{
+      display: "inline-flex", borderRadius: "var(--r-2)",
+      border: "1px solid var(--border)", overflow: "hidden",
+      opacity: lock ? 0.7 : 1, flex: "none",
+    }}>
+      {ROLE_SEG.map(({ key, label, color }, i) => {
+        const on = value === key;
+        return (
+          <button key={key} type="button" disabled={lock || !onChange}
+            onClick={() => onChange?.(key)}
+            style={{
+              font: "600 11.5px/1 var(--font-sans)", padding: "6px 10px", border: "none",
+              borderLeft: i ? "1px solid var(--border)" : "none",
+              cursor: lock || !onChange ? "default" : "pointer",
+              background: on ? color : "var(--surface)",
+              color: on ? "#fff" : "var(--text-soft)", whiteSpace: "nowrap",
+              transition: "background var(--t-fast), color var(--t-fast)",
+            }}>
+            {label}
+          </button>
+        );
+      })}
+    </span>
+  );
+}
+
+// Origen del permiso → etiqueta + tono del badge
+function sourceLabel(source: string): string {
+  if (source === "global_admin") return "Admin global del sistema";
+  if (source === "direct") return "Permiso directo";
+  if (source.startsWith("group:")) return `Grupo: ${source.slice(6)}`;
+  if (source.startsWith("workspace:")) return `Workspace (${source.slice(10)})`;
+  return source;
+}
+function sourceBadge(source: string): { label: string; tone: Tone } {
+  if (source === "global_admin") return { label: "global", tone: "violet" };
+  if (source === "direct") return { label: "directo", tone: "rel" };
+  if (source.startsWith("group:")) return { label: "grupo", tone: "calc" };
+  if (source.startsWith("workspace:")) return { label: "workspace", tone: "primary" };
+  return { label: source, tone: "neutral" };
 }
 
 export default function DatasetAccessModal({ open, onClose, subject, workspaceId }: Props) {
@@ -117,306 +180,323 @@ export default function DatasetAccessModal({ open, onClose, subject, workspaceId
 
   if (!open) return null;
 
+  const sub = isGroup
+    ? "Permisos explícitos asignados a este grupo"
+    : "Rol efectivo · prioridad: directo › grupo › workspace › rol global";
+
+  // ── primitivos de estilo locales ─────────────────────────────────────────────
+  const inputStyle: CSSProperties = {
+    height: 38, padding: "0 11px 0 34px", borderRadius: "var(--r-2)",
+    border: "1px solid var(--border)", background: "var(--surface)",
+    font: "400 13.5px/1 var(--font-sans)", color: "var(--text)", outline: "none",
+  };
+
   return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 1000,
-      background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center",
-    }} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div style={{
-        background: "var(--color-surface)", borderRadius: 14, padding: "24px 28px",
-        width: "min(960px, 96vw)", height: "min(720px, 92vh)",
-        display: "flex", flexDirection: "column",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.3)", gap: 14,
+    <div onMouseDown={onClose} style={{
+      position: "fixed", inset: 0, zIndex: 200,
+      background: "var(--overlay)", backdropFilter: "blur(5px)",
+      display: "grid", placeItems: "center", padding: 24, animation: "ogFade var(--t-mid)",
+    }}>
+      <div onMouseDown={(e) => e.stopPropagation()} style={{
+        width: "100%", maxWidth: 760, maxHeight: "90vh", display: "flex", flexDirection: "column",
+        background: "var(--surface)", border: "1px solid var(--border)",
+        borderRadius: "var(--r-4)", boxShadow: "var(--shadow-4)",
+        animation: "ogPop var(--t-slow)", overflow: "hidden",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontSize: 22 }}>{isGroup ? "" : ""}</div>
-          <div>
-            <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>
+        {/* Header */}
+        <div style={{
+          display: "flex", alignItems: "flex-start", gap: 12,
+          padding: "18px 20px", borderBottom: "1px solid var(--border)",
+        }}>
+          <span style={{
+            display: "grid", placeItems: "center", width: 38, height: 38,
+            borderRadius: "var(--r-2)", background: "var(--violet-soft)", color: "var(--violet)", flex: "none",
+          }}>
+            <Lock size={20} />
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ font: "700 17px/1.2 var(--font-sans)", color: "var(--text)" }}>
               Datasets accesibles · {subject.name}
-            </h3>
-            <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-muted)" }}>
-              {isGroup
-                ? "Permisos explícitos asignados a este grupo"
-                : "Rol efectivo (combina permisos directos, de grupo y de workspace)"}
-            </p>
+            </div>
+            <div style={{ font: "400 13px/1.4 var(--font-sans)", color: "var(--text-soft)", marginTop: 3 }}>
+              {sub}
+            </div>
           </div>
-          <button className="btn btn-ghost" onClick={onClose}
-            style={{ marginLeft: "auto", padding: "4px 8px", fontSize: 18 }}>×</button>
+          <button onClick={onClose} className="og-iconbtn" style={{
+            width: 32, height: 32, display: "grid", placeItems: "center",
+            border: "none", background: "transparent", borderRadius: 8,
+            cursor: "pointer", color: "var(--text-mute)", flex: "none",
+          }}>
+            <X size={18} />
+          </button>
         </div>
 
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <input
-            type="text"
-            placeholder="Buscar dataset o workspace…"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            style={{
-              flex: 1, minWidth: 220,
-              fontSize: 13, padding: "6px 10px", borderRadius: 6,
-              border: "1px solid var(--color-border)",
-            }}
-          />
-          {workspaces.length > 1 && (
-            <select value={wsFilter} onChange={(e) => setWsFilter(e.target.value)}
-              style={{ fontSize: 13, padding: "6px 10px", borderRadius: 6 }}>
-              <option value="">Todos los workspaces</option>
-              {workspaces.map((w) => (
-                <option key={w.id} value={w.id}>{w.name}</option>
-              ))}
-            </select>
-          )}
-          {data && (
-            <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
-              {filtered.length} de {data.length}
-            </span>
-          )}
-        </div>
+        {/* Body */}
+        <div style={{ padding: 20, overflow: "auto", display: "flex", flexDirection: "column", gap: 14 }}>
+          {/* Toolbar: buscar + filtro de workspace + contador */}
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ position: "relative", flex: 1, minWidth: 220 }}>
+              <Search size={15} style={{
+                position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)",
+                color: "var(--text-mute)", pointerEvents: "none",
+              }} />
+              <input
+                type="text"
+                placeholder="Buscar dataset o workspace…"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                style={{ ...inputStyle, width: "100%" }}
+              />
+            </div>
+            {workspaces.length > 1 && (
+              <select value={wsFilter} onChange={(e) => setWsFilter(e.target.value)}
+                style={{
+                  height: 38, padding: "0 10px", borderRadius: "var(--r-2)",
+                  border: "1px solid var(--border)", background: "var(--surface)",
+                  font: "400 13px/1 var(--font-sans)", color: "var(--text)", cursor: "pointer",
+                }}>
+                <option value="">Todos los workspaces</option>
+                {workspaces.map((w) => (
+                  <option key={w.id} value={w.id}>{w.name}</option>
+                ))}
+              </select>
+            )}
+            {data && (
+              <span style={{ font: "500 12px/1 var(--font-sans)", color: "var(--text-mute)" }}>
+                {filtered.length} de {data.length}
+              </span>
+            )}
+          </div>
 
-        <div style={{ overflowY: "auto", flex: 1, border: "1px solid var(--color-border)", borderRadius: 8 }}>
+          {/* Lista de accesos */}
           {isLoading ? (
-            <div style={{ padding: 48, textAlign: "center", color: "var(--color-text-muted)" }}>
-              Cargando…
-            </div>
+            <Empty>Cargando…</Empty>
           ) : error ? (
-            <div style={{ padding: 48, textAlign: "center", color: "var(--pm-red-500)", fontSize: 13 }}>
-              Error: {(error as Error).message}
-            </div>
+            <Empty tone="danger">Error: {(error as Error).message}</Empty>
           ) : !data || data.length === 0 ? (
-            <div style={{ padding: 48, textAlign: "center", color: "var(--color-text-muted)" }}>
+            <Empty>
               {isGroup
                 ? "Este grupo no tiene permisos asignados a ningún dataset todavía."
                 : "Este usuario no tiene acceso a ningún dataset."}
-            </div>
+            </Empty>
           ) : filtered.length === 0 ? (
-            <div style={{ padding: 32, textAlign: "center", color: "var(--color-text-muted)", fontSize: 13 }}>
-              Sin resultados para "{filter}".
-            </div>
+            <Empty>Sin resultados para "{filter}".</Empty>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: "var(--color-bg)", position: "sticky", top: 0 }}>
-                  <th style={th}>Dataset</th>
-                  <th style={th}>Workspace</th>
-                  <th style={th}>Rol</th>
-                  {!isGroup && <th style={th}>Origen del permiso</th>}
-                  <th style={th}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((d) => {
-                  const style = ROLE_STYLE[d.role] ?? ROLE_STYLE.viewer;
-                  return (
-                    <tr key={d.dataset_id} style={{ borderBottom: "1px solid var(--color-border-light)" }}>
-                      <td style={td}>
-                        <Link to={`/datasets/${d.dataset_id}`}
-                          style={{ color: "var(--color-primary)", fontWeight: 600 }}>
+            <div style={{
+              display: "flex", flexDirection: "column",
+              border: "1px solid var(--border)", borderRadius: "var(--r-3)", overflow: "hidden",
+            }}>
+              {filtered.map((d, idx) => {
+                const userSource = !isGroup ? (d as UserDatasetAccess).source : undefined;
+                const badge = userSource ? sourceBadge(userSource) : null;
+                return (
+                  <div key={d.dataset_id} style={{
+                    display: "flex", alignItems: "center", gap: 12, padding: "11px 14px",
+                    borderBottom: idx < filtered.length - 1 ? "1px solid var(--border)" : "none",
+                  }}>
+                    <span style={{
+                      display: "grid", placeItems: "center", width: 34, height: 34, flex: "none",
+                      borderRadius: "var(--r-2)",
+                      background: d.is_bridge ? "var(--calc-soft)" : "var(--pri-soft)",
+                      color: d.is_bridge ? "var(--accent-calc)" : "var(--accent-pri)",
+                    }}>
+                      {d.is_bridge ? <GitBranch size={17} /> : <Layers size={17} />}
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                        <Link to={`/datasets/${d.dataset_id}`} style={{
+                          font: "600 13.5px/1.2 var(--font-sans)", color: "var(--text)",
+                          textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        }}>
                           {d.dataset_name}
                         </Link>
-                        {d.is_bridge && (
-                          <span style={{
-                            marginLeft: 6, fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 99,
-                            background: "#7C3AED20", color: "#7C3AED", textTransform: "uppercase",
-                          }}>intermedia</span>
-                        )}
-                      </td>
-                      <td style={{ ...td, color: "var(--color-text-secondary)" }}>
-                        {d.workspace_name ?? <em style={{ color: "var(--color-text-muted)" }}>—</em>}
-                      </td>
-                      <td style={td}>
-                        {canEdit ? (
-                          <select
-                            value={d.role}
-                            disabled={setRoleMut.isPending}
-                            onChange={(e) => setRoleMut.mutate({ datasetId: d.dataset_id, role: e.target.value })}
-                            style={{
-                              fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 99,
-                              background: style.bg, color: style.fg, border: `1px solid ${style.fg}40`,
-                              cursor: "pointer",
-                            }}>
-                            <option value="admin">Admin</option>
-                            <option value="editor">Editor</option>
-                            <option value="viewer">Visualizar</option>
-                            <option value="none">Sin acceso (bloqueo)</option>
-                          </select>
-                        ) : (
-                          <span style={{
-                            fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 99,
-                            background: style.bg, color: style.fg, border: `1px solid ${style.fg}40`,
-                          }}>
-                            {style.label}
-                          </span>
-                        )}
-                      </td>
-                      {!isGroup && (
-                        <td style={{ ...td, fontSize: 11, color: "var(--color-text-muted)" }}>
-                          {sourceLabel((d as UserDatasetAccess).source)}
-                        </td>
-                      )}
-                      <td style={td}>
-                        <div style={{ display: "flex", gap: 8, alignItems: "center", whiteSpace: "nowrap" }}>
-                          <Link to={`/datasets/${d.dataset_id}`}
-                            style={{
-                              fontSize: 11, color: "var(--color-primary)",
-                              textDecoration: "underline",
-                            }}>
-                            abrir →
-                          </Link>
-                          {canEdit && (
-                            <button
-                              onClick={() => {
-                                if (confirm(`¿Quitar acceso de ${subject.name} al dataset "${d.dataset_name}"?`)) {
-                                  removeMut.mutate(d.dataset_id);
-                                }
-                              }}
-                              disabled={removeMut.isPending}
+                        {d.is_bridge && <Badge tone="calc">intermedia</Badge>}
+                      </span>
+                      <span style={{
+                        display: "block", font: "400 12px/1.3 var(--font-sans)",
+                        color: "var(--text-mute)", marginTop: 2,
+                      }}>
+                        {d.workspace_name ?? "— sin workspace"}
+                        {userSource && <> · {sourceLabel(userSource)}</>}
+                      </span>
+                    </span>
+
+                    {badge && <Badge tone={badge.tone}>{badge.label}</Badge>}
+
+                    {canEdit ? (
+                      <RoleSeg
+                        value={d.role}
+                        onChange={(role) => setRoleMut.mutate({ datasetId: d.dataset_id, role })}
+                        lock={setRoleMut.isPending}
+                      />
+                    ) : (
+                      <RoleSeg value={d.role} />
+                    )}
+
+                    <Link to={`/datasets/${d.dataset_id}`} title="Abrir dataset"
+                      className="og-iconbtn" style={{
+                        width: 32, height: 32, display: "grid", placeItems: "center",
+                        borderRadius: 8, color: "var(--text-soft)", flex: "none",
+                      }}>
+                      <ArrowUpRight size={16} />
+                    </Link>
+                    {canEdit && (
+                      <button
+                        title="Quitar acceso"
+                        onClick={() => {
+                          if (confirm(`¿Quitar acceso de ${subject.name} al dataset "${d.dataset_name}"?`)) {
+                            removeMut.mutate(d.dataset_id);
+                          }
+                        }}
+                        disabled={removeMut.isPending}
+                        className="og-iconbtn" style={{
+                          width: 32, height: 32, display: "grid", placeItems: "center",
+                          border: "none", background: "transparent", borderRadius: 8,
+                          cursor: removeMut.isPending ? "not-allowed" : "pointer",
+                          color: "var(--danger)", flex: "none",
+                        }}>
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Editor: agregar nuevo dataset al grupo */}
+          {canEdit && workspaceId && (
+            showAdder ? (
+              <div style={{
+                padding: 14, borderRadius: "var(--r-3)",
+                background: "var(--pri-soft)", border: "1px solid color-mix(in srgb, var(--accent-pri) 30%, transparent)",
+                display: "flex", flexDirection: "column", gap: 10,
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Plus size={15} color="var(--accent-pri)" />
+                  <strong style={{ font: "700 13px/1 var(--font-sans)", color: "var(--text)" }}>
+                    Dar acceso a otro dataset
+                  </strong>
+                  <button onClick={() => { setShowAdder(false); setPickerDsId(""); setPickerFilter(""); }}
+                    className="og-iconbtn" style={{
+                      marginLeft: "auto", width: 28, height: 28, display: "grid", placeItems: "center",
+                      background: "transparent", border: "none", borderRadius: 8,
+                      cursor: "pointer", color: "var(--text-mute)",
+                    }}>
+                    <X size={15} />
+                  </button>
+                </div>
+                {(() => {
+                  const q = pickerFilter.trim().toLowerCase();
+                  const usedIds = new Set((data ?? []).map((d) => d.dataset_id));
+                  const available = wsDatasets.filter((d) => !usedIds.has(d.id));
+                  const filteredAvail = q
+                    ? available.filter((d) => d.name.toLowerCase().includes(q))
+                    : available;
+                  return (
+                    <>
+                      <div style={{ position: "relative" }}>
+                        <Search size={15} style={{
+                          position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)",
+                          color: "var(--text-mute)", pointerEvents: "none",
+                        }} />
+                        <input
+                          type="text"
+                          placeholder="Buscar dataset…"
+                          value={pickerFilter}
+                          onChange={(e) => setPickerFilter(e.target.value)}
+                          style={{ ...inputStyle, width: "100%" }}
+                        />
+                      </div>
+                      <div style={{
+                        maxHeight: 180, overflowY: "auto",
+                        border: "1px solid var(--border)", borderRadius: "var(--r-2)",
+                        background: "var(--surface)",
+                      }}>
+                        {filteredAvail.length === 0 ? (
+                          <p style={{ padding: "10px 12px", font: "400 12.5px/1.4 var(--font-sans)", color: "var(--text-mute)", margin: 0 }}>
+                            {available.length === 0
+                              ? "El grupo ya tiene acceso a todos los datasets del workspace."
+                              : `Sin resultados para "${pickerFilter}".`}
+                          </p>
+                        ) : filteredAvail.map((d, i) => {
+                          const sel = pickerDsId === d.id;
+                          return (
+                            <button key={d.id} onClick={() => setPickerDsId(d.id)}
+                              className="og-menu-item"
                               style={{
-                                fontSize: 11, padding: "2px 8px", borderRadius: 4,
-                                border: "1px solid #DC2626", background: "#fff",
-                                color: "#DC2626", cursor: "pointer",
+                                width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 8,
+                                background: sel ? "var(--pri-soft)" : undefined,
+                                border: "none", padding: "8px 12px",
+                                font: `${sel ? 600 : 400} 13px/1 var(--font-sans)`,
+                                cursor: "pointer",
+                                borderBottom: i < filteredAvail.length - 1 ? "1px solid var(--border)" : "none",
+                                color: sel ? "var(--accent-pri)" : "var(--text)",
                               }}>
-                              Quitar
+                              {sel
+                                ? <Check size={15} color="var(--accent-pri)" />
+                                : <span style={{ width: 15, flex: "none" }} />}
+                              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {d.name}
+                              </span>
+                              {d.is_bridge && <Badge tone="calc">intermedia</Badge>}
                             </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
+                          );
+                        })}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                        <span style={{ font: "600 12.5px/1 var(--font-sans)", color: "var(--text-soft)" }}>Rol:</span>
+                        <RoleSeg value={pickerRole} onChange={(r) => r !== "none" && setPickerRole(r)} />
+                        <Btn variant="primary" icon={addMut.isPending ? undefined : <Check size={16} />}
+                          disabled={!pickerDsId || addMut.isPending}
+                          onClick={() => addMut.mutate()}
+                          style={{ marginLeft: "auto" }}>
+                          {addMut.isPending ? "Guardando…" : "Dar acceso"}
+                        </Btn>
+                      </div>
+                    </>
                   );
-                })}
-              </tbody>
-            </table>
+                })()}
+              </div>
+            ) : (
+              <Btn variant="soft" icon={<Plus size={16} />} onClick={() => setShowAdder(true)}
+                style={{ alignSelf: "flex-start" }}>
+                Dar acceso a otro dataset
+              </Btn>
+            )
+          )}
+
+          {/* Leyenda solo para usuarios (orígenes del permiso) */}
+          {!isGroup && data && data.length > 0 && (
+            <p style={{
+              margin: 0, font: "400 11.5px/1.5 var(--font-sans)", color: "var(--text-mute)",
+              display: "flex", alignItems: "flex-start", gap: 7,
+            }}>
+              <Lock size={13} style={{ flex: "none", marginTop: 1 }} />
+              <span>
+                <strong>Origen:</strong> directo (permiso individual) · grupo (vía membresía) ·
+                workspace (por ser miembro) · global (admin del sistema, ve todo).
+                Prioridad: directo › grupo › workspace.
+              </span>
+            </p>
           )}
         </div>
-
-        {/* Editor: agregar nuevo dataset al grupo */}
-        {canEdit && workspaceId && (
-          showAdder ? (
-            <div style={{
-              padding: "12px 14px", borderRadius: 8,
-              background: "var(--color-primary-bg)", border: "1px solid var(--color-primary)",
-              display: "flex", flexDirection: "column", gap: 10,
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <strong style={{ fontSize: 13 }}>+ Dar acceso a otro dataset</strong>
-                <button onClick={() => { setShowAdder(false); setPickerDsId(""); setPickerFilter(""); }}
-                  style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "var(--color-text-muted)" }}>
-                  ×
-                </button>
-              </div>
-              {(() => {
-                const q = pickerFilter.trim().toLowerCase();
-                const usedIds = new Set((data ?? []).map((d) => d.dataset_id));
-                const available = wsDatasets.filter((d) => !usedIds.has(d.id));
-                const filteredAvail = q
-                  ? available.filter((d) => d.name.toLowerCase().includes(q))
-                  : available;
-                return (
-                  <>
-                    <input
-                      type="text"
-                      placeholder="Buscar dataset…"
-                      value={pickerFilter}
-                      onChange={(e) => setPickerFilter(e.target.value)}
-                      style={{
-                        fontSize: 13, padding: "6px 10px", borderRadius: 6,
-                        border: "1px solid var(--color-border)",
-                      }}
-                    />
-                    <div style={{
-                      maxHeight: 180, overflowY: "auto",
-                      border: "1px solid var(--color-border)", borderRadius: 6,
-                      background: "var(--color-surface)",
-                    }}>
-                      {filteredAvail.length === 0 ? (
-                        <p style={{ padding: "10px 12px", fontSize: 12, color: "var(--color-text-muted)", margin: 0 }}>
-                          {available.length === 0
-                            ? "El grupo ya tiene acceso a todos los datasets del workspace."
-                            : `Sin resultados para "${pickerFilter}".`}
-                        </p>
-                      ) : filteredAvail.map((d) => (
-                        <button key={d.id} onClick={() => setPickerDsId(d.id)}
-                          style={{
-                            width: "100%", textAlign: "left", background: pickerDsId === d.id ? "var(--color-primary-bg)" : "none",
-                            border: "none", padding: "6px 12px", fontSize: 13, cursor: "pointer",
-                            borderBottom: "1px solid var(--color-border-light)",
-                            color: "var(--color-text)",
-                            fontWeight: pickerDsId === d.id ? 600 : 400,
-                          }}>
-                          {pickerDsId === d.id && "✓ "}{d.name}
-                          {d.is_bridge && (
-                            <span style={{ marginLeft: 6, fontSize: 9, padding: "1px 5px", borderRadius: 99, background: "#7C3AED20", color: "#7C3AED" }}>intermedia</span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <span style={{ fontSize: 12, fontWeight: 600 }}>Rol:</span>
-                      {(["admin", "editor", "viewer"] as const).map((r) => {
-                        const sel = pickerRole === r;
-                        const s = ROLE_STYLE[r];
-                        return (
-                          <button key={r} onClick={() => setPickerRole(r)}
-                            style={{
-                              fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 99,
-                              border: `1.5px solid ${s.fg}`,
-                              background: sel ? s.bg : "transparent",
-                              color: sel ? s.fg : "var(--color-text-muted)",
-                              cursor: "pointer",
-                            }}>
-                            {s.label}
-                          </button>
-                        );
-                      })}
-                      <button
-                        onClick={() => addMut.mutate()}
-                        disabled={!pickerDsId || addMut.isPending}
-                        style={{
-                          marginLeft: "auto",
-                          fontSize: 12, fontWeight: 600, padding: "6px 14px", borderRadius: 6,
-                          background: pickerDsId ? "var(--color-primary)" : "var(--color-border)",
-                          color: "#fff", border: "none",
-                          cursor: pickerDsId ? "pointer" : "not-allowed",
-                        }}>
-                        {addMut.isPending ? "Guardando…" : "Dar acceso"}
-                      </button>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowAdder(true)}
-              style={{
-                padding: "10px 16px", fontSize: 13, fontWeight: 600,
-                background: "var(--color-primary)", color: "#fff",
-                border: "none", borderRadius: 8, cursor: "pointer",
-                alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 6,
-              }}>
-              <span style={{ fontSize: 15 }}>＋</span> Dar acceso a otro dataset
-            </button>
-          )
-        )}
-
-        {/* Leyenda solo para usuarios (orígenes del permiso) */}
-        {!isGroup && data && data.length > 0 && (
-          <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-muted)" }}>
-            <strong>Origen:</strong> "directo" (permiso individual) · "grupo:X" (vía membresía a grupo X) ·
-            "workspace:rol" (por ser miembro del workspace) · "global_admin" (admin del sistema, ve todo).
-            La prioridad es: directo &gt; grupo &gt; workspace.
-          </p>
-        )}
       </div>
     </div>
   );
 }
 
-function sourceLabel(source: string): string {
-  if (source === "global_admin") return "Admin global del sistema";
-  if (source === "direct") return "Permiso directo";
-  if (source.startsWith("group:")) return `Grupo: ${source.slice(6)}`;
-  if (source.startsWith("workspace:")) return `Workspace (${source.slice(10)})`;
-  return source;
+// Estado vacío / cargando / error
+function Empty({ children, tone }: { children: ReactNode; tone?: "danger" }) {
+  return (
+    <div style={{
+      padding: 40, textAlign: "center",
+      border: "1px solid var(--border)", borderRadius: "var(--r-3)",
+      background: "var(--surface-alt)",
+      font: "400 13px/1.5 var(--font-sans)",
+      color: tone === "danger" ? "var(--danger)" : "var(--text-mute)",
+    }}>
+      {children}
+    </div>
+  );
 }
-
-// Type guard ya implícito en sourceLabel — los grupos no tienen source
-// pero TS necesita el cast en la celda condicional. Ya manejado arriba.

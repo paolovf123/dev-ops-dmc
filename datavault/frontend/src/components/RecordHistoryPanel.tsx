@@ -1,5 +1,8 @@
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { History, X, Plus, Pencil, Trash2, ArrowRight } from "lucide-react";
 import { getRecordHistory } from "../api/datasets";
+import { Badge, IconBtn, type Tone } from "./ui/kit";
 import type { ColumnDefinition } from "../types";
 
 interface Props {
@@ -9,10 +12,13 @@ interface Props {
   onClose: () => void;
 }
 
-const ACTION_LABELS: Record<string, { label: string; color: string; icon: string }> = {
-  create: { label: "Creado",     color: "#0EA5E9", icon: "✦" },
-  update: { label: "Editado",    color: "#3B82F6", icon: "✎" },
-  delete: { label: "Eliminado",  color: "#EF4444", icon: "✕" },
+const ACTION_META: Record<
+  string,
+  { label: string; tone: Tone; dotColor: string; Icon: typeof Plus }
+> = {
+  create: { label: "CREÓ", tone: "success", dotColor: "var(--success)", Icon: Plus },
+  update: { label: "EDITÓ", tone: "primary", dotColor: "var(--accent-pri)", Icon: Pencil },
+  delete: { label: "ELIMINÓ", tone: "danger", dotColor: "var(--danger)", Icon: Trash2 },
 };
 
 export default function RecordHistoryPanel({ datasetId, recordId, columns, onClose }: Props) {
@@ -21,75 +27,123 @@ export default function RecordHistoryPanel({ datasetId, recordId, columns, onClo
     queryFn: () => getRecordHistory(datasetId, recordId),
   });
 
+  // Cierra con Esc (helper SlideOver del handoff)
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [onClose]);
+
   const colName = (key: string | null) =>
     key ? (columns.find((c) => c.field_key === key)?.name ?? key) : null;
 
   return (
-    <div className="history-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="history-panel">
+    <div
+      onMouseDown={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 200,
+        background: "var(--overlay)", backdropFilter: "blur(4px)",
+      }}
+    >
+      <div
+        onMouseDown={(e) => e.stopPropagation()}
+        className="og-slide"
+        style={{
+          position: "absolute", top: 0, right: 0, bottom: 0,
+          width: 440, maxWidth: "92vw", display: "flex", flexDirection: "column",
+          background: "var(--surface)", borderLeft: "1px solid var(--border)",
+          boxShadow: "var(--shadow-4)",
+        }}
+      >
         {/* Header */}
-        <div className="history-header">
-          <div>
-            <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>Historial de cambios</p>
-            <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 }}>
-              {history.length} evento{history.length !== 1 ? "s" : ""}
-            </p>
+        <div
+          style={{
+            display: "flex", alignItems: "center", gap: 10,
+            padding: "18px 20px", borderBottom: "1px solid var(--border)",
+          }}
+        >
+          <History size={19} color="var(--accent-pri)" />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ font: "700 16px var(--font-sans)", color: "var(--text)" }}>
+              Historial de cambios
+            </div>
+            <div style={{ font: "400 12.5px var(--font-sans)", color: "var(--text-soft)" }}>
+              Cada cambio queda registrado · {history.length} evento{history.length !== 1 ? "s" : ""}
+            </div>
           </div>
-          <button className="btn btn-ghost" onClick={onClose}
-            style={{ fontSize: 20, padding: "2px 8px" }}>×</button>
+          <IconBtn onClick={onClose} title="Cerrar">
+            <X size={18} />
+          </IconBtn>
         </div>
 
         {/* Timeline */}
-        <div className="history-body">
+        <div style={{ padding: 20, overflow: "auto", flex: 1 }}>
           {isLoading ? (
-            <div className="history-empty">Cargando…</div>
+            <div style={{ padding: "40px 0", textAlign: "center", color: "var(--text-mute)", font: "400 13.5px var(--font-sans)" }}>
+              Cargando…
+            </div>
           ) : history.length === 0 ? (
-            <div className="history-empty">Sin historial disponible</div>
+            <div style={{ padding: "40px 0", textAlign: "center", color: "var(--text-mute)", font: "400 13.5px var(--font-sans)" }}>
+              Sin historial disponible
+            </div>
           ) : (
-            <div className="history-timeline">
-              {history.map((entry, i) => {
-                const meta = ACTION_LABELS[entry.action] ?? { label: entry.action, color: "#6B7280", icon: "•" };
+            <div style={{ position: "relative", paddingLeft: 26 }}>
+              {/* Línea vertical del timeline */}
+              <div style={{ position: "absolute", left: 8, top: 6, bottom: 6, width: 2, background: "var(--border)" }} />
+              {history.map((entry) => {
+                const meta = ACTION_META[entry.action] ?? {
+                  label: entry.action.toUpperCase(), tone: "neutral" as Tone,
+                  dotColor: "var(--text-mute)", Icon: Pencil,
+                };
+                const field = colName(entry.field_key);
                 const date = new Date(entry.changed_at);
-                const isLast = i === history.length - 1;
                 return (
-                  <div key={entry.id} className="history-entry">
-                    {/* Line */}
-                    <div className="history-line-col">
-                      <div className="history-dot" style={{ background: meta.color, borderColor: meta.color + "33" }}>
-                        <span style={{ fontSize: 9, color: "#fff", fontWeight: 700 }}>{meta.icon}</span>
-                      </div>
-                      {!isLast && <div className="history-connector" />}
+                  <div key={entry.id} style={{ position: "relative", marginBottom: 22 }}>
+                    {/* Dot */}
+                    <span
+                      style={{
+                        position: "absolute", left: -24, top: 3, width: 11, height: 11,
+                        borderRadius: 999, background: meta.dotColor,
+                        border: "2px solid var(--surface)", boxShadow: "0 0 0 1px var(--border)",
+                      }}
+                    />
+
+                    {/* Acción + campo */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+                      <Badge tone={meta.tone}>
+                        <meta.Icon size={11} />{meta.label}
+                      </Badge>
+                      {field && (
+                        <span className="mono" style={{ font: "500 12.5px var(--font-mono)", color: "var(--text)" }}>
+                          {field}
+                        </span>
+                      )}
                     </div>
 
-                    {/* Content */}
-                    <div className="history-content">
-                      <div className="history-action-row">
-                        <span className="history-action-badge" style={{ background: meta.color + "18", color: meta.color, border: `1px solid ${meta.color}33` }}>
-                          {meta.label}
+                    {/* Diff anterior → nuevo */}
+                    {entry.action === "update" && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7, font: "400 12.5px var(--font-mono)", flexWrap: "wrap" }}>
+                        <span
+                          className="mono"
+                          style={{ padding: "2px 7px", borderRadius: "var(--r-1)", background: "var(--danger-soft)", color: "var(--danger)" }}
+                        >
+                          {entry.old_value ?? "vacío"}
                         </span>
-                        {colName(entry.field_key) && (
-                          <span className="history-field-name">{colName(entry.field_key)}</span>
-                        )}
-                        <span className="history-date">
-                          {date.toLocaleDateString("es-PE", { day: "2-digit", month: "short" })}
-                          {" · "}
-                          {date.toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" })}
+                        <ArrowRight size={13} color="var(--text-mute)" />
+                        <span
+                          className="mono"
+                          style={{ padding: "2px 7px", borderRadius: "var(--r-1)", background: "var(--success-soft)", color: "var(--success)" }}
+                        >
+                          {entry.new_value ?? "vacío"}
                         </span>
                       </div>
+                    )}
 
-                      {entry.action === "update" && entry.old_value !== null && (
-                        <div className="history-diff">
-                          <span className="history-old">
-                            <span className="history-diff-label">antes</span>
-                            {entry.old_value ?? <em>vacío</em>}
-                          </span>
-                          <span className="history-arrow">→</span>
-                          <span className="history-new">
-                            <span className="history-diff-label">ahora</span>
-                            {entry.new_value ?? <em>vacío</em>}
-                          </span>
-                        </div>
-                      )}
+                    {/* Timestamp */}
+                    <div style={{ marginTop: 8, font: "400 12px var(--font-sans)", color: "var(--text-soft)" }}>
+                      {date.toLocaleDateString("es-PE", { day: "2-digit", month: "short" })}
+                      {" · "}
+                      {date.toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" })}
                     </div>
                   </div>
                 );

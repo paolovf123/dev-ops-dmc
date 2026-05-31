@@ -9,46 +9,44 @@ import RelationsManagerModal from "../components/RelationsManagerModal";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useAuth } from "../auth/AuthContext";
 import { useWorkspace } from "../workspace/WorkspaceContext";
-import WorkspaceSwitcher from "../workspace/WorkspaceSwitcher";
-import UserMenu from "../components/UserMenu";
 import { useToast } from "../components/Toast";
-import { IcSearch, IcTable } from "../components/ui/icons";
 import AppShell from "../components/chrome/AppShell";
+import { Badge, Btn, Toggle } from "../components/ui/kit";
+import {
+  Search, Table2, FunctionSquare, MoreHorizontal, Plus,
+  Network, LayoutGrid, Workflow, FileSpreadsheet, Code2,
+  LayoutDashboard, Users, UsersRound, User, Trash2,
+} from "lucide-react";
 import type { ColumnDefinition } from "../types";
 import type { UseQueryResult } from "@tanstack/react-query";
 
-const PALETTE = [
-  { from: "#0EA5E9", to: "#0284C7", light: "#E0F2FE", text: "#075985" },
-  { from: "#F5821F", to: "#D96C10", light: "#FFF3E8", text: "#9A4400" },
-  { from: "#6366F1", to: "#4F46E5", light: "#EEF2FF", text: "#3730A3" },
-  { from: "#0EA5E9", to: "#0284C7", light: "#F0F9FF", text: "#075985" },
-  { from: "#8B5CF6", to: "#7C3AED", light: "#F5F3FF", text: "#5B21B6" },
-  { from: "#EC4899", to: "#DB2777", light: "#FFF0F6", text: "#9D174D" },
-  { from: "#14B8A6", to: "#0D9488", light: "#F0FDFA", text: "#115E59" },
-  { from: "#F59E0B", to: "#D97706", light: "#FFFBEB", text: "#92400E" },
-];
+interface Dataset { id: string; name: string; description?: string | null; is_bridge?: boolean; is_computed?: boolean }
 
-function dsColor(name: string) {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xfffffff;
-  return PALETTE[h % PALETTE.length];
-}
-
+// ── Helpers del mini-mapa de relaciones (preview inline) ──────────────────────
 const BOX_COLORS = [
-  "#0EA5E9","#3B82F6","#F5821F","#8B5CF6","#0EA5E9",
-  "#EC4899","#14B8A6","#F59E0B","#6366F1","#10B981",
+  "var(--accent-pri)", "var(--accent-rel)", "var(--accent-calc)", "#0fb583", "#8b3df0",
+  "#f59e0b", "#14b8a6", "#6366f1", "#ec4899", "#0ea5e9",
 ];
 function normKw(s: string) { return s.toLowerCase().replace(/\s+/g, "_"); }
 function kw(s: string) { const p = normKw(s).split("_"); return p[p.length - 1]; }
 
-interface Dataset { id: string; name: string; description?: string | null; is_computed?: boolean }
+type Kind = "real" | "calc" | "bridge";
+function kindMeta(k: Kind): { color: string; soft: string } {
+  if (k === "calc") return { color: "var(--accent-calc)", soft: "var(--calc-soft)" };
+  if (k === "bridge") return { color: "var(--accent-rel)", soft: "var(--rel-soft)" };
+  return { color: "var(--accent-pri)", soft: "var(--pri-soft)" };
+}
 
-function SchemaPreview({ datasets, colQueries }: {
+function SchemaPreview({
+  datasets, colQueries,
+}: {
   datasets: Dataset[];
   colQueries: UseQueryResult<ColumnDefinition[]>[];
 }) {
   const W = 148, H = 52, GAP_X = 76, GAP_Y = 22, MARGIN = 28, COLS = 4;
-  const edges: { fi: number; ti: number; fkKey: string }[] = [];
+  const STRIPE = 4;
+
+  const edges: { fi: number; ti: number }[] = [];
   datasets.forEach((_ds, fi) => {
     const cols = colQueries[fi]?.data ?? [];
     cols.filter((c) => c.field_key.startsWith("id_")).forEach((c) => {
@@ -58,9 +56,10 @@ function SchemaPreview({ datasets, colQueries }: {
           normKw(d.name).endsWith(`_${refKw}`) || normKw(d.name).startsWith(`${refKw}_`))
       );
       if (ti !== -1 && !edges.find((e) => e.fi === fi && e.ti === ti))
-        edges.push({ fi, ti, fkKey: c.field_key });
+        edges.push({ fi, ti });
     });
   });
+
   const rows = Math.ceil(datasets.length / COLS);
   const svgW = MARGIN * 2 + COLS * W + (COLS - 1) * GAP_X;
   const svgH = MARGIN * 2 + rows * H + (rows - 1) * GAP_Y;
@@ -68,20 +67,21 @@ function SchemaPreview({ datasets, colQueries }: {
     x: MARGIN + (i % COLS) * (W + GAP_X),
     y: MARGIN + Math.floor(i / COLS) * (H + GAP_Y),
   }));
-  const STRIPE = 4;
+
   return (
-    <svg viewBox={`0 0 ${svgW} ${svgH}`} style={{ width: "100%", height: "auto", display: "block" }}
+    <svg viewBox={`0 0 ${svgW} ${svgH}`}
+      style={{ width: "100%", height: "auto", display: "block" }}
       xmlns="http://www.w3.org/2000/svg">
-      <rect width={svgW} height={svgH} fill="#EFF2F7" />
       <defs>
-        <pattern id="pvdots" width={22} height={22} patternUnits="userSpaceOnUse">
-          <circle cx={11} cy={11} r={1} fill="#C4CDD6" opacity={0.5} />
+        <pattern id="wpdots" width={22} height={22} patternUnits="userSpaceOnUse">
+          <circle cx={11} cy={11} r={1} fill="var(--border-strong)" opacity={0.5} />
         </pattern>
-        <marker id="pvarr" markerWidth={7} markerHeight={7} refX={5} refY={3} orient="auto">
-          <path d="M0,0 L0,6 L7,3 z" fill="#94A3B8" />
+        <marker id="wparr" markerWidth={7} markerHeight={7} refX={5} refY={3} orient="auto">
+          <path d="M0,0 L0,6 L7,3 z" fill="var(--text-mute)" />
         </marker>
       </defs>
-      <rect width={svgW} height={svgH} fill="url(#pvdots)" />
+      <rect width={svgW} height={svgH} fill="url(#wpdots)" />
+
       {edges.map((e, i) => {
         const fp = pos[e.fi], tp = pos[e.ti];
         if (!fp || !tp) return null;
@@ -89,8 +89,9 @@ function SchemaPreview({ datasets, colQueries }: {
         const x2 = tp.x, y2 = tp.y + H / 2;
         const mx = (x1 + x2) / 2;
         return <path key={i} d={`M ${x1} ${y1} C ${mx} ${y1} ${mx} ${y2} ${x2} ${y2}`}
-          fill="none" stroke="#94A3B8" strokeWidth={1.5} opacity={0.55} markerEnd="url(#pvarr)" />;
+          fill="none" stroke="var(--accent-rel)" strokeWidth={1.5} opacity={0.5} markerEnd="url(#wparr)" />;
       })}
+
       {datasets.map((ds, i) => {
         const { x, y } = pos[i];
         const color = BOX_COLORS[i % BOX_COLORS.length];
@@ -98,20 +99,17 @@ function SchemaPreview({ datasets, colQueries }: {
         const fkCount = (colQueries[i]?.data ?? []).filter(c => c.field_key.startsWith("id_")).length;
         return (
           <g key={ds.id}>
-            <rect x={x + 2} y={y + 2} width={W} height={H} rx={9} fill="rgba(0,0,0,0.06)" />
-            <rect x={x} y={y} width={W} height={H} rx={9} fill="white" stroke="#E2E8F0" strokeWidth={1} />
-            {/* left stripe */}
+            <rect x={x} y={y} width={W} height={H} rx={9} fill="var(--surface)" stroke="var(--border)" strokeWidth={1} />
             <rect x={x} y={y} width={STRIPE} height={H} rx={9} fill={color} />
             <rect x={x} y={y + 7} width={STRIPE} height={H - 14} fill={color} />
             <text x={x + STRIPE + 9} y={y + 20}
               fill={color} fontSize={11} fontWeight={700} fontFamily="Inter,system-ui,sans-serif">
               {ds.name.length > 16 ? ds.name.slice(0, 15) + "…" : ds.name}
             </text>
-            <line x1={x + STRIPE} y1={y + 27} x2={x + W} y2={y + 27}
-              stroke="#E2E8F0" strokeWidth={1} />
+            <line x1={x + STRIPE} y1={y + 27} x2={x + W} y2={y + 27} stroke="var(--border-soft)" strokeWidth={1} />
             <text x={x + STRIPE + 9} y={y + 42}
-              fill="#64748B" fontSize={10} fontFamily="Inter,system-ui,sans-serif">
-              {colCount} col{colCount !== 1 ? "s" : ""}{fkCount > 0 ? `  ·  ${fkCount} FK` : ""}
+              fill="var(--text-mute)" fontSize={10} fontFamily="Inter,system-ui,sans-serif">
+              {colCount} cols{fkCount > 0 ? `  ·  ${fkCount} FK` : ""}
             </text>
           </g>
         );
@@ -120,21 +118,18 @@ function SchemaPreview({ datasets, colQueries }: {
   );
 }
 
-function SkeletonCard() {
+function SkeletonCard({ i = 0 }: { i?: number }) {
   return (
-    <div className="ds-card" style={{ pointerEvents: "none" }}>
-      <div className="ds-card-header" style={{ background: "var(--color-border-light)" }} />
-      <div className="ds-card-body">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div style={{ height: 16, width: "55%", borderRadius: 4, background: "var(--color-border-light)" }} />
-          <div style={{ width: 24, height: 24, borderRadius: 4, background: "var(--color-border-light)" }} />
-        </div>
-        <div style={{ height: 12, width: "80%", borderRadius: 4, background: "var(--color-border-light)", marginTop: 10 }} />
-        <div style={{ height: 12, width: "60%", borderRadius: 4, background: "var(--color-border-light)", marginTop: 6 }} />
-      </div>
-      <div className="ds-card-footer">
-        <div style={{ height: 20, width: 70, borderRadius: 99, background: "var(--color-border-light)" }} />
-        <div style={{ height: 20, width: 80, borderRadius: 99, background: "var(--color-border-light)" }} />
+    <div className="og-rise" style={{
+      background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-3)",
+      padding: 16, minHeight: 132, boxShadow: "var(--shadow-1)", animationDelay: `${i * 55}ms`,
+    }}>
+      <div className="og-shimmer" style={{ width: 40, height: 40, borderRadius: "var(--r-2)" }} />
+      <div className="og-shimmer" style={{ width: "55%", height: 15, borderRadius: 5, marginTop: 14 }} />
+      <div className="og-shimmer" style={{ width: "75%", height: 11, borderRadius: 5, marginTop: 9 }} />
+      <div style={{ display: "flex", gap: 6, marginTop: 16 }}>
+        <div className="og-shimmer" style={{ width: 52, height: 20, borderRadius: 999 }} />
+        <div className="og-shimmer" style={{ width: 64, height: 20, borderRadius: 999 }} />
       </div>
     </div>
   );
@@ -217,6 +212,7 @@ export default function WorkspaceView() {
   });
 
   const totalRecords = recQueries.reduce((sum, q) => sum + (typeof q.data === "number" ? q.data : 0), 0);
+  const totalCols = colQueries.reduce((sum, q) => sum + (q.data?.length ?? 0), 0);
 
   const trimSearch = globalSearch.trim();
   const searchQueries = useQueries({
@@ -235,331 +231,264 @@ export default function WorkspaceView() {
       }).slice(0, 30)
     : [];
 
+  const sectionTitle: React.CSSProperties = { font: "400 13px/1 var(--font-sans)", color: "var(--text-mute)", marginBottom: 14 };
+
+  // Nav del workspace (admin global / owner / admin_ws)
+  const navItems = (isAdmin || isWsManager) ? [
+    ...(isAdmin ? [{ title: "Workspaces", path: "/admin/workspaces", icon: <LayoutDashboard size={15} /> }] : []),
+    { title: "Equipo", path: "/admin/workspaces", icon: <Users size={15} /> },
+    { title: "Grupos", path: "/admin/groups", icon: <UsersRound size={15} /> },
+    { title: "Usuarios", path: `/admin/users?workspace_id=${workspaceId}`, icon: <User size={15} /> },
+  ] : [];
+
   return (
     <>
-      <header className="app-header" style={{ gap: 4, display: "none" }}>
-        {/* Brand */}
-        <button className="app-brand-btn" onClick={() => { setCurrent(null); navigate("/"); }}>
-          <div className="app-header-logo app-header-logo--img"><img src="/opsgrid-logo.svg" alt="OpsGrid" /></div>
-          <span className="app-header-name">Ops<em>Grid</em></span>
-        </button>
-
-        {/* Breadcrumb */}
-        {workspace && (
-          <>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" style={{ flexShrink: 0 }}>
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
-            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 160 }}>
-              {workspace.name}
-            </span>
-          </>
-        )}
-
-        {/* Divider */}
-        <div style={{ width: 1, height: 22, background: "var(--color-border)", margin: "0 6px", flexShrink: 0 }} />
-
-        <WorkspaceSwitcher />
-
-        <div className="app-header-spacer" />
-
-        {/* Nav links: admin global ve todo; owner/admin_ws ven grupos y usuarios de su ws */}
-        {(isAdmin || isWsManager) && (() => {
-          const navBtn = (title: string, path: string, icon: React.ReactNode) => (
-            <button key={title} title={title} onClick={() => navigate(path)}
-              style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 10px", height:34, borderRadius:7, background:"transparent", border:"1.5px solid transparent", cursor:"pointer", color:"var(--color-text-secondary)", fontSize:12.5, fontWeight:600, transition:"all 0.14s", whiteSpace:"nowrap" }}
-              onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.background="var(--color-border-light)"; el.style.borderColor="var(--color-border)"; el.style.color="var(--color-text)"; }}
-              onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.background="transparent"; el.style.borderColor="transparent"; el.style.color="var(--color-text-secondary)"; }}
-            >{icon}<span>{title}</span></button>
-          );
-          return (
-            <nav style={{ display:"flex", gap:2, alignItems:"center" }}>
-              {isAdmin && navBtn("Workspaces", "/admin/workspaces", <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>)}
-              {navBtn("Equipo",   "/admin/workspaces", <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>)}
-              {navBtn("Grupos",   "/admin/groups", <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6"/><circle cx="16" cy="8" r="3"/><path d="M22 20c0-3.3-2.7-6-6-6"/><path d="M9 14c0 0 1.5-.5 3-.5s3 .5 3 .5"/></svg>)}
-              {navBtn("Usuarios", `/admin/users?workspace_id=${workspaceId}`, <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>)}
-            </nav>
-          );
-        })()}
-
-        <div style={{ width: 1, height: 22, background: "var(--color-border)", margin: "0 4px", flexShrink: 0 }} />
-        <UserMenu />
-      </header>
-
       <AppShell active="workspaces">
-      <main className="page" style={{ overflowY: "auto", maxWidth: "none", width: "100%", paddingTop: 28 }}>
+        <main className="home-main" style={{ overflowY: "auto", padding: 0 }}>
+          <div style={{ maxWidth: 1160, margin: "0 auto", padding: "28px 32px 80px" }}>
 
-      {/* Nav propio del workspace (movido desde el header legacy) */}
-      {(isAdmin || isWsManager) && (() => {
-        const navBtn = (title: string, path: string, icon: React.ReactNode) => (
-          <button key={title} title={title} onClick={() => navigate(path)}
-            style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 10px", height:34, borderRadius:7, background:"transparent", border:"1.5px solid transparent", cursor:"pointer", color:"var(--color-text-secondary)", fontSize:12.5, fontWeight:600, transition:"all 0.14s", whiteSpace:"nowrap" }}
-            onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.background="var(--color-border-light)"; el.style.borderColor="var(--color-border)"; el.style.color="var(--color-text)"; }}
-            onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.background="transparent"; el.style.borderColor="transparent"; el.style.color="var(--color-text-secondary)"; }}
-          >{icon}<span>{title}</span></button>
-        );
-        return (
-          <nav style={{ display:"flex", gap:2, alignItems:"center", marginBottom: 12 }}>
-            {isAdmin && navBtn("Workspaces", "/admin/workspaces", <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>)}
-            {navBtn("Equipo",   "/admin/workspaces", <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>)}
-            {navBtn("Grupos",   "/admin/groups", <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6"/><circle cx="16" cy="8" r="3"/><path d="M22 20c0-3.3-2.7-6-6-6"/><path d="M9 14c0 0 1.5-.5 3-.5s3 .5 3 .5"/></svg>)}
-            {navBtn("Usuarios", `/admin/users?workspace_id=${workspaceId}`, <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>)}
-          </nav>
-        );
-      })()}
+            {/* Nav del workspace */}
+            {navItems.length > 0 && (
+              <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 18, flexWrap: "wrap" }}>
+                {navItems.map((it) => (
+                  <Btn key={it.title} variant="ghost" size="sm" icon={it.icon} onClick={() => navigate(it.path)}>
+                    {it.title}
+                  </Btn>
+                ))}
+              </div>
+            )}
 
-      <div className="ds-hero">
-        <div className="ds-hero-inner">
-          <div>
-            <h1 className="ds-hero-title">{workspace?.name ?? "Workspace"}</h1>
-            <p className="ds-hero-sub">
-              {workspace?.description ?? "Gestiona los datos de este equipo"}
-            </p>
-          </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            {datasets.length > 0 && (
-              <button className="btn btn-secondary" onClick={() => setShowSchema(true)}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="3" width="6" height="6" rx="1"/><rect x="3" y="15" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><path d="M9 6h6M6 9v6M18 9v6M9 18h6"/></svg>
-                Diagrama
-              </button>
-            )}
-            {canManage && datasets.length > 1 && (
-              <button className="btn btn-secondary" onClick={() => setShowRelManager(true)}
-                style={{ borderColor: "#7C3AED", color: "#7C3AED" }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M9 6h6a3 3 0 0 1 3 3v6"/></svg>
-                Relaciones
-              </button>
-            )}
-            {canManage && (
-              <button className="btn btn-secondary" onClick={() => navigate("/scripts")}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                Scripts
-              </button>
-            )}
-            {canManage && (
-              <button className="btn btn-secondary" onClick={() => setShowImportModal(true)}
-                style={{ borderColor: "#16A34A", color: "#16A34A" }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                Importar Excel
-              </button>
-            )}
-            {canManage && (
-              <button className="btn btn-primary ds-hero-btn" onClick={() => navigate("/create")}>
-                <span style={{ fontSize: 18, lineHeight: 1 }}>＋</span>
-                Nuevo dataset
-              </button>
-            )}
-          </div>
-        </div>
-
-        {datasets.length > 0 && (
-          <div style={{ maxWidth: "var(--page-max)", margin: "16px auto 0", position: "relative" }}>
-            <div className="global-search-wrap">
-              <span className="search-icon" style={{ display: "inline-flex", alignItems: "center" }}><IcSearch size={15} /></span>
-              <input
-                placeholder="Buscar en todos los datasets..."
-                value={globalSearch}
-                onChange={(e) => setGlobalSearch(e.target.value)}
-                onKeyDown={(e) => e.key === "Escape" && setGlobalSearch("")}
-              />
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
+              <div>
+                <h1 style={{ margin: 0, font: "700 28px/1.1 var(--font-sans)", letterSpacing: "-.02em", color: "var(--text)" }}>
+                  {workspace?.name ?? "Workspace"}
+                </h1>
+                <p style={{ margin: "7px 0 0", font: "400 15px/1.4 var(--font-sans)", color: "var(--text-soft)", maxWidth: 520 }}>
+                  {workspace?.description ?? "Gestiona los datos de este equipo."}
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {canManage && (
+                  <Btn variant="soft" icon={<Code2 size={16} />} onClick={() => navigate("/scripts")}>Scripts</Btn>
+                )}
+                {canManage && (
+                  <Btn variant="soft" icon={<FileSpreadsheet size={16} />} onClick={() => setShowImportModal(true)}>Importar Excel</Btn>
+                )}
+                {canManage && (
+                  <Btn variant="primary" icon={<Plus size={16} />} onClick={() => navigate("/create")}>Nuevo dataset</Btn>
+                )}
+              </div>
             </div>
+
+            {/* Toolbar */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "22px 0 18px", flexWrap: "wrap" }}>
+              <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 9, height: 38, padding: "0 12px", borderRadius: "var(--r-2)", border: "1px solid var(--border)", background: "var(--surface)", width: 280 }}>
+                <Search size={16} style={{ color: "var(--text-mute)", flex: "none" }} />
+                <input
+                  value={globalSearch}
+                  onChange={(e) => setGlobalSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === "Escape" && setGlobalSearch("")}
+                  placeholder="Buscar en todos los datasets…"
+                  style={{ flex: 1, border: "none", background: "transparent", outline: "none", color: "var(--text)", font: "400 13.5px/1 var(--font-sans)" }}
+                />
+              </div>
+              {datasets.length > 0 && (
+                <Btn variant="soft" size="sm" icon={<LayoutGrid size={15} />} onClick={() => setShowSchema(true)}>Diagrama</Btn>
+              )}
+              {canManage && datasets.length > 1 && (
+                <Btn variant="soft" size="sm" icon={<Network size={15} />} onClick={() => setShowRelManager(true)}>Relaciones</Btn>
+              )}
+              <div style={{ flex: 1 }} />
+              {bridgesCount > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 9, font: "500 13px/1 var(--font-sans)", color: "var(--text-soft)" }}>
+                  <Workflow size={15} style={{ color: "var(--text-mute)" }} />
+                  <span>Intermedias <span className="mono" style={{ color: "var(--text-mute)" }}>({bridgesCount})</span></span>
+                  <Toggle on={showBridges} onChange={setShowBridges} />
+                </div>
+              )}
+            </div>
+
+            {/* Resultados de búsqueda global */}
             {trimSearch.length >= 2 && (
-              <div className="global-search-results" style={{ maxWidth: 480, marginTop: 6 }}>
+              <div className="global-search-results" style={{ maxWidth: 520, margin: "0 0 var(--sp-4)" }}>
                 {searchResults.length === 0 ? (
-                  <div style={{ padding: "14px 16px", fontSize: 13, color: "var(--color-text-muted)" }}>
+                  <div style={{ padding: "14px 16px", fontSize: 13, color: "var(--text-mute)" }}>
                     {searchQueries.some((q) => q.isLoading) ? "Buscando…" : "Sin resultados"}
                   </div>
-                ) : (
-                  (() => {
-                    const grouped = new Map<string, typeof searchResults>();
-                    for (const item of searchResults) {
-                      const arr = grouped.get(item.ds.id) ?? [];
-                      arr.push(item);
-                      grouped.set(item.ds.id, arr);
-                    }
-                    return [...grouped.entries()].map(([dsId, items]) => (
-                      <div key={dsId} className="global-search-group">
-                        <div className="global-search-group-header">{items[0].ds.name}</div>
-                        {items.map(({ rec, ds }) => {
-                          const cols = colQueries[datasets.findIndex((d) => d.id === ds.id)]?.data ?? [];
-                          const firstVal = cols.map((c) => String(rec.data[c.field_key] ?? ""))
-                            .find((v) => v.toLowerCase().includes(trimSearch.toLowerCase()));
-                          const labelCol = cols[0];
-                          const label = labelCol ? String(rec.data[labelCol.field_key] ?? "—") : rec.id;
-                          return (
-                            <button key={rec.id} className="global-search-item"
-                              onClick={() => { navigate(`/datasets/${ds.id}`); setGlobalSearch(""); }}>
-                              <span className="global-search-item-name">{highlight(label, trimSearch)}</span>
-                              {firstVal && firstVal !== label && (
-                                <span className="global-search-item-meta">{highlight(firstVal.slice(0, 40), trimSearch)}</span>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ));
-                  })()
-                )}
+                ) : (() => {
+                  const grouped = new Map<string, typeof searchResults>();
+                  for (const item of searchResults) {
+                    const arr = grouped.get(item.ds.id) ?? [];
+                    arr.push(item);
+                    grouped.set(item.ds.id, arr);
+                  }
+                  return [...grouped.entries()].map(([dsId, items]) => (
+                    <div key={dsId} className="global-search-group">
+                      <div className="global-search-group-header">{items[0].ds.name}</div>
+                      {items.map(({ rec, ds }) => {
+                        const cols = colQueries[datasets.findIndex((d) => d.id === ds.id)]?.data ?? [];
+                        const firstVal = cols
+                          .map((c) => String(rec.data[c.field_key] ?? ""))
+                          .find((v) => v.toLowerCase().includes(trimSearch.toLowerCase()));
+                        const labelCol = cols[0];
+                        const label = labelCol ? String(rec.data[labelCol.field_key] ?? "—") : rec.id;
+                        return (
+                          <button key={rec.id} className="global-search-item"
+                            onClick={() => { navigate(`/datasets/${ds.id}`); setGlobalSearch(""); }}>
+                            <span className="global-search-item-name">{highlight(label, trimSearch)}</span>
+                            {firstVal && firstVal !== label && (
+                              <span className="global-search-item-meta">{highlight(firstVal.slice(0, 40), trimSearch)}</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ));
+                })()}
                 {searchResults.length > 0 && (
-                  <div style={{ padding: "6px 14px 8px", borderTop: "1px solid var(--color-border-light)", fontSize: 11, color: "var(--color-text-muted)" }}>
+                  <div style={{ padding: "6px 14px 8px", borderTop: "1px solid var(--border-soft)", font: "400 11px/1.3 var(--font-sans)", color: "var(--text-mute)" }}>
                     {searchResults.length} resultado{searchResults.length !== 1 ? "s" : ""}
                     {searchResults.length === 30 ? " (limitado a 30)" : ""}
                   </div>
                 )}
               </div>
             )}
-          </div>
-        )}
 
-        {!isLoading && datasets.length > 0 && (
-          <div className="ds-stats">
-            <div className="ds-stat">
-              <span className="ds-stat-value">{datasets.length}</span>
-              <span className="ds-stat-label">dataset{datasets.length !== 1 ? "s" : ""}</span>
-            </div>
-            <div className="ds-stat-divider" />
-            <div className="ds-stat">
-              <span className="ds-stat-value">{totalRecords.toLocaleString()}</span>
-              <span className="ds-stat-label">registros totales</span>
-            </div>
-            <div className="ds-stat-divider" />
-            <div className="ds-stat">
-              <span className="ds-stat-value">{colQueries.reduce((sum, q) => sum + (q.data?.length ?? 0), 0)}</span>
-              <span className="ds-stat-label">columnas totales</span>
-            </div>
-          </div>
-        )}
-      </div>
+            {/* Count line */}
+            {!isLoading && datasets.length > 0 && (
+              <div style={sectionTitle}>
+                {visibleDatasets.length} dataset{visibleDatasets.length !== 1 ? "s" : ""} · {totalRecords.toLocaleString("es-PE")} filas · {totalCols} columnas
+              </div>
+            )}
 
-      <div>
-        {bridgesCount > 0 && (
-          <div style={{
-            display: "flex", alignItems: "center", gap: 10, marginBottom: 14,
-            padding: "8px 14px", borderRadius: 8,
-            background: showBridges ? "var(--color-primary-bg)" : "var(--color-bg)",
-            border: `1px solid ${showBridges ? "var(--color-primary)" : "var(--color-border)"}`,
-          }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13 }}>
-              <input
-                type="checkbox"
-                checked={showBridges}
-                onChange={(e) => setShowBridges(e.target.checked)}
-              />
-              <span style={{ fontWeight: 600 }}>Mostrar tablas intermedias</span>
-              <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>
-                ({bridgesCount} oculta{bridgesCount !== 1 ? "s" : ""})
-              </span>
-            </label>
-          </div>
-        )}
-        {isLoading ? (
-          <div className="ds-grid">{[1, 2, 3].map((n) => <SkeletonCard key={n} />)}</div>
-        ) : visibleDatasets.length === 0 ? (
-          <div className="ds-empty" onClick={() => navigate("/create")}>
-            <div className="ds-empty-icon" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-muted)" }}><IcTable size={30} /></div>
-            <h3>{datasets.length === 0 ? "Sin datasets todavía" : "Solo hay tablas intermedias"}</h3>
-            <p>{datasets.length === 0 ? "Haz clic para crear tu primer dataset" : "Marca el toggle de arriba para verlas"}</p>
-          </div>
-        ) : (
-          <div className="ds-grid">
-            {visibleDatasets.map((ds) => {
-              const origIdx = datasets.indexOf(ds);
-              const color = dsColor(ds.name);
-              const colCount = colQueries[origIdx]?.data?.length ?? null;
-              const recCount = recQueries[origIdx]?.data ?? null;
-              return (
-                <article key={ds.id} className="ds-card"
-                  onClick={() => navigate(`/datasets/${ds.id}`)}
-                  role="button" tabIndex={0}
-                  onKeyDown={(e) => e.key === "Enter" && navigate(`/datasets/${ds.id}`)}>
-                  <div className="ds-card-header" style={{ background: `linear-gradient(135deg, ${color.from}, ${color.to})` }}>
-                    <div className="ds-card-avatar" style={{ background: "rgba(255,255,255,0.22)" }}>
-                      {ds.name.charAt(0).toUpperCase()}
-                    </div>
-                  </div>
-                  <div className="ds-card-body">
-                    <div className="ds-card-top">
-                      <h3 className="ds-card-name">{ds.name}</h3>
-                      {canManage && (
-                        <button className="ds-card-delete" title={"Eliminar " + ds.name}
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            const ok = await confirm({
-                              title: "Eliminar " + ds.name,
-                              message: "Se eliminarán el dataset, todas sus columnas y todos sus registros permanentemente.",
-                              confirmLabel: "Eliminar dataset",
-                              variant: "danger",
-                            });
-                            if (ok) deleteMut.mutate(ds.id);
-                          }}>×</button>
+            {/* Grid de cards */}
+            {isLoading ? (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(258px, 1fr))", gap: 16 }}>
+                {[0, 1, 2, 3].map((i) => <SkeletonCard key={i} i={i} />)}
+              </div>
+            ) : visibleDatasets.length === 0 ? (
+              <div className="empty">
+                <div className="empty__art"><Table2 size={28} /></div>
+                <h4>{datasets.length === 0 ? "Sin datasets todavía" : "Solo hay tablas intermedias"}</h4>
+                <p>{datasets.length === 0 ? "Crea el primer dataset de este equipo." : "Usa el toggle de arriba para verlas."}</p>
+                {canManage && (
+                  <button className="btn btn--primary" onClick={() => navigate("/create")}><Plus /> Nuevo dataset</button>
+                )}
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(258px, 1fr))", gap: 16 }}>
+                {visibleDatasets.map((ds, idx) => {
+                  const origIdx = datasets.indexOf(ds);
+                  const cols = colQueries[origIdx]?.data ?? [];
+                  const colCount = colQueries[origIdx]?.data?.length ?? null;
+                  const recCount = recQueries[origIdx]?.data ?? null;
+                  const relCount = cols.filter((c) => c.data_type === "relation").length;
+                  const code = ds.name.replace(/[^A-Za-z]/g, "").slice(0, 4).toUpperCase() || "DS";
+                  const kind: Kind = ds.is_computed ? "calc" : ds.is_bridge ? "bridge" : "real";
+                  const m = kindMeta(kind);
+                  const Icon = ds.is_computed ? FunctionSquare : ds.is_bridge ? Workflow : Table2;
+
+                  return (
+                    <div key={ds.id} className="og-card og-rise" tabIndex={0} role="button"
+                      onClick={() => navigate(`/datasets/${ds.id}`)}
+                      onKeyDown={(e) => e.key === "Enter" && navigate(`/datasets/${ds.id}`)}
+                      style={{
+                        animationDelay: `${idx * 55}ms`,
+                        background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-3)",
+                        padding: 16, cursor: "pointer", transition: "all var(--t-fast)", boxShadow: "var(--shadow-1)",
+                        display: "flex", flexDirection: "column", minHeight: 132,
+                      }}>
+                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+                        <span style={{
+                          display: "grid", placeItems: "center", width: 40, height: 40, borderRadius: "var(--r-2)",
+                          background: m.soft, color: m.color, border: `1px solid color-mix(in srgb, ${m.color} 26%, transparent)`,
+                        }}><Icon size={21} /></span>
+                        {ds.is_computed && canManage ? (
+                          <button title="Editar código"
+                            onClick={(e) => { e.stopPropagation(); navigate(`/datasets/${ds.id}/computed`); }}
+                            style={{ display: "grid", placeItems: "center", width: 30, height: 30, borderRadius: "var(--r-2)", border: "none", background: "transparent", color: "var(--text-mute)", cursor: "pointer" }}>
+                            <Code2 size={17} />
+                          </button>
+                        ) : canManage ? (
+                          <button title={`Eliminar "${ds.name}"`}
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              const ok = await confirm({
+                                title: "Eliminar " + ds.name,
+                                message: "Se eliminarán el dataset, todas sus columnas y todos sus registros permanentemente.",
+                                confirmLabel: "Eliminar dataset",
+                                variant: "danger",
+                              });
+                              if (ok) deleteMut.mutate(ds.id);
+                            }}
+                            style={{ display: "grid", placeItems: "center", width: 30, height: 30, borderRadius: "var(--r-2)", border: "none", background: "transparent", color: "var(--text-mute)", cursor: "pointer" }}>
+                            <Trash2 size={16} />
+                          </button>
+                        ) : (
+                          <span style={{ display: "grid", placeItems: "center", width: 30, height: 30, color: "var(--text-mute)" }}>
+                            <MoreHorizontal size={18} />
+                          </span>
+                        )}
+                      </div>
+
+                      <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ font: "600 16px/1.2 var(--font-sans)", color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ds.name}</span>
+                        <span className="mono" style={{ font: "500 10.5px/1 var(--font-mono)", color: "var(--text-mute)", padding: "3px 5px", borderRadius: 5, background: "var(--surface-alt)", flex: "none" }}>{code}</span>
+                      </div>
+                      {ds.description && (
+                        <div style={{ font: "400 12.5px/1.3 var(--font-sans)", color: "var(--text-mute)", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ds.description}</div>
                       )}
+
+                      <div style={{ flex: 1 }} />
+
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 13 }}>
+                        <Badge tone="neutral">{colCount === null ? "—" : colCount} col</Badge>
+                        <Badge tone="neutral">{recCount === null ? "—" : recCount.toLocaleString("es-PE")} filas</Badge>
+                        {kind === "calc" && <Badge tone="calc" dot>calculado</Badge>}
+                        {kind === "bridge" && <Badge tone="rel">intermedia</Badge>}
+                        {relCount > 0 && kind !== "bridge" && <Badge tone="rel" dot>{relCount} rel</Badge>}
+                      </div>
                     </div>
-                    {ds.description
-                      ? <p className="ds-card-desc">{ds.description}</p>
-                      : <p className="ds-card-desc ds-card-desc--empty">Sin descripción</p>}
-                  </div>
-                  <div className="ds-card-footer">
-                    {ds.is_computed && (
-                      <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 99,
-                        background: "#7C3AED18", color: "#7C3AED", border: "1px solid #7C3AED40" }}>⚡ calculado</span>
-                    )}
-                    <span className="ds-meta-badge" style={{ background: color.light, color: color.text, border: `1px solid ${color.from}33` }}>
-                      <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M2 3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3zm0 4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7zm0 4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-1z"/>
-                      </svg>
-                      {colCount === null ? "—" : colCount} col{colCount !== 1 ? "s" : ""}
-                    </span>
-                    <span className="ds-meta-badge">
-                      <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M14 1H2a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1zm-1 12H3V3h10v10z"/>
-                        <path d="M5 5h6v1H5zm0 3h6v1H5zm0 3h4v1H5z"/>
-                      </svg>
-                      {recCount === null ? "—" : recCount.toLocaleString()} fila{recCount !== 1 ? "s" : ""}
-                    </span>
-                    {ds.is_computed && canManage && (
-                      <button className="btn btn-ghost" style={{ fontSize: 11, padding: "2px 8px" }}
-                        title="Editar código"
-                        onClick={(e) => { e.stopPropagation(); navigate(`/datasets/${ds.id}/computed`); }}>
-                        ✏️ Editor
-                      </button>
-                    )}
-                    <span className="ds-card-open">Abrir <span style={{ fontSize: 14 }}>→</span></span>
-                  </div>
-                </article>
-              );
-            })}
-            {canManage && (
-              <div className="ds-card ds-card--new" onClick={() => navigate("/create")}>
-                <div className="ds-card-new-inner">
-                  <div className="ds-card-new-icon">＋</div>
-                  <p style={{ margin: "10px 0 4px", fontWeight: 600, fontSize: 14 }}>Nuevo dataset</p>
-                  <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-muted)" }}>
-                    Crea tablas con columnas configurables
-                  </p>
+                  );
+                })}
+
+                {/* Card crear */}
+                {canManage && (
+                  <button className="og-newcard og-rise" onClick={() => navigate("/create")} style={{
+                    animationDelay: `${visibleDatasets.length * 55}ms`,
+                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10,
+                    minHeight: 132, borderRadius: "var(--r-3)", border: "1.5px dashed var(--border-strong)",
+                    background: "transparent", cursor: "pointer", color: "var(--text-mute)", transition: "all var(--t-fast)",
+                  }}>
+                    <span style={{ display: "grid", placeItems: "center", width: 40, height: 40, borderRadius: "var(--r-2)", border: "1.5px dashed var(--border-strong)" }}><Plus size={22} /></span>
+                    <span style={{ font: "600 14px/1 var(--font-sans)" }}>Nuevo dataset</span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Mapa de relaciones */}
+            {!isLoading && datasets.length > 1 && (
+              <div style={{ marginTop: 34 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                  <Network size={17} style={{ color: "var(--accent-rel)" }} />
+                  <span style={{ font: "600 15px/1 var(--font-sans)", color: "var(--text)" }}>
+                    Mapa de relaciones — {workspace?.name}
+                  </span>
+                  <a href="#" onClick={(e) => { e.preventDefault(); setShowSchema(true); }}
+                    style={{ marginLeft: "auto", font: "500 13px/1 var(--font-sans)", color: "var(--accent-pri)" }}>Ver completo →</a>
+                </div>
+                <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-3)", padding: "18px 20px", boxShadow: "var(--shadow-1)", overflow: "hidden" }}>
+                  <SchemaPreview datasets={datasets} colQueries={colQueries} />
                 </div>
               </div>
             )}
           </div>
-        )}
-
-        {!isLoading && datasets.length > 1 && (
-          <div className="home-schema-preview">
-            <div className="home-schema-header">
-              <span style={{ fontWeight: 700, fontSize: 14 }}>
-                Mapa de relaciones — {workspace?.name}
-              </span>
-              <button className="btn btn-secondary" style={{ fontSize: 12, padding: "4px 12px" }}
-                onClick={() => setShowSchema(true)}>
-                Ver completo 
-              </button>
-            </div>
-            <SchemaPreview datasets={datasets} colQueries={colQueries} />
-          </div>
-        )}
-      </div>
-      </main>
+        </main>
       </AppShell>
 
+      {/* ── Modales ── */}
       {showSchema && (
         <GlobalSchemaDiagram
           onClose={() => setShowSchema(false)}

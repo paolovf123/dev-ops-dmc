@@ -4,8 +4,9 @@ import api from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import AuditTimeline from "../components/AuditTimeline";
 import AppShell from "../components/chrome/AppShell";
+import { Avatar, Badge, Btn, Chip as KitChip, type Tone } from "../components/ui/kit";
 import {
-  Lock, History, Download, FileText, FileSpreadsheet, ChevronDown,
+  Lock, BarChart3, Download, FileText, FileSpreadsheet, ChevronDown,
   Filter, User, X, ChevronLeft, ChevronRight, Search, Check,
   Plus, Pencil, Trash2, RotateCcw, ArrowRight, List, Clock,
 } from "lucide-react";
@@ -28,11 +29,12 @@ interface UserInfo { id: string; username: string; email: string; role: string }
 interface WorkspaceInfo { id: string; name: string; description: string }
 interface DatasetInfo { id: string; name: string; workspace_id: string | null }
 
-const ACTION_META: Record<string, { label: string; chip: string; icon: React.ReactNode }> = {
-  create:  { label: "Creado",     chip: "is-create", icon: <Plus /> },
-  update:  { label: "Editado",    chip: "is-update", icon: <Pencil /> },
-  delete:  { label: "Eliminado",  chip: "is-delete", icon: <Trash2 /> },
-  restore: { label: "Restaurado", chip: "is-import", icon: <RotateCcw /> },
+// Acción → label, tono semántico (badge handoff CREÓ/EDITÓ/ELIMINÓ/RESTAURÓ) e icono lucide
+const ACTION_META: Record<string, { label: string; verb: string; tone: Tone; icon: React.ReactNode }> = {
+  create:  { label: "Creado",     verb: "CREÓ",      tone: "success", icon: <Plus size={13} /> },
+  update:  { label: "Editado",    verb: "EDITÓ",     tone: "primary", icon: <Pencil size={13} /> },
+  delete:  { label: "Eliminado",  verb: "ELIMINÓ",   tone: "danger",  icon: <Trash2 size={13} /> },
+  restore: { label: "Restaurado", verb: "RESTAURÓ",  tone: "warn",    icon: <RotateCcw size={13} /> },
 };
 
 function timeAgo(iso: string) {
@@ -56,12 +58,19 @@ function shortStamp(iso: string) {
     day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
   });
 }
-function initials(name: string) {
-  const parts = name.trim().split(/\s+/);
-  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || name.slice(0, 2).toUpperCase();
-}
 
 const PAGE_SIZE = 50;
+
+// Estilo común de los <select> de la barra de filtros (look "chip" del handoff)
+const selectStyle: React.CSSProperties = {
+  appearance: "none", WebkitAppearance: "none", MozAppearance: "none",
+  height: 34, padding: "0 30px 0 12px", borderRadius: "var(--r-2)",
+  border: "1px solid var(--border)", background: "var(--surface)",
+  color: "var(--text)", font: "500 12.5px/1 var(--font-sans)", cursor: "pointer",
+  backgroundImage:
+    "url(\"data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%2398a1b2' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e\")",
+  backgroundRepeat: "no-repeat", backgroundPosition: "right 9px center",
+};
 
 export default function AdminAudit() {
   const { isAdmin } = useAuth();
@@ -239,13 +248,26 @@ export default function AdminAudit() {
   function today() { return new Date().toISOString().slice(0, 10); }
   function xmlEsc(s: string) { return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 
+  // ── Sin acceso (no admin global) ──
   if (!isAdmin) return (
     <AppShell active="audit">
-      <main className="page">
-        <div className="empty" style={{ marginTop: "var(--sp-8)" }}>
-          <span className="empty__art"><Lock /></span>
-          <h4>Solo administradores</h4>
-          <p>Esta sección requiere rol de administrador global.</p>
+      <main className="home-main" style={{ overflowY: "auto" }}>
+        <div style={{ maxWidth: 1160, margin: "0 auto", padding: "28px 32px 80px" }}>
+          <div className="og-rise" style={{
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 12,
+            textAlign: "center", padding: "60px 24px", marginTop: 24,
+            background: "var(--surface)", border: "1px solid var(--border)",
+            borderRadius: "var(--r-3)", boxShadow: "var(--shadow-1)",
+          }}>
+            <span style={{
+              display: "grid", placeItems: "center", width: 56, height: 56,
+              borderRadius: "var(--r-3)", background: "var(--danger-soft)", color: "var(--danger)",
+            }}><Lock size={26} /></span>
+            <h4 style={{ margin: 0, font: "700 18px/1.2 var(--font-sans)", color: "var(--text)" }}>Solo administradores</h4>
+            <p style={{ margin: 0, font: "400 14px/1.5 var(--font-sans)", color: "var(--text-soft)" }}>
+              Esta sección requiere rol de administrador global.
+            </p>
+          </div>
         </div>
       </main>
     </AppShell>
@@ -256,86 +278,91 @@ export default function AdminAudit() {
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const hasFilters = !!filterAction || !!filterWorkspace || !!filterDataset || filterUsers.length > 0;
 
+  // Grid de columnas compartido entre header y filas (Tabla)
+  const GRID_COLS = "138px 1.2fr 116px 1.4fr 1.5fr";
+
   return (
     <AppShell active="audit">
-      <main className="page" style={{ maxWidth: "none", width: "100%", overflowY: "auto" }}>
+      <main className="home-main" style={{ overflowY: "auto", padding: 0 }}>
+        <div style={{ maxWidth: 1160, margin: "0 auto", padding: "28px 32px 80px" }}>
 
-        {/* ── Page header ── */}
-        <div className="page-header">
-          <div>
-            <h1>Registro de auditoría</h1>
-            <p>
-              Historial inmutable de todo lo que pasa en el workspace · {total.toLocaleString()} entrada{total !== 1 ? "s" : ""}.
-            </p>
-          </div>
-          <div className="page-header__actions">
-            {/* View toggle: Tabla / Timeline */}
-            <div className="segmented" role="tablist" aria-label="Vista">
-              <button
-                className={`segmented__item${view === "table" ? " is-active" : ""}`}
-                style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "none", background: view === "table" ? undefined : "transparent" }}
-                onClick={() => setView("table")}
-              >
-                <List style={{ width: 13, height: 13 }} /> Tabla
-              </button>
-              <button
-                className={`segmented__item${view === "timeline" ? " is-active" : ""}`}
-                style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "none", background: view === "timeline" ? undefined : "transparent" }}
-                onClick={() => setView("timeline")}
-              >
-                <Clock style={{ width: 13, height: 13 }} /> Timeline
-              </button>
+          {/* ── Page header ── */}
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap", marginBottom: 22 }}>
+            <div>
+              <h1 style={{ margin: 0, font: "700 28px/1.1 var(--font-sans)", letterSpacing: "-.02em", color: "var(--text)", display: "flex", alignItems: "center", gap: 10 }}>
+                <BarChart3 size={25} style={{ color: "var(--accent-pri)" }} /> Registro de auditoría
+              </h1>
+              <p style={{ margin: "7px 0 0", font: "400 15px/1.4 var(--font-sans)", color: "var(--text-soft)" }}>
+                Historial inmutable de todo lo que pasa en el workspace · {total.toLocaleString()} entrada{total !== 1 ? "s" : ""}.
+              </p>
             </div>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              {/* View toggle: Tabla / Línea de tiempo */}
+              <div role="tablist" aria-label="Vista" style={{
+                display: "inline-flex", padding: 3, borderRadius: "var(--r-2)",
+                background: "var(--surface-alt)", border: "1px solid var(--border)",
+              }}>
+                {([["table", "Tabla", <List size={14} key="l" />], ["timeline", "Línea", <Clock size={14} key="c" />]] as const).map(([k, l, ic]) => (
+                  <button key={k} role="tab" aria-selected={view === k} onClick={() => setView(k as "table" | "timeline")} style={{
+                    display: "inline-flex", alignItems: "center", gap: 6,
+                    font: "600 12.5px/1 var(--font-sans)", padding: "7px 11px", borderRadius: 6,
+                    border: "none", cursor: "pointer",
+                    background: view === k ? "var(--surface)" : "transparent",
+                    color: view === k ? "var(--text)" : "var(--text-soft)",
+                    boxShadow: view === k ? "var(--shadow-1)" : "none", transition: "all var(--t-fast)",
+                  }}>{ic}{l}</button>
+                ))}
+              </div>
 
-            {/* Export dropdown */}
-            <div ref={exportRef} style={{ position: "relative" }}>
-              <button
-                className={`btn btn--secondary${downloading ? " is-loading" : ""}`}
-                onClick={() => setExportOpen((v) => !v)}
-                disabled={downloading || total === 0}
-              >
-                <Download /> {downloading ? "Exportando…" : "Exportar"}
-                <ChevronDown style={{ transform: exportOpen ? "rotate(180deg)" : "none", transition: "transform .18s" }} />
-              </button>
+              {/* Export dropdown */}
+              <div ref={exportRef} style={{ position: "relative" }}>
+                <Btn variant="soft" icon={<Download size={16} />} iconR={
+                  <ChevronDown size={15} style={{ transform: exportOpen ? "rotate(180deg)" : "none", transition: "transform var(--t-fast)" }} />
+                } onClick={() => setExportOpen((v) => !v)} disabled={downloading || total === 0}>
+                  {downloading ? "Exportando…" : "Exportar"}
+                </Btn>
 
-              {exportOpen && (
-                <div style={{
-                  position: "absolute", top: "calc(100% + 6px)", right: 0, minWidth: 200, zIndex: 50,
-                  background: "var(--surface)", border: "1px solid var(--border)",
-                  borderRadius: "var(--r-3)", boxShadow: "var(--shadow-lg, 0 8px 24px rgba(0,0,0,.12))", overflow: "hidden",
-                }}>
-                  <div style={{ padding: "8px 12px 6px", borderBottom: "1px solid var(--border-soft)" }}>
-                    <p style={{ margin: 0, fontSize: "var(--fs-11)", fontWeight: 600, color: "var(--text-mute)", textTransform: "uppercase", letterSpacing: ".04em" }}>
-                      {hasFilters ? "Exportar con filtros" : "Exportar todo"}
-                    </p>
+                {exportOpen && (
+                  <div className="og-pop" style={{
+                    position: "absolute", top: "calc(100% + 6px)", right: 0, minWidth: 230, zIndex: 50,
+                    background: "var(--surface)", border: "1px solid var(--border)",
+                    borderRadius: "var(--r-3)", boxShadow: "var(--shadow-3)", overflow: "hidden",
+                    animation: "ogPop var(--t-fast)",
+                  }}>
+                    <div style={{ padding: "9px 13px 7px", borderBottom: "1px solid var(--border-soft)" }}>
+                      <p style={{ margin: 0, font: "600 11px/1 var(--font-sans)", color: "var(--text-mute)", textTransform: "uppercase", letterSpacing: ".04em" }}>
+                        {hasFilters ? "Exportar con filtros" : "Exportar todo"}
+                      </p>
+                    </div>
+                    {[
+                      { label: "CSV", sub: "Compatible con cualquier app", icon: <FileText size={17} />, fn: exportCSV },
+                      { label: "Excel (.xls)", sub: "Abre directo en Excel", icon: <FileSpreadsheet size={17} />, fn: exportExcel },
+                    ].map(({ label, sub, icon, fn }) => (
+                      <button key={label} onClick={fn} className="og-menu-item" style={{
+                        width: "100%", padding: "10px 14px", display: "flex", alignItems: "center", gap: 11,
+                        textAlign: "left", background: "transparent", border: "none", cursor: "pointer",
+                      }}>
+                        <span style={{ display: "inline-flex", color: "var(--accent-pri)", lineHeight: 1 }}>{icon}</span>
+                        <div>
+                          <div style={{ font: "600 13.5px/1.2 var(--font-sans)", color: "var(--text)" }}>{label}</div>
+                          <div style={{ font: "400 11.5px/1.2 var(--font-sans)", color: "var(--text-mute)", marginTop: 2 }}>{sub}</div>
+                        </div>
+                      </button>
+                    ))}
                   </div>
-                  {[
-                    { label: "CSV", sub: "Compatible con cualquier app", icon: <FileText />, fn: exportCSV },
-                    { label: "Excel (.xls)", sub: "Abre directo en Excel", icon: <FileSpreadsheet />, fn: exportExcel },
-                  ].map(({ label, sub, icon, fn }) => (
-                    <button key={label} onClick={fn} style={{ width: "100%", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, textAlign: "left", background: "transparent", border: "none", cursor: "pointer" }}>
-                      <span style={{ display: "inline-flex", color: "var(--text-soft)", lineHeight: 1 }}>{icon}</span>
-                      <div>
-                        <div style={{ fontSize: "var(--fs-13)", fontWeight: 600, color: "var(--text)" }}>{label}</div>
-                        <div style={{ fontSize: "var(--fs-11)", color: "var(--text-mute)" }}>{sub}</div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* ── Filter bar ── */}
-        <div className="dv-toolbar-wrap" style={{ border: "1px solid var(--border-soft)", borderRadius: "var(--r-3)", overflow: "visible", marginBottom: "var(--sp-4)" }}>
-          <div className="dv-toolbar" style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", padding: "var(--sp-2) var(--sp-3)", flexWrap: "wrap" }}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "var(--fs-11)", fontWeight: 600, color: "var(--text-mute)", textTransform: "uppercase", letterSpacing: ".04em", marginRight: 2 }}>
-              <Filter style={{ width: 14, height: 14 }} /> Filtros
+          {/* ── Filter bar ── */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "600 11px/1 var(--font-sans)", color: "var(--text-mute)", textTransform: "uppercase", letterSpacing: ".04em", marginRight: 2 }}>
+              <Filter size={14} /> Filtros
             </span>
 
             {/* Acción */}
-            <select className="input" value={filterAction} onChange={(e) => { setFilterAction(e.target.value); setPage(0); }} style={{ width: "auto", height: 32 }}>
+            <select value={filterAction} onChange={(e) => { setFilterAction(e.target.value); setPage(0); }} style={selectStyle}>
               <option value="">Toda acción</option>
               <option value="create">Creaciones</option>
               <option value="update">Ediciones</option>
@@ -344,237 +371,264 @@ export default function AdminAudit() {
             </select>
 
             {/* Workspace */}
-            <select className="input" value={filterWorkspace} onChange={(e) => { setFilterWorkspace(e.target.value); setFilterDataset(""); setPage(0); }} style={{ width: "auto", height: 32, maxWidth: 180 }}>
+            <select value={filterWorkspace} onChange={(e) => { setFilterWorkspace(e.target.value); setFilterDataset(""); setPage(0); }} style={{ ...selectStyle, maxWidth: 180 }}>
               <option value="">Todo workspace</option>
               {workspaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
             </select>
 
             {/* Dataset — filtered by workspace */}
-            <select className="input" value={filterDataset} onChange={(e) => { setFilterDataset(e.target.value); setPage(0); }} style={{ width: "auto", height: 32, maxWidth: 200 }} disabled={datasets.length === 0 && !filterDataset}>
+            <select value={filterDataset} onChange={(e) => { setFilterDataset(e.target.value); setPage(0); }} disabled={datasets.length === 0 && !filterDataset}
+              style={{ ...selectStyle, maxWidth: 200, opacity: datasets.length === 0 && !filterDataset ? 0.55 : 1, cursor: datasets.length === 0 && !filterDataset ? "not-allowed" : "pointer" }}>
               <option value="">Todo dataset</option>
               {datasets.map((ds) => <option key={ds.id} value={ds.id}>{ds.name}</option>)}
             </select>
 
             {/* Persona — dropdown multi-select */}
             <div ref={userDropRef} style={{ position: "relative" }}>
-              <button
-                className={`btn btn--secondary btn--sm${filterUsers.length ? " is-active" : ""}`}
-                onClick={() => setUserDropOpen((v) => !v)}
-                style={{ height: 32 }}
-              >
+              <button onClick={() => setUserDropOpen((v) => !v)} style={{
+                display: "inline-flex", alignItems: "center", gap: 7, height: 34, padding: "0 11px",
+                borderRadius: "var(--r-2)", cursor: "pointer",
+                border: `1px solid ${filterUsers.length ? "color-mix(in srgb, var(--accent-pri) 40%, transparent)" : "var(--border)"}`,
+                background: filterUsers.length ? "var(--pri-soft)" : "var(--surface)",
+                color: filterUsers.length ? "var(--accent-pri)" : "var(--text)",
+                font: "500 12.5px/1 var(--font-sans)",
+              }}>
                 {filterUsers.length === 0 ? (
-                  <><User /> Toda persona</>
+                  <><User size={14} /> Toda persona</>
                 ) : filterUsers.length === 1 ? (
-                  <><span className="avatar avatar--xs">{initials(selectedUserObjs[0].username)}</span>{selectedUserObjs[0].username}</>
+                  <><Avatar name={selectedUserObjs[0].username} size={18} />{selectedUserObjs[0].username}</>
                 ) : (
                   <>
-                    <span className="avatar-group">
-                      {selectedUserObjs.slice(0, 3).map((u) => (
-                        <span key={u.id} className="avatar avatar--xs">{initials(u.username)}</span>
+                    <span style={{ display: "inline-flex" }}>
+                      {selectedUserObjs.slice(0, 3).map((u, i) => (
+                        <span key={u.id} style={{ marginLeft: i === 0 ? 0 : -7 }}>
+                          <Avatar name={u.username} size={18} ring />
+                        </span>
                       ))}
                     </span>
                     {filterUsers.length} personas
                   </>
                 )}
-                <ChevronDown style={{ transform: userDropOpen ? "rotate(180deg)" : "none", transition: "transform .18s" }} />
+                <ChevronDown size={14} style={{ transform: userDropOpen ? "rotate(180deg)" : "none", transition: "transform var(--t-fast)" }} />
               </button>
 
               {userDropOpen && (
-                <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, minWidth: 260, zIndex: 50, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-3)", boxShadow: "var(--shadow-lg, 0 8px 24px rgba(0,0,0,.13))", overflow: "hidden" }}>
-                  <div style={{ padding: "8px 10px", borderBottom: "1px solid var(--border-soft)" }}>
-                    <span className="input-affix" style={{ width: "100%" }}>
-                      <Search />
-                      <input autoFocus className="input input--with-icon" placeholder="Buscar persona…" value={userSearch} onChange={(e) => setUserSearch(e.target.value)} style={{ width: "100%", height: 32 }} />
-                    </span>
+                <div className="og-pop" style={{
+                  position: "absolute", top: "calc(100% + 6px)", left: 0, minWidth: 264, zIndex: 50,
+                  background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-3)",
+                  boxShadow: "var(--shadow-3)", overflow: "hidden", animation: "ogPop var(--t-fast)",
+                }}>
+                  <div style={{ padding: "9px 10px", borderBottom: "1px solid var(--border-soft)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, height: 34, padding: "0 11px", borderRadius: "var(--r-2)", border: "1px solid var(--border)", background: "var(--surface-2)" }}>
+                      <Search size={15} style={{ color: "var(--text-mute)", flex: "none" }} />
+                      <input autoFocus placeholder="Buscar persona…" value={userSearch} onChange={(e) => setUserSearch(e.target.value)}
+                        style={{ flex: 1, border: "none", background: "transparent", outline: "none", color: "var(--text)", font: "400 13px/1 var(--font-sans)" }} />
+                    </div>
                   </div>
                   {filterUsers.length > 0 && (
-                    <div style={{ padding: "6px 10px", borderBottom: "1px solid var(--border-soft)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <span style={{ fontSize: "var(--fs-11)", color: "var(--text-mute)" }}>{filterUsers.length} seleccionada{filterUsers.length > 1 ? "s" : ""}</span>
-                      <button className="btn btn--ghost btn--sm" onClick={() => { setFilterUsers([]); setPage(0); }} style={{ color: "var(--danger)" }}>Limpiar</button>
+                    <div style={{ padding: "7px 12px", borderBottom: "1px solid var(--border-soft)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span style={{ font: "400 11.5px/1 var(--font-sans)", color: "var(--text-mute)" }}>{filterUsers.length} seleccionada{filterUsers.length > 1 ? "s" : ""}</span>
+                      <button onClick={() => { setFilterUsers([]); setPage(0); }} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--danger)", font: "600 12px/1 var(--font-sans)" }}>Limpiar</button>
                     </div>
                   )}
-                  <div style={{ maxHeight: 240, overflowY: "auto" }}>
+                  <div style={{ maxHeight: 252, overflowY: "auto" }}>
                     {filteredUsers.map((u) => {
                       const isActive = filterUsers.includes(u.id);
                       return (
-                        <button key={u.id} onClick={() => toggleUser(u.id)}
-                          style={{ width: "100%", padding: "7px 12px", background: isActive ? "var(--accent-pri-soft)" : "transparent", border: "none", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${isActive ? "var(--accent-pri)" : "var(--border-strong)"}`, background: isActive ? "var(--accent-pri)" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "#fff" }}>
-                            {isActive && <Check style={{ width: 11, height: 11 }} />}
+                        <button key={u.id} onClick={() => toggleUser(u.id)} className={isActive ? undefined : "og-menu-item"}
+                          style={{ width: "100%", padding: "8px 12px", background: isActive ? "var(--pri-soft)" : "transparent", border: "none", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 9 }}>
+                          <span style={{ width: 17, height: 17, borderRadius: 5, border: `1.5px solid ${isActive ? "var(--accent-pri)" : "var(--border-strong)"}`, background: isActive ? "var(--accent-pri)" : "transparent", display: "grid", placeItems: "center", flexShrink: 0, color: "#fff" }}>
+                            {isActive && <Check size={11} strokeWidth={3} />}
                           </span>
-                          <span className="avatar avatar--sm">{initials(u.username)}</span>
+                          <Avatar name={u.username} size={26} />
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: "var(--fs-13)", fontWeight: isActive ? 600 : 500, color: isActive ? "var(--accent-pri)" : "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.username}</div>
-                            <div style={{ fontSize: "var(--fs-11)", color: "var(--text-mute)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</div>
+                            <div style={{ font: `${isActive ? 600 : 500} 13px/1.2 var(--font-sans)`, color: isActive ? "var(--accent-pri)" : "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.username}</div>
+                            <div style={{ font: "400 11.5px/1.2 var(--font-sans)", color: "var(--text-mute)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>{u.email}</div>
                           </div>
                         </button>
                       );
                     })}
-                    {filteredUsers.length === 0 && <p style={{ padding: "10px 12px", fontSize: "var(--fs-12)", color: "var(--text-mute)", margin: 0 }}>Sin resultados</p>}
+                    {filteredUsers.length === 0 && <p style={{ padding: "12px", font: "400 12.5px/1 var(--font-sans)", color: "var(--text-mute)", margin: 0 }}>Sin resultados</p>}
                   </div>
                 </div>
               )}
             </div>
 
-            <span style={{ marginLeft: "auto", fontSize: "var(--fs-12)", color: "var(--text-mute)", whiteSpace: "nowrap" }}>
-              <b style={{ color: "var(--text)", fontFamily: "var(--font-mono)" }}>{total.toLocaleString()}</b> resultado{total !== 1 ? "s" : ""}
+            <div style={{ flex: 1 }} />
+            <span style={{ font: "400 13px/1 var(--font-mono)", color: "var(--text-mute)", whiteSpace: "nowrap" }}>
+              <b style={{ color: "var(--text)" }}>{total.toLocaleString()}</b> evento{total !== 1 ? "s" : ""}
             </span>
           </div>
 
           {/* Active filter chips */}
           {hasFilters && (
-            <div className="dv-filters" style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", padding: "var(--sp-2) var(--sp-3)", borderTop: "1px dashed var(--border-soft)", flexWrap: "wrap" }}>
-              <span style={{ fontSize: "var(--fs-11)", color: "var(--text-mute)", fontWeight: 600 }}>Filtros activos</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+              <span style={{ font: "600 11px/1 var(--font-sans)", color: "var(--text-mute)", textTransform: "uppercase", letterSpacing: ".04em" }}>Activos</span>
               {filterAction && (
-                <Chip label={ACTION_META[filterAction]?.label ?? filterAction} onRemove={() => { setFilterAction(""); setPage(0); }} />
+                <FilterChip label={`Acción: ${ACTION_META[filterAction]?.label ?? filterAction}`} onRemove={() => { setFilterAction(""); setPage(0); }} />
               )}
               {filterWorkspace && (
-                <Chip label={workspaces.find((w) => w.id === filterWorkspace)?.name ?? "Workspace"} onRemove={() => { setFilterWorkspace(""); setFilterDataset(""); setPage(0); }} />
+                <FilterChip label={`Workspace: ${workspaces.find((w) => w.id === filterWorkspace)?.name ?? "—"}`} onRemove={() => { setFilterWorkspace(""); setFilterDataset(""); setPage(0); }} />
               )}
               {filterDataset && (
-                <Chip label={allDatasets.find((d) => d.id === filterDataset)?.name ?? "Dataset"} onRemove={() => { setFilterDataset(""); setPage(0); }} />
+                <FilterChip label={`Dataset: ${allDatasets.find((d) => d.id === filterDataset)?.name ?? "—"}`} onRemove={() => { setFilterDataset(""); setPage(0); }} />
               )}
               {selectedUserObjs.map((u) => (
-                <Chip key={u.id} label={u.username} onRemove={() => { setFilterUsers((prev) => prev.filter((id) => id !== u.id)); setPage(0); }} />
+                <FilterChip key={u.id} label={u.username} onRemove={() => { setFilterUsers((prev) => prev.filter((id) => id !== u.id)); setPage(0); }} />
               ))}
-              <button className="btn btn--ghost btn--sm" onClick={() => { setFilterAction(""); setFilterWorkspace(""); setFilterDataset(""); setFilterUsers([]); setUserSearch(""); setPage(0); }}>
+              <button onClick={() => { setFilterAction(""); setFilterWorkspace(""); setFilterDataset(""); setFilterUsers([]); setUserSearch(""); setPage(0); }}
+                style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--accent-pri)", font: "600 12px/1 var(--font-sans)" }}>
                 Limpiar todo
               </button>
             </div>
           )}
-        </div>
 
-        {/* ── Content: timeline / table / empty ── */}
-        {isLoading ? (
-          <div className="empty">
-            <span className="empty__art"><History /></span>
-            <h4>Cargando registros…</h4>
-          </div>
-        ) : items.length === 0 ? (
-          <div className="empty">
-            <span className="empty__art"><List /></span>
-            <h4>Sin registros</h4>
-            <p>{hasFilters ? "Probá ajustando los filtros." : "Aún no hay actividad registrada."}</p>
-          </div>
-        ) : view === "timeline" ? (
-          <AuditTimeline items={items} loading={isLoading} />
-        ) : (
-          <table className="audit-tbl">
-            <thead>
-              <tr>
-                <th style={{ width: 130 }}>Cuándo</th>
-                <th style={{ width: 200 }}>Quién</th>
-                <th style={{ width: 120 }}>Acción</th>
-                <th>Objetivo</th>
-                <th>Cambio</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((entry) => {
+          {/* ── Content: timeline / table / empty ── */}
+          {isLoading ? (
+            <div style={{ border: "1px solid var(--border)", borderRadius: "var(--r-3)", overflow: "hidden", background: "var(--surface)", boxShadow: "var(--shadow-1)" }}>
+              {[0, 1, 2, 3, 4].map((i) => (
+                <div key={i} className="og-rise" style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderBottom: i < 4 ? "1px solid var(--border)" : "none", animationDelay: `${i * 55}ms` }}>
+                  <div className="og-shimmer" style={{ width: 80, height: 12, borderRadius: 5 }} />
+                  <div className="og-shimmer" style={{ width: 26, height: 26, borderRadius: 999 }} />
+                  <div className="og-shimmer" style={{ width: 120, height: 12, borderRadius: 5 }} />
+                  <div className="og-shimmer" style={{ width: 70, height: 20, borderRadius: 999 }} />
+                  <div className="og-shimmer" style={{ flex: 1, height: 12, borderRadius: 5 }} />
+                </div>
+              ))}
+            </div>
+          ) : items.length === 0 ? (
+            <div className="og-rise" style={{
+              display: "flex", flexDirection: "column", alignItems: "center", gap: 12,
+              textAlign: "center", padding: "60px 24px",
+              background: "var(--surface)", border: "1px solid var(--border)",
+              borderRadius: "var(--r-3)", boxShadow: "var(--shadow-1)",
+            }}>
+              <span style={{ display: "grid", placeItems: "center", width: 56, height: 56, borderRadius: "var(--r-3)", background: "var(--surface-alt)", color: "var(--text-mute)" }}>
+                <List size={26} />
+              </span>
+              <h4 style={{ margin: 0, font: "700 18px/1.2 var(--font-sans)", color: "var(--text)" }}>Sin registros</h4>
+              <p style={{ margin: 0, font: "400 14px/1.5 var(--font-sans)", color: "var(--text-soft)" }}>
+                {hasFilters ? "Probá ajustando los filtros." : "Aún no hay actividad registrada."}
+              </p>
+            </div>
+          ) : view === "timeline" ? (
+            <AuditTimeline items={items} loading={isLoading} />
+          ) : (
+            <div style={{ border: "1px solid var(--border)", borderRadius: "var(--r-3)", overflow: "hidden", background: "var(--surface)", boxShadow: "var(--shadow-1)" }}>
+              {/* head */}
+              <div style={{ display: "grid", gridTemplateColumns: GRID_COLS, padding: "11px 16px", background: "var(--surface-2)", borderBottom: "1px solid var(--border)", font: "600 12px/1 var(--font-sans)", color: "var(--text-mute)" }}>
+                <span>Cuándo</span><span>Quién</span><span>Acción</span><span>Objetivo</span><span>Cambio</span>
+              </div>
+              {items.map((entry, i) => {
                 const meta = ACTION_META[entry.action] ?? ACTION_META.update;
                 const isFiltered = !!entry.user_id && filterUsers.includes(entry.user_id);
                 return (
-                  <tr key={entry.id}>
+                  <div key={entry.id} className="og-gridrow og-rise" style={{
+                    display: "grid", gridTemplateColumns: GRID_COLS, alignItems: "center",
+                    padding: "12px 16px", borderBottom: i < items.length - 1 ? "1px solid var(--border)" : "none",
+                    animationDelay: `${Math.min(i, 12) * 28}ms`,
+                  }}>
                     {/* Cuándo */}
-                    <td>
-                      <span className="when" title={fullDate(entry.changed_at)}>{timeAgo(entry.changed_at)}</span>
-                      <div style={{ fontSize: 10, color: "var(--text-mute)", fontFamily: "var(--font-mono)", marginTop: 2 }}>
-                        {shortStamp(entry.changed_at)}
-                      </div>
-                    </td>
+                    <span>
+                      <span title={fullDate(entry.changed_at)} style={{ display: "block", font: "500 12.5px/1.2 var(--font-sans)", color: "var(--text)" }}>{timeAgo(entry.changed_at)}</span>
+                      <span className="mono" style={{ display: "block", font: "400 10.5px/1.2 var(--font-mono)", color: "var(--text-mute)", marginTop: 2 }}>{shortStamp(entry.changed_at)}</span>
+                    </span>
 
                     {/* Quién — clickeable para filtrar */}
-                    <td>
+                    <span>
                       {entry.user_name ? (
                         <button
-                          className="who"
                           title={isFiltered ? "Quitar filtro" : `Filtrar por ${entry.user_name}`}
                           onClick={() => toggleUser(entry.user_id ?? "")}
-                          style={{ background: isFiltered ? "var(--accent-pri-soft)" : "transparent", border: "none", borderRadius: "var(--r-2)", padding: "2px 6px 2px 2px", cursor: "pointer" }}
-                        >
-                          <span className="avatar avatar--xs">{initials(entry.user_name)}</span>
-                          <b style={{ color: isFiltered ? "var(--accent-pri)" : undefined }}>{entry.user_name}</b>
+                          style={{ display: "inline-flex", alignItems: "center", gap: 8, background: isFiltered ? "var(--pri-soft)" : "transparent", border: "none", borderRadius: "var(--r-pill)", padding: "3px 9px 3px 3px", cursor: "pointer", maxWidth: "100%" }}>
+                          <Avatar name={entry.user_name} size={24} />
+                          <span style={{ font: "600 13px/1 var(--font-sans)", color: isFiltered ? "var(--accent-pri)" : "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.user_name}</span>
                         </button>
                       ) : (
-                        <span className="who"><span className="avatar avatar--xs avatar--calc">ƒ</span><b style={{ color: "var(--text-mute)", fontStyle: "italic" }}>Sistema</b></span>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                          <span className="mono" style={{ display: "grid", placeItems: "center", width: 24, height: 24, borderRadius: "var(--r-pill)", background: "var(--calc-soft)", color: "var(--accent-calc)", font: "700 12px/1 var(--font-mono)" }}>ƒ</span>
+                          <span style={{ font: "500 13px/1 var(--font-sans)", color: "var(--text-mute)", fontStyle: "italic" }}>Sistema</span>
+                        </span>
                       )}
-                    </td>
+                    </span>
 
                     {/* Acción */}
-                    <td>
-                      <span className={`action-chip ${meta.chip}`}>{meta.icon} {meta.label.toUpperCase()}</span>
-                    </td>
+                    <span>
+                      <Badge tone={meta.tone}>{meta.icon} {meta.verb}</Badge>
+                    </span>
 
                     {/* Objetivo */}
-                    <td>
-                      <span className="target"><b>{entry.dataset_name}</b></span>
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: "block", font: "600 13px/1.3 var(--font-sans)", color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.dataset_name}</span>
                       {entry.field_key && (
-                        <div style={{ fontSize: "var(--fs-11)", color: "var(--text-mute)", fontFamily: "var(--font-mono)", marginTop: 2 }}>
+                        <span className="mono" style={{ display: "block", font: "400 11px/1.2 var(--font-mono)", color: "var(--text-mute)", marginTop: 2 }}>
                           columna · {entry.field_key}
-                        </div>
+                        </span>
                       )}
-                    </td>
+                    </span>
 
                     {/* Cambio (diff) */}
-                    <td>
+                    <span style={{ minWidth: 0 }}>
                       {entry.old_value !== null || entry.new_value !== null ? (
-                        <div className="diff">
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                            {entry.old_value !== null && (
-                              <code className="old">{entry.old_value || "vacío"}</code>
-                            )}
-                            {entry.old_value !== null && entry.new_value !== null && (
-                              <ArrowRight style={{ width: 11, height: 11, color: "var(--text-mute)" }} />
-                            )}
-                            {entry.new_value !== null && (
-                              <code className="new">{entry.new_value || "vacío"}</code>
-                            )}
-                          </span>
-                        </div>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          {entry.old_value !== null && (
+                            <code className="mono" style={{ font: "400 11.5px/1.2 var(--font-mono)", padding: "2px 7px", borderRadius: 6, background: "var(--danger-soft)", color: "var(--danger)", textDecoration: "line-through", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.old_value || "vacío"}</code>
+                          )}
+                          {entry.old_value !== null && entry.new_value !== null && (
+                            <ArrowRight size={12} style={{ color: "var(--text-mute)", flex: "none" }} />
+                          )}
+                          {entry.new_value !== null && (
+                            <code className="mono" style={{ font: "400 11.5px/1.2 var(--font-mono)", padding: "2px 7px", borderRadius: 6, background: "var(--success-soft)", color: "var(--success)", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.new_value || "vacío"}</code>
+                          )}
+                        </span>
                       ) : (
                         <span style={{ color: "var(--text-mute)" }}>—</span>
                       )}
-                    </td>
-                  </tr>
+                    </span>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
-        )}
+            </div>
+          )}
 
-        {/* ── Footer / pagination ── */}
-        {!isLoading && items.length > 0 && (
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "var(--sp-4)", padding: "0 var(--sp-1)", fontSize: "var(--fs-12)", color: "var(--text-mute)", flexWrap: "wrap", gap: "var(--sp-2)" }}>
-            <span>
-              Mostrando {items.length} de <b style={{ color: "var(--text)", fontFamily: "var(--font-mono)" }}>{total.toLocaleString()}</b> evento{total !== 1 ? "s" : ""}
-            </span>
-            {totalPages > 1 && (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                <button className="btn btn--secondary btn--icon btn--sm" title="Anterior" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>
-                  <ChevronLeft />
-                </button>
-                <span style={{ padding: "0 var(--sp-2)", color: "var(--text)", fontWeight: 600 }}>{page + 1} / {totalPages}</span>
-                <button className="btn btn--secondary btn--icon btn--sm" title="Siguiente" onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}>
-                  <ChevronRight />
-                </button>
+          {/* ── Footer / pagination ── */}
+          {!isLoading && items.length > 0 && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 18, padding: "0 2px", font: "400 12.5px/1 var(--font-sans)", color: "var(--text-mute)", flexWrap: "wrap", gap: 10 }}>
+              <span>
+                Mostrando {items.length} de <b className="mono" style={{ color: "var(--text)" }}>{total.toLocaleString()}</b> evento{total !== 1 ? "s" : ""}
               </span>
-            )}
-          </div>
-        )}
+              {totalPages > 1 && (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <button className="og-iconbtn" title="Anterior" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}
+                    style={{ display: "grid", placeItems: "center", width: 32, height: 32, borderRadius: "var(--r-2)", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-soft)", cursor: page === 0 ? "not-allowed" : "pointer", opacity: page === 0 ? 0.5 : 1 }}>
+                    <ChevronLeft size={16} />
+                  </button>
+                  <span style={{ padding: "0 8px", color: "var(--text)", font: "600 12.5px/1 var(--font-sans)" }}>{page + 1} / {totalPages}</span>
+                  <button className="og-iconbtn" title="Siguiente" onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
+                    style={{ display: "grid", placeItems: "center", width: 32, height: 32, borderRadius: "var(--r-2)", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-soft)", cursor: page >= totalPages - 1 ? "not-allowed" : "pointer", opacity: page >= totalPages - 1 ? 0.5 : 1 }}>
+                    <ChevronRight size={16} />
+                  </button>
+                </span>
+              )}
+            </div>
+          )}
+        </div>
       </main>
     </AppShell>
   );
 }
 
-// ── Small reusable components ────────────────────────────────────────────────
-
-function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
+// ── Chip de filtro activo (estilo handoff: pill con × removible) ────────────────
+function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
-    <span className="chip">
+    <KitChip tone="neutral" style={{ paddingRight: 4 }}>
       {label}
-      <button onClick={onRemove} style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", display: "inline-flex", alignItems: "center", padding: 0, marginLeft: 4, opacity: 0.7 }}>
-        <X style={{ width: 12, height: 12 }} />
+      <button onClick={onRemove} title="Quitar filtro" style={{
+        display: "grid", placeItems: "center", width: 17, height: 17, marginLeft: 2,
+        border: "none", background: "transparent", cursor: "pointer", color: "var(--text-mute)", borderRadius: 999,
+      }}>
+        <X size={12} />
       </button>
-    </span>
+    </KitChip>
   );
 }

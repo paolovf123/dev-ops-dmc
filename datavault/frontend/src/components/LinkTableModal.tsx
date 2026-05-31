@@ -1,9 +1,12 @@
 import { useState } from "react";
+import type { CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link2, X, Check, ArrowRight } from "lucide-react";
 import { getDatasets, getColumns } from "../api/datasets";
 import type { ColumnDefinition } from "../types";
 import { useWorkspace } from "../workspace/WorkspaceContext";
 import { useEscapeKey } from "../utils/useEscapeKey";
+import { Btn, TONE } from "./ui/kit";
 
 interface Props {
   currentDatasetId: string;
@@ -16,10 +19,25 @@ function toSlug(name: string) {
   return name.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
 }
 
+// ── estilos compartidos ───────────────────────────────────────────────────────
+const fieldLabel: CSSProperties = {
+  display: "block", font: "500 12.5px/1 var(--font-sans)", color: "var(--text-soft)", marginBottom: 6,
+};
+const fieldInput: CSSProperties = {
+  width: "100%", height: 38, padding: "0 11px", borderRadius: "var(--r-2)",
+  border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)",
+  font: "400 13.5px/1 var(--font-sans)", outline: "none",
+};
+const fieldHelp: CSSProperties = {
+  display: "block", marginTop: 6, font: "400 11.5px/1.4 var(--font-sans)", color: "var(--text-mute)",
+};
+
+const [REL_FG, REL_BG] = TONE.rel;
+
 export default function LinkTableModal({ currentDatasetId, currentDatasetName, onSave, onClose }: Props) {
-  const [targetId, setTargetId]       = useState("");
-  const [colName, setColName]         = useState("");
-  const [fieldKey, setFieldKey]       = useState("");
+  const [targetId, setTargetId]         = useState("");
+  const [colName, setColName]           = useState("");
+  const [fieldKey, setFieldKey]         = useState("");
   const [displayField, setDisplayField] = useState("");
   useEscapeKey(onClose);
 
@@ -66,108 +84,136 @@ export default function LinkTableModal({ currentDatasetId, currentDatasetName, o
   };
 
   const saveDisabled = !targetId || !colName.trim() || !fieldKey.trim();
+  const targetName = datasets.find((d) => d.id === targetId)?.name;
 
   return (
-    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal modal-v2">
-        <div className="modal-accent" style={{ background: "#DB2777" }} />
+    <div
+      onMouseDown={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 200, background: "var(--overlay)",
+        backdropFilter: "blur(5px)", WebkitBackdropFilter: "blur(5px)",
+        display: "grid", placeItems: "center", padding: 24, animation: "ogFade var(--t-mid)",
+      }}
+    >
+      <div
+        onMouseDown={(e) => e.stopPropagation()}
+        className="og-rise"
+        style={{
+          width: "100%", maxWidth: 520, maxHeight: "90vh", display: "flex", flexDirection: "column",
+          background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-4)",
+          boxShadow: "var(--shadow-4)", overflow: "hidden",
+        }}
+      >
+        {/* Accent bar (tono relación) */}
+        <div style={{ height: 3, background: REL_FG }} />
 
-        <div className="modal-header">
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div className="modal-header-icon" style={{ background: "#DB277718", color: "#DB2777" }}>⇢</div>
-            <div>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Vincular tabla</h3>
-              <p style={{ margin: 0, fontSize: 11.5, color: "var(--color-text-muted)" }}>
-                Agrega una columna FK en <strong>{currentDatasetName}</strong> que apunte a otro dataset
-              </p>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "18px 20px", borderBottom: "1px solid var(--border)" }}>
+          <span style={{
+            display: "grid", placeItems: "center", width: 38, height: 38, flex: "none",
+            borderRadius: "var(--r-2)", background: REL_BG, color: REL_FG,
+          }}>
+            <Link2 size={20} />
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ font: "700 17px/1.2 var(--font-sans)", color: "var(--text)" }}>Vincular tabla</div>
+            <div style={{ font: "400 13px/1.4 var(--font-sans)", color: "var(--text-soft)", marginTop: 3 }}>
+              Agrega una columna FK en <strong style={{ color: "var(--text)" }}>{currentDatasetName}</strong> que apunte a otro dataset
             </div>
           </div>
-          <button className="modal-close-btn" onClick={onClose}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
-            </svg>
+          <button
+            onClick={onClose}
+            className="og-iconbtn"
+            title="Cerrar"
+            style={{
+              width: 32, height: 32, display: "grid", placeItems: "center", flex: "none",
+              border: "none", background: "transparent", borderRadius: 8, cursor: "pointer",
+              color: "var(--text-mute)",
+            }}
+          >
+            <X size={18} />
           </button>
         </div>
 
-        <div className="modal-body">
+        {/* Body */}
+        <div style={{ padding: 20, overflow: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
           {/* Step 1 — target dataset */}
-          <div className="form-group">
-            <label className="form-label">Dataset destino</label>
-            <select value={targetId} onChange={(e) => handleTargetChange(e.target.value)}>
+          <label style={{ display: "block" }}>
+            <span style={fieldLabel}>Dataset destino</span>
+            <select style={fieldInput} value={targetId} onChange={(e) => handleTargetChange(e.target.value)}>
               <option value="">— Seleccionar dataset —</option>
               {otherDatasets.map((ds) => (
                 <option key={ds.id} value={ds.id}>{ds.name}</option>
               ))}
             </select>
-            <span style={{ fontSize: 11.5, color: "var(--color-text-muted)" }}>
-              El dataset al que apuntará la FK
-            </span>
-          </div>
+            <span style={fieldHelp}>El dataset al que apuntará la FK</span>
+          </label>
 
           {targetId && (
             <>
               {/* Step 2 — column name + field key */}
-              <div className="form-group">
-                <label className="form-label">Nombre visible de la columna FK</label>
+              <label style={{ display: "block" }}>
+                <span style={fieldLabel}>Nombre visible de la columna FK</span>
                 <input
+                  style={fieldInput}
                   value={colName}
                   onChange={(e) => setColName(e.target.value)}
                   placeholder="Ej. ID Persona"
                 />
-              </div>
+              </label>
 
-              <div className="form-group">
-                <label className="form-label">
+              <label style={{ display: "block" }}>
+                <span style={fieldLabel}>
                   Field key
-                  <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, marginLeft: 6, color: "var(--color-text-muted)" }}>
-                    — identificador interno
-                  </span>
-                </label>
+                  <span style={{ fontWeight: 400, color: "var(--text-mute)", marginLeft: 5 }}>— identificador interno</span>
+                </span>
                 <input
                   className="mono"
+                  style={{ ...fieldInput, fontFamily: "var(--font-mono)", fontSize: 13 }}
                   value={fieldKey}
                   onChange={(e) => setFieldKey(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
                 />
-              </div>
+              </label>
 
               {/* Step 3 — display field */}
-              <div className="form-group">
-                <label className="form-label">Campo a mostrar como label en el dropdown</label>
-                <select value={displayField} onChange={(e) => setDisplayField(e.target.value)}>
+              <label style={{ display: "block" }}>
+                <span style={fieldLabel}>Campo a mostrar como label en el dropdown</span>
+                <select style={fieldInput} value={displayField} onChange={(e) => setDisplayField(e.target.value)}>
                   <option value="">— Mostrar ID (por defecto) —</option>
                   {targetCols.map((col) => (
                     <option key={col.id} value={col.field_key}>{col.name} ({col.field_key})</option>
                   ))}
                 </select>
-                <span style={{ fontSize: 11.5, color: "var(--color-text-muted)" }}>
-                  El valor guardado siempre será el UUID del registro seleccionado
-                </span>
-              </div>
+                <span style={fieldHelp}>El valor guardado siempre será el UUID del registro seleccionado</span>
+              </label>
 
-              {/* Preview */}
+              {/* Preview — Current.fk ⇢ Target */}
               <div style={{
-                padding: "12px 14px", borderRadius: 8,
-                background: "var(--color-bg-secondary)",
-                border: "1px solid var(--color-border-light)",
-                fontSize: 12, color: "var(--color-text-muted)",
+                display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8,
+                padding: "12px 14px", borderRadius: "var(--r-3)",
+                background: REL_BG,
+                border: `1px solid color-mix(in srgb, ${REL_FG} 30%, transparent)`,
               }}>
-                <strong style={{ color: "var(--color-text)" }}>{currentDatasetName}</strong>
-                <span style={{ margin: "0 6px" }}>.</span>
-                <code style={{ fontFamily: "var(--font-mono)", color: "#DB2777" }}>{fieldKey || "id_…"}</code>
-                <span style={{ margin: "0 8px" }}>⇢</span>
-                <strong style={{ color: "var(--color-text)" }}>
-                  {datasets.find((d) => d.id === targetId)?.name}
-                </strong>
+                <strong style={{ font: "600 13px/1 var(--font-sans)", color: "var(--text)" }}>{currentDatasetName}</strong>
+                <code className="mono" style={{ font: "500 12.5px/1 var(--font-mono)", color: REL_FG }}>
+                  .{fieldKey || "id_…"}
+                </code>
+                <ArrowRight size={15} color="var(--text-mute)" />
+                <strong style={{ font: "600 13px/1 var(--font-sans)", color: "var(--text)" }}>{targetName}</strong>
               </div>
             </>
           )}
         </div>
 
-        <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saveDisabled}>
+        {/* Footer */}
+        <div style={{
+          display: "flex", justifyContent: "flex-end", gap: 10, padding: "14px 20px",
+          borderTop: "1px solid var(--border)", background: "var(--surface-2)",
+        }}>
+          <Btn variant="ghost" onClick={onClose}>Cancelar</Btn>
+          <Btn variant="primary" tone="rel" icon={<Check size={16} />} onClick={handleSave} disabled={saveDisabled}>
             Crear columna FK
-          </button>
+          </Btn>
         </div>
       </div>
     </div>

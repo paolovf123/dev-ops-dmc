@@ -14,9 +14,10 @@ import { useWorkspace } from "../workspace/WorkspaceContext";
 import { useToast } from "../components/Toast";
 import { IcBuilding } from "../components/ui/icons";
 import AppShell from "../components/chrome/AppShell";
+import { Badge, Btn, Toggle } from "../components/ui/kit";
 import {
   Search, Table2, FunctionSquare, MoreHorizontal, Plus,
-  Network, ScanSearch, LayoutGrid, Zap, Workflow,
+  Network, Sparkles, LayoutGrid, Workflow,
 } from "lucide-react";
 import type { ColumnDefinition } from "../types";
 import type { UseQueryResult } from "@tanstack/react-query";
@@ -31,12 +32,11 @@ const BOX_COLORS = [
 function normKw(s: string) { return s.toLowerCase().replace(/\s+/g, "_"); }
 function kw(s: string) { const p = normKw(s).split("_"); return p[p.length - 1]; }
 
-// Variante de color del ícono de cada card (determinística por nombre)
-const ICON_VARIANTS = ["", "is-rel", "is-mint", "is-violet"];
-function iconVariant(name: string) {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xfffffff;
-  return ICON_VARIANTS[h % ICON_VARIANTS.length];
+type Kind = "real" | "calc" | "bridge";
+function kindMeta(k: Kind): { color: string; soft: string } {
+  if (k === "calc") return { color: "var(--accent-calc)", soft: "var(--calc-soft)" };
+  if (k === "bridge") return { color: "var(--accent-rel)", soft: "var(--rel-soft)" };
+  return { color: "var(--accent-pri)", soft: "var(--pri-soft)" };
 }
 
 function SchemaPreview({
@@ -120,19 +120,20 @@ function SchemaPreview({
   );
 }
 
-function SkeletonCard() {
-  const bar = (w: string, h = 12) => (
-    <div style={{ height: h, width: w, borderRadius: 4, background: "var(--surface-alt)" }} />
-  );
+// ── Card de dataset (estilo handoff) ──────────────────────────────────────────
+function SkeletonCard({ i = 0 }: { i?: number }) {
   return (
-    <div className="h-card" style={{ pointerEvents: "none" }}>
-      <div className="h-card__head">
-        <span className="h-card__icon" style={{ background: "var(--surface-alt)", color: "transparent" }} />
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-          {bar("55%", 14)}{bar("40%", 11)}
-        </div>
+    <div className="og-rise" style={{
+      background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-3)",
+      padding: 16, minHeight: 132, boxShadow: "var(--shadow-1)", animationDelay: `${i * 55}ms`,
+    }}>
+      <div className="og-shimmer" style={{ width: 40, height: 40, borderRadius: "var(--r-2)" }} />
+      <div className="og-shimmer" style={{ width: "55%", height: 15, borderRadius: 5, marginTop: 14 }} />
+      <div className="og-shimmer" style={{ width: "75%", height: 11, borderRadius: 5, marginTop: 9 }} />
+      <div style={{ display: "flex", gap: 6, marginTop: 16 }}>
+        <div className="og-shimmer" style={{ width: 52, height: 20, borderRadius: 999 }} />
+        <div className="og-shimmer" style={{ width: 64, height: 20, borderRadius: 999 }} />
       </div>
-      <div className="h-card__stats">{bar("100%", 28)}</div>
     </div>
   );
 }
@@ -234,198 +235,214 @@ export default function DatasetList() {
   if (isAdmin) {
     return (
       <AppShell active="home">
-        <main className="home-main">
-          <AdminDashboard />
-        </main>
+        <main className="home-main"><AdminDashboard /></main>
       </AppShell>
     );
   }
+
+  const sectionTitle: React.CSSProperties = { font: "400 13px/1 var(--font-sans)", color: "var(--text-mute)", marginBottom: 14 };
 
   // ── Home de usuario: grid de datasets ──
   return (
     <>
       <AppShell active="home">
-        <main className="home-main">
-          {/* Header */}
-          <div className="home-header">
-            <div>
-              <h1>{workspace ? workspace.name : "Datasets"}</h1>
-              <p>{workspace?.description ?? "Gestiona, explora y vincula las tablas de datos de tu equipo."}</p>
+        <main className="home-main" style={{ overflowY: "auto", padding: 0 }}>
+          <div style={{ maxWidth: 1160, margin: "0 auto", padding: "28px 32px 80px" }}>
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
+              <div>
+                <h1 style={{ margin: 0, font: "700 28px/1.1 var(--font-sans)", letterSpacing: "-.02em", color: "var(--text)" }}>
+                  {workspace ? workspace.name : "Datasets"}
+                </h1>
+                <p style={{ margin: "7px 0 0", font: "400 15px/1.4 var(--font-sans)", color: "var(--text-soft)", maxWidth: 520 }}>
+                  {workspace?.description ?? "Convierte tus Excels en tablas relacionadas."}
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {datasets.length > 1 && (
+                  <Btn variant="soft" icon={<Sparkles size={16} />} onClick={() => setShowRelationScan(true)}>Detectar relaciones</Btn>
+                )}
+                <Btn variant="primary" icon={<Plus size={16} />} onClick={() => navigate("/create")}>Nuevo dataset</Btn>
+              </div>
             </div>
-            <div className="home-header__actions">
-              {datasets.length > 1 && (
-                <button className="btn btn--secondary" onClick={() => setShowRelationScan(true)}>
-                  <ScanSearch /> Detectar relaciones
-                </button>
+
+            {/* Toolbar */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "22px 0 18px", flexWrap: "wrap" }}>
+              <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 9, height: 38, padding: "0 12px", borderRadius: "var(--r-2)", border: "1px solid var(--border)", background: "var(--surface)", width: 280 }}>
+                <Search size={16} style={{ color: "var(--text-mute)", flex: "none" }} />
+                <input
+                  value={globalSearch}
+                  onChange={(e) => setGlobalSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === "Escape" && setGlobalSearch("")}
+                  placeholder="Buscar dataset, registro…"
+                  style={{ flex: 1, border: "none", background: "transparent", outline: "none", color: "var(--text)", font: "400 13.5px/1 var(--font-sans)" }}
+                />
+              </div>
+              {datasets.length > 0 && (
+                <Btn variant="soft" size="sm" icon={<LayoutGrid size={15} />} onClick={() => setShowSchema(true)}>Diagrama</Btn>
               )}
-              <button className="btn btn--primary" onClick={() => navigate("/create")}>
-                <Plus /> Nuevo dataset
-              </button>
-            </div>
-          </div>
-
-          {/* Toolbar */}
-          <div className="home-toolbar">
-            <span className="search" style={{ position: "relative" }}>
-              <Search />
-              <input
-                value={globalSearch}
-                onChange={(e) => setGlobalSearch(e.target.value)}
-                onKeyDown={(e) => e.key === "Escape" && setGlobalSearch("")}
-                placeholder="Buscar dataset, registro…"
-                style={{ flex: 1, background: "transparent", border: 0, outline: 0, font: "inherit", color: "var(--text)" }}
-              />
-            </span>
-            <span className="home-toolbar__grow" />
-            {datasets.length > 0 && (
-              <button className="tb-btn" onClick={() => setShowSchema(true)}><LayoutGrid /> Diagrama</button>
-            )}
-            {datasets.length > 1 && (
-              <button className="tb-btn" onClick={() => setShowRelManager(true)}><Network /> Relaciones</button>
-            )}
-            {bridgesCount > 0 && (
-              <button
-                className={`tb-btn${showBridges ? " is-on" : ""}`}
-                onClick={() => setShowBridges((v) => !v)}
-                style={showBridges ? { color: "var(--accent-pri)" } : undefined}
-                title="Mostrar/ocultar tablas intermedias (puentes N:N)"
-              >
-                <Workflow /> Intermedias ({bridgesCount})
-              </button>
-            )}
-          </div>
-
-          {/* Resultados de búsqueda global */}
-          {trimSearch.length >= 2 && (
-            <div className="global-search-results" style={{ maxWidth: 520, margin: "0 0 var(--sp-4)" }}>
-              {searchResults.length === 0 ? (
-                <div style={{ padding: "14px 16px", fontSize: 13, color: "var(--text-mute)" }}>
-                  {searchQueries.some((q) => q.isLoading) ? "Buscando…" : "Sin resultados"}
+              {datasets.length > 1 && (
+                <Btn variant="soft" size="sm" icon={<Network size={15} />} onClick={() => setShowRelManager(true)}>Relaciones</Btn>
+              )}
+              <div style={{ flex: 1 }} />
+              {bridgesCount > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 9, font: "500 13px/1 var(--font-sans)", color: "var(--text-soft)" }}>
+                  <Workflow size={15} style={{ color: "var(--text-mute)" }} />
+                  <span>Intermedias <span className="mono" style={{ color: "var(--text-mute)" }}>({bridgesCount})</span></span>
+                  <Toggle on={showBridges} onChange={setShowBridges} />
                 </div>
-              ) : (() => {
-                const grouped = new Map<string, typeof searchResults>();
-                for (const item of searchResults) {
-                  const arr = grouped.get(item.ds.id) ?? [];
-                  arr.push(item);
-                  grouped.set(item.ds.id, arr);
-                }
-                return [...grouped.entries()].map(([dsId, items]) => (
-                  <div key={dsId} className="global-search-group">
-                    <div className="global-search-group-header">{items[0].ds.name}</div>
-                    {items.map(({ rec, ds }) => {
-                      const cols = colQueries[datasets.findIndex((d) => d.id === ds.id)]?.data ?? [];
-                      const firstVal = cols
-                        .map((c) => String(rec.data[c.field_key] ?? ""))
-                        .find((v) => v.toLowerCase().includes(trimSearch.toLowerCase()));
-                      const labelCol = cols[0];
-                      const label = labelCol ? String(rec.data[labelCol.field_key] ?? "—") : rec.id;
-                      return (
-                        <button key={rec.id} className="global-search-item"
-                          onClick={() => { navigate(`/datasets/${ds.id}`); setGlobalSearch(""); }}>
-                          <span className="global-search-item-name">{highlight(label, trimSearch)}</span>
-                          {firstVal && firstVal !== label && (
-                            <span className="global-search-item-meta">{highlight(firstVal.slice(0, 40), trimSearch)}</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ));
-              })()}
+              )}
             </div>
-          )}
 
-          {/* Sección + grid */}
-          <div className="home-section-title">
-            <h3>Tus datasets</h3>
+            {/* Resultados de búsqueda global */}
+            {trimSearch.length >= 2 && (
+              <div className="global-search-results" style={{ maxWidth: 520, margin: "0 0 var(--sp-4)" }}>
+                {searchResults.length === 0 ? (
+                  <div style={{ padding: "14px 16px", fontSize: 13, color: "var(--text-mute)" }}>
+                    {searchQueries.some((q) => q.isLoading) ? "Buscando…" : "Sin resultados"}
+                  </div>
+                ) : (() => {
+                  const grouped = new Map<string, typeof searchResults>();
+                  for (const item of searchResults) {
+                    const arr = grouped.get(item.ds.id) ?? [];
+                    arr.push(item);
+                    grouped.set(item.ds.id, arr);
+                  }
+                  return [...grouped.entries()].map(([dsId, items]) => (
+                    <div key={dsId} className="global-search-group">
+                      <div className="global-search-group-header">{items[0].ds.name}</div>
+                      {items.map(({ rec, ds }) => {
+                        const cols = colQueries[datasets.findIndex((d) => d.id === ds.id)]?.data ?? [];
+                        const firstVal = cols
+                          .map((c) => String(rec.data[c.field_key] ?? ""))
+                          .find((v) => v.toLowerCase().includes(trimSearch.toLowerCase()));
+                        const labelCol = cols[0];
+                        const label = labelCol ? String(rec.data[labelCol.field_key] ?? "—") : rec.id;
+                        return (
+                          <button key={rec.id} className="global-search-item"
+                            onClick={() => { navigate(`/datasets/${ds.id}`); setGlobalSearch(""); }}>
+                            <span className="global-search-item-name">{highlight(label, trimSearch)}</span>
+                            {firstVal && firstVal !== label && (
+                              <span className="global-search-item-meta">{highlight(firstVal.slice(0, 40), trimSearch)}</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ));
+                })()}
+              </div>
+            )}
+
+            {/* Count line */}
             {!isLoading && (
-              <span className="home-section-title__count">
-                {visibleDatasets.length} dataset{visibleDatasets.length !== 1 ? "s" : ""} · {totalRecords.toLocaleString()} filas · {totalCols} cols
-              </span>
+              <div style={sectionTitle}>
+                {visibleDatasets.length} dataset{visibleDatasets.length !== 1 ? "s" : ""} · {totalRecords.toLocaleString("es-PE")} filas · {totalCols} columnas
+              </div>
+            )}
+
+            {/* Grid de cards */}
+            {isLoading ? (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(258px, 1fr))", gap: 16 }}>
+                {[0, 1, 2, 3].map((i) => <SkeletonCard key={i} i={i} />)}
+              </div>
+            ) : visibleDatasets.length === 0 ? (
+              <div className="empty">
+                <div className="empty__art"><Table2 size={28} /></div>
+                <h4>{datasets.length === 0 ? "Sin datasets todavía" : "Solo hay tablas intermedias"}</h4>
+                <p>{datasets.length === 0 ? "Crea tu primer dataset para empezar." : "Usa el toggle de arriba para verlas."}</p>
+                <button className="btn btn--primary" onClick={() => navigate("/create")}><Plus /> Nuevo dataset</button>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(258px, 1fr))", gap: 16 }}>
+                {visibleDatasets.map((ds, idx) => {
+                  const origIdx = datasets.indexOf(ds);
+                  const cols = colQueries[origIdx]?.data ?? [];
+                  const colCount = colQueries[origIdx]?.data?.length ?? null;
+                  const recCount = recQueries[origIdx]?.data ?? null;
+                  const relCount = cols.filter((c) => c.data_type === "relation").length;
+                  const code = ds.name.replace(/[^A-Za-z]/g, "").slice(0, 4).toUpperCase() || "DS";
+                  const kind: Kind = ds.is_computed ? "calc" : ds.is_bridge ? "bridge" : "real";
+                  const m = kindMeta(kind);
+                  const Icon = ds.is_computed ? FunctionSquare : ds.is_bridge ? Workflow : Table2;
+
+                  return (
+                    <div key={ds.id} className="og-card og-rise" tabIndex={0} role="button"
+                      onClick={() => navigate(`/datasets/${ds.id}`)}
+                      onKeyDown={(e) => e.key === "Enter" && navigate(`/datasets/${ds.id}`)}
+                      style={{
+                        animationDelay: `${idx * 55}ms`,
+                        background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-3)",
+                        padding: 16, cursor: "pointer", transition: "all var(--t-fast)", boxShadow: "var(--shadow-1)",
+                        display: "flex", flexDirection: "column", minHeight: 132,
+                      }}>
+                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+                        <span style={{
+                          display: "grid", placeItems: "center", width: 40, height: 40, borderRadius: "var(--r-2)",
+                          background: m.soft, color: m.color, border: `1px solid color-mix(in srgb, ${m.color} 26%, transparent)`,
+                        }}><Icon size={21} /></span>
+                        <button title={`Editar "${ds.name}"`}
+                          onClick={(e) => { e.stopPropagation(); setEditingDataset({ id: ds.id, name: ds.name, description: ds.description, is_bridge: ds.is_bridge }); }}
+                          style={{ display: "grid", placeItems: "center", width: 30, height: 30, borderRadius: "var(--r-2)", border: "none", background: "transparent", color: "var(--text-mute)", cursor: "pointer" }}>
+                          <MoreHorizontal size={18} />
+                        </button>
+                      </div>
+
+                      <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ font: "600 16px/1.2 var(--font-sans)", color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ds.name}</span>
+                        <span className="mono" style={{ font: "500 10.5px/1 var(--font-mono)", color: "var(--text-mute)", padding: "3px 5px", borderRadius: 5, background: "var(--surface-alt)", flex: "none" }}>{code}</span>
+                      </div>
+                      {ds.description && (
+                        <div style={{ font: "400 12.5px/1.3 var(--font-sans)", color: "var(--text-mute)", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ds.description}</div>
+                      )}
+
+                      <div style={{ flex: 1 }} />
+
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 13 }}>
+                        <Badge tone="neutral">{colCount === null ? "—" : colCount} col</Badge>
+                        <Badge tone="neutral">{recCount === null ? "—" : recCount.toLocaleString("es-PE")} filas</Badge>
+                        {kind === "calc" && <Badge tone="calc" dot>calculado</Badge>}
+                        {kind === "bridge" && <Badge tone="rel">intermedia</Badge>}
+                        {relCount > 0 && kind !== "bridge" && <Badge tone="rel" dot>{relCount} rel</Badge>}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Card crear */}
+                <button className="og-rise" onClick={() => navigate("/create")} style={{
+                  animationDelay: `${visibleDatasets.length * 55}ms`,
+                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10,
+                  minHeight: 132, borderRadius: "var(--r-3)", border: "1.5px dashed var(--border-strong)",
+                  background: "transparent", cursor: "pointer", color: "var(--text-mute)", transition: "all var(--t-fast)",
+                }}>
+                  <span style={{ display: "grid", placeItems: "center", width: 40, height: 40, borderRadius: "var(--r-2)", border: "1.5px dashed var(--border-strong)" }}><Plus size={22} /></span>
+                  <span style={{ font: "600 14px/1 var(--font-sans)" }}>Nuevo dataset</span>
+                </button>
+              </div>
+            )}
+
+            {/* Mapa de relaciones */}
+            {!isLoading && datasets.length > 1 && (
+              <div style={{ marginTop: 34 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                  <Network size={17} style={{ color: "var(--accent-rel)" }} />
+                  <span style={{ font: "600 15px/1 var(--font-sans)", color: "var(--text)" }}>
+                    Mapa de relaciones{workspace ? ` — ${workspace.name}` : ""}
+                  </span>
+                  <a href="#" onClick={(e) => { e.preventDefault(); setShowSchema(true); }}
+                    style={{ marginLeft: "auto", font: "500 13px/1 var(--font-sans)", color: "var(--accent-pri)" }}>Ver completo →</a>
+                </div>
+                <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-3)", padding: "18px 20px", boxShadow: "var(--shadow-1)", overflow: "hidden" }}>
+                  <SchemaPreview datasets={datasets} colQueries={colQueries} />
+                </div>
+              </div>
             )}
           </div>
-
-          {isLoading ? (
-            <div className="home-grid">{[1, 2, 3].map((n) => <SkeletonCard key={n} />)}</div>
-          ) : visibleDatasets.length === 0 ? (
-            <div className="empty">
-              <div className="empty__art"><Table2 size={28} /></div>
-              <h4>{datasets.length === 0 ? "Sin datasets todavía" : "Solo hay tablas intermedias"}</h4>
-              <p>{datasets.length === 0 ? "Crea tu primer dataset para empezar." : "Usa el botón de intermedias para verlas."}</p>
-              <button className="btn btn--primary" onClick={() => navigate("/create")}><Plus /> Nuevo dataset</button>
-            </div>
-          ) : (
-            <div className="home-grid">
-              {visibleDatasets.map((ds) => {
-                const origIdx = datasets.indexOf(ds);
-                const cols = colQueries[origIdx]?.data ?? [];
-                const colCount = colQueries[origIdx]?.data?.length ?? null;
-                const recCount = recQueries[origIdx]?.data ?? null;
-                const relCount = cols.filter((c) => c.data_type === "relation").length;
-                const code = ds.name.replace(/[^A-Za-z]/g, "").slice(0, 4).toUpperCase() || "DS";
-                const iconCls = ds.is_computed ? "is-calc" : iconVariant(ds.name);
-                const Icon = ds.is_computed ? FunctionSquare : Table2;
-
-                return (
-                  <article key={ds.id} className="h-card" onClick={() => navigate(`/datasets/${ds.id}`)}
-                    role="button" tabIndex={0}
-                    onKeyDown={(e) => e.key === "Enter" && navigate(`/datasets/${ds.id}`)}>
-                    <div className="h-card__head">
-                      <span className={`h-card__icon ${iconCls}`}><Icon /></span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div className="h-card__title" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ds.name}</div>
-                        <div className="h-card__sub">{code}{ds.is_computed ? " · derivado por script" : ds.is_bridge ? " · tabla intermedia" : ""}</div>
-                      </div>
-                      {ds.is_computed && <span className="badge badge--calc" style={{ marginLeft: "var(--sp-1)" }}>ƒ</span>}
-                      <button className="h-card__menu" title={`Editar "${ds.name}"`}
-                        onClick={(e) => { e.stopPropagation(); setEditingDataset({ id: ds.id, name: ds.name, description: ds.description, is_bridge: ds.is_bridge }); }}>
-                        <MoreHorizontal />
-                      </button>
-                    </div>
-
-                    <div className="h-card__stats">
-                      <div><span>Filas</span><b>{recCount === null ? "—" : recCount.toLocaleString()}</b></div>
-                      <div><span>Columnas</span><b>{colCount === null ? "—" : colCount}</b></div>
-                      <div><span>Relaciones</span><b>{relCount}</b></div>
-                    </div>
-
-                    <div className="h-card__foot">
-                      <span className="avatar-group">
-                        <span className={`avatar avatar--xs ${ds.is_computed ? "avatar--calc" : relCount > 0 ? "avatar--rel" : ""}`}>{code.slice(0, 2)}</span>
-                      </span>
-                      <span className="when">
-                        {ds.is_computed ? <><Zap /> calculado</> : ds.description ? ds.description.slice(0, 28) : "Abrir →"}
-                      </span>
-                    </div>
-                  </article>
-                );
-              })}
-
-              {/* Card crear */}
-              <div className="h-card h-card--new" onClick={() => navigate("/create")}>
-                <span className="h-card__icon"><Plus /></span>
-                <h4>Nuevo dataset</h4>
-                <p>Crea una tabla con columnas configurables.</p>
-              </div>
-            </div>
-          )}
-
-          {/* Mapa de relaciones */}
-          {!isLoading && datasets.length > 1 && (
-            <>
-              <div className="home-section-title">
-                <h3>Mapa de relaciones{workspace ? ` — ${workspace.name}` : ""}</h3>
-                <a href="#" onClick={(e) => { e.preventDefault(); setShowSchema(true); }}>Ver completo →</a>
-              </div>
-              <div style={{ background: "var(--surface)", border: "1px solid var(--border-soft)", borderRadius: "var(--r-3)", padding: "var(--sp-4)", overflow: "hidden" }}>
-                <SchemaPreview datasets={datasets} colQueries={colQueries} />
-              </div>
-            </>
-          )}
         </main>
       </AppShell>
 
-      {/* ── Modales (fuera de .og para conservar su estilo legacy) ── */}
+      {/* ── Modales ── */}
       {showSchema && (
         <GlobalSchemaDiagram onClose={() => setShowSchema(false)} workspaceId={workspace?.id} workspaceName={workspace?.name} />
       )}

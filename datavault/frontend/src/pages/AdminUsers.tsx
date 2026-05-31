@@ -101,7 +101,7 @@ export default function AdminUsers({ embedded = false }: { embedded?: boolean } 
     enabled: isAdmin || !!initWsId,
   });
 
-  const { data: groups    = [] } = useQuery({ queryKey: ["groups"],    queryFn: getGroups,    staleTime: 60_000 });
+  const { data: groups    = [] } = useQuery({ queryKey: ["groups"],    queryFn: () => getGroups(), staleTime: 60_000 });
   const { data: workspaces = [], isLoading: isLoadingWs } = useQuery({ queryKey: ["workspaces"], queryFn: getWorkspaces, staleTime: 60_000 });
 
   // El rol del usuario en el workspace filtrado (permite acceso a owner/admin_ws)

@@ -1,13 +1,15 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+import {
+  Link2, Sparkles, Plus, Trash2, X, ArrowRight, Network, ExternalLink, ArrowUpFromLine,
+} from "lucide-react";
 import api from "../api/client";
 import { getDatasets, getColumns, updateColumn, createColumn, updateDataset, deleteDataset } from "../api/datasets";
 import type { Dataset, ColumnDefinition } from "../types";
 import { useToast } from "./Toast";
 import { useEscapeKey } from "../utils/useEscapeKey";
-import { modalTh as th, modalTd as td } from "../utils/ui";
-import { IcLink, IcBridge } from "./ui/icons";
+import { Badge, Btn, Chip, IconBtn, TONE } from "./ui/kit";
 import RelationScanModal from "./RelationScanModal";
 
 interface Props {
@@ -28,6 +30,16 @@ interface RelationRow {
   toDatasetName: string;
   displayField: string | null;
 }
+
+// ── Estilos compartidos de presentación ──────────────────────────────────────
+const inputSt: CSSProperties = {
+  width: "100%", height: 38, padding: "0 11px", borderRadius: "var(--r-2)",
+  border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)",
+  font: "400 13.5px var(--font-sans)", outline: "none",
+};
+const labelSt: CSSProperties = {
+  display: "block", font: "500 12.5px var(--font-sans)", color: "var(--text-soft)", marginBottom: 6,
+};
 
 export default function RelationsManagerModal({ open, onClose, workspaceId }: Props) {
   const qc = useQueryClient();
@@ -117,185 +129,190 @@ export default function RelationsManagerModal({ open, onClose, workspaceId }: Pr
 
   if (!open) return null;
 
+  const bridgeCount = datasets.filter((d) => d.is_bridge).length;
+  const tabs: [Tab, string, number | null][] = [
+    ["list", "Relaciones activas", relations.length],
+    ["bridges", "Tablas intermedias", bridgeCount],
+    ["create_nn", "Tabla intermedia con atributos", null],
+  ];
+  const [relFg, relBg] = TONE.rel;
+
   return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 1000,
-      background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center",
-    }} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div style={{
-        background: "var(--color-surface)", borderRadius: 14, padding: "24px 28px",
-        width: "min(1100px, 96vw)", height: "min(820px, 94vh)",
-        display: "flex", flexDirection: "column",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.3)", gap: 14,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ display: "flex", color: "var(--color-primary)" }}><IcLink size={20} /></div>
-          <div>
-            <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>Gestor de relaciones</h3>
-            <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-muted)" }}>
+    <div
+      onMouseDown={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 1000,
+        background: "var(--overlay)", backdropFilter: "blur(5px)",
+        display: "grid", placeItems: "center", padding: 24,
+        animation: "ogFade var(--t-mid)",
+      }}
+    >
+      <div
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{
+          width: "100%", maxWidth: 1040, height: "min(820px, 92vh)",
+          display: "flex", flexDirection: "column",
+          background: "var(--surface)", border: "1px solid var(--border)",
+          borderRadius: "var(--r-4)", boxShadow: "var(--shadow-4)",
+          animation: "ogPop var(--t-slow)", overflow: "hidden",
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "18px 20px", borderBottom: "1px solid var(--border)" }}>
+          <span style={{ display: "grid", placeItems: "center", width: 38, height: 38, borderRadius: "var(--r-2)", background: relBg, color: relFg, flex: "none" }}>
+            <Link2 size={20} />
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ font: "700 17px/1.2 var(--font-sans)", color: "var(--text)" }}>Gestor de relaciones</div>
+            <div style={{ font: "400 13px/1.4 var(--font-sans)", color: "var(--text-soft)", marginTop: 3 }}>
               Lista, busca y elimina relaciones · crea tablas intermedias N:N
-            </p>
+            </div>
           </div>
-          <button className="btn btn-secondary"
-            onClick={() => setShowScan(true)}
-            style={{ marginLeft: "auto", fontSize: 13, borderColor: "#7C3AED", color: "#7C3AED" }}>
+          <Btn variant="soft" tone="violet" icon={<Sparkles size={15} />} onClick={() => setShowScan(true)}>
             Detectar relaciones
-          </button>
-          <button className="btn btn-ghost" onClick={onClose}
-            style={{ padding: "4px 8px", fontSize: 18 }}>×</button>
+          </Btn>
+          <IconBtn onClick={onClose} title="Cerrar" style={{ width: 32, height: 32, color: "var(--text-mute)" }}>
+            <X size={18} />
+          </IconBtn>
         </div>
 
         {/* Tabs */}
-        <div style={{
-          display: "flex", gap: 4, borderBottom: "1px solid var(--color-border)",
-          paddingBottom: 0, marginBottom: -4,
-        }}>
-          {([
-            ["list", `Relaciones activas (${relations.length})`],
-            ["bridges", `Tablas intermedias (${datasets.filter((d) => d.is_bridge).length})`],
-            ["create_nn", "Tabla intermedia con atributos"],
-          ] as [Tab, string][]).map(([k, label]) => (
-            <button key={k} onClick={() => setTab(k)}
-              style={{
-                padding: "8px 14px", fontSize: 13, fontWeight: tab === k ? 700 : 500,
-                background: "none", border: "none", cursor: "pointer",
-                borderBottom: tab === k ? "2px solid var(--color-primary)" : "2px solid transparent",
-                color: tab === k ? "var(--color-primary)" : "var(--color-text-secondary)",
-                marginBottom: -1,
-              }}>
-              {label}
-            </button>
-          ))}
+        <div style={{ display: "flex", gap: 4, padding: "0 20px", borderBottom: "1px solid var(--border)" }}>
+          {tabs.map(([k, label, count]) => {
+            const on = tab === k;
+            return (
+              <button
+                key={k}
+                onClick={() => setTab(k)}
+                style={{
+                  padding: "11px 4px", marginRight: 12, font: `${on ? 700 : 500} 13px var(--font-sans)`,
+                  background: "none", border: "none", cursor: "pointer",
+                  borderBottom: on ? "2px solid var(--accent-rel)" : "2px solid transparent",
+                  color: on ? "var(--accent-rel)" : "var(--text-soft)",
+                  marginBottom: -1, display: "inline-flex", alignItems: "center", gap: 7,
+                }}
+              >
+                {label}
+                {count != null && <Badge tone={on ? "rel" : "neutral"}>{count}</Badge>}
+              </button>
+            );
+          })}
         </div>
 
-        {tab === "list" && (
-          <>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input
-                type="text"
-                placeholder="Buscar por dataset, columna…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                style={{
-                  flex: 1, fontSize: 13, padding: "7px 11px", borderRadius: 6,
-                  border: "1px solid var(--color-border)",
-                }}
-              />
-              <button
-                onClick={() => setShowScan(true)}
-                style={{
-                  padding: "8px 16px", fontSize: 13, fontWeight: 600,
-                  background: "#7C3AED", color: "#fff",
-                  border: "none", borderRadius: 6, cursor: "pointer", whiteSpace: "nowrap",
-                  display: "flex", alignItems: "center", gap: 6,
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "#6D28D9")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "#7C3AED")}>
-                <span style={{ fontSize: 15 }}>＋</span> Buscar más relaciones
-              </button>
-            </div>
+        {/* Body */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: 20, overflow: "hidden" }}>
+          {tab === "list" && (
+            <>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 14 }}>
+                <input
+                  type="text"
+                  placeholder="Buscar por dataset, columna…"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  style={{ ...inputSt, flex: 1 }}
+                />
+                <Btn variant="primary" tone="violet" icon={<Plus size={15} />} onClick={() => setShowScan(true)}>
+                  Buscar más relaciones
+                </Btn>
+              </div>
 
-            <div style={{ overflowY: "auto", flex: 1, border: "1px solid var(--color-border)", borderRadius: 8 }}>
-              {!allLoaded ? (
-                <div style={{ padding: 48, textAlign: "center", color: "var(--color-text-muted)" }}>
-                  Cargando relaciones…
-                </div>
-              ) : relations.length === 0 ? (
-                <div style={{ padding: 48, textAlign: "center", color: "var(--color-text-muted)" }}>
-                  No hay relaciones confirmadas todavía.
-                  <br />
-                  Usa "Detectar relaciones" para aplicar sugerencias.
-                </div>
-              ) : filtered.length === 0 ? (
-                <div style={{ padding: 32, textAlign: "center", color: "var(--color-text-muted)", fontSize: 13 }}>
-                  Sin resultados para "{query}".
-                </div>
-              ) : (
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                  <thead>
-                    <tr style={{ background: "var(--color-bg)", position: "sticky", top: 0 }}>
-                      <th style={th}>Desde</th>
-                      <th style={th}>Columna</th>
-                      <th style={th}>→ Apunta a</th>
-                      <th style={th}>Campo destino</th>
-                      <th style={th}>Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((rel) => {
-                      const key = `${rel.fromDatasetId}:${rel.fromColumnId}`;
-                      const removing = removingKey === key;
-                      return (
-                        <tr key={key} style={{ borderBottom: "1px solid var(--color-border-light)" }}>
-                          <td style={td}>
-                            <Link to={`/datasets/${rel.fromDatasetId}`}
-                              style={{ color: "var(--color-primary)", fontWeight: 600 }}>
-                              {rel.fromDatasetName}
-                            </Link>
-                          </td>
-                          <td style={td}>
-                            <code style={{ fontSize: 12, color: "#DB2777" }}>{rel.fromColumnFieldKey}</code>
-                            {rel.fromColumnName !== rel.fromColumnFieldKey && (
-                              <div style={{ fontSize: 11, color: "var(--color-text-muted)" }}>{rel.fromColumnName}</div>
-                            )}
-                          </td>
-                          <td style={td}>
-                            <Link to={`/datasets/${rel.toDatasetId}`}
-                              style={{ color: "var(--color-primary)", fontWeight: 600 }}>
-                              {rel.toDatasetName}
-                            </Link>
-                          </td>
-                          <td style={{ ...td, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-muted)" }}>
-                            {rel.displayField ?? "id (registro)"}
-                          </td>
-                          <td style={td}>
-                            <button
-                              onClick={() => {
-                                if (confirm(`¿Quitar la relación de ${rel.fromDatasetName}.${rel.fromColumnName}?\n\nLa columna volverá a ser de tipo "text" (los datos se conservan).`)) {
-                                  removeMut.mutate(rel);
-                                }
-                              }}
-                              disabled={removing}
-                              style={{
-                                fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 6,
-                                border: "1px solid #DC2626", background: "#fff",
-                                color: "#DC2626", cursor: removing ? "wait" : "pointer", whiteSpace: "nowrap",
-                                opacity: removing ? 0.6 : 1,
-                              }}
-                              onMouseEnter={(e) => { if (!removing) (e.currentTarget as HTMLButtonElement).style.background = "#FEE2E2"; }}
-                              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#fff"; }}>
-                              {removing ? "Quitando…" : "Quitar"}
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </>
-        )}
+              <div style={{ overflowY: "auto", flex: 1, border: "1px solid var(--border)", borderRadius: "var(--r-3)", background: "var(--surface)" }}>
+                {!allLoaded ? (
+                  <EmptyState>Cargando relaciones…</EmptyState>
+                ) : relations.length === 0 ? (
+                  <EmptyState>
+                    No hay relaciones confirmadas todavía.
+                    <br />
+                    Usa "Detectar relaciones" para aplicar sugerencias.
+                  </EmptyState>
+                ) : filtered.length === 0 ? (
+                  <EmptyState>Sin resultados para "{query}".</EmptyState>
+                ) : (
+                  <table style={{ width: "100%", borderCollapse: "collapse", font: "400 13px var(--font-sans)" }}>
+                    <thead>
+                      <tr style={{ position: "sticky", top: 0, background: "var(--surface-alt)", zIndex: 1 }}>
+                        <th style={thSt}>Desde</th>
+                        <th style={thSt}>Columna</th>
+                        <th style={thSt}>→ Apunta a</th>
+                        <th style={thSt}>Campo destino</th>
+                        <th style={{ ...thSt, textAlign: "right" }}>Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map((rel) => {
+                        const key = `${rel.fromDatasetId}:${rel.fromColumnId}`;
+                        const removing = removingKey === key;
+                        return (
+                          <tr key={key} style={{ borderTop: "1px solid var(--border)" }}>
+                            <td style={tdSt}>
+                              <Link to={`/datasets/${rel.fromDatasetId}`} style={{ textDecoration: "none" }}>
+                                <Chip tone="rel">{rel.fromDatasetName}</Chip>
+                              </Link>
+                            </td>
+                            <td style={tdSt}>
+                              <span className="mono" style={{ font: "500 12px var(--font-mono)", color: "var(--accent-rel)" }}>
+                                .{rel.fromColumnFieldKey}
+                              </span>
+                              {rel.fromColumnName !== rel.fromColumnFieldKey && (
+                                <div style={{ font: "400 11px var(--font-sans)", color: "var(--text-mute)" }}>{rel.fromColumnName}</div>
+                              )}
+                            </td>
+                            <td style={tdSt}>
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+                                <ArrowRight size={14} color="var(--text-mute)" />
+                                <Link to={`/datasets/${rel.toDatasetId}`} style={{ textDecoration: "none" }}>
+                                  <Chip tone="primary">{rel.toDatasetName}</Chip>
+                                </Link>
+                              </span>
+                            </td>
+                            <td style={{ ...tdSt, font: "400 11.5px var(--font-mono)", color: "var(--text-mute)" }} className="mono">
+                              {rel.displayField ?? "id (registro)"}
+                            </td>
+                            <td style={{ ...tdSt, textAlign: "right" }}>
+                              <Btn
+                                variant="danger"
+                                size="sm"
+                                disabled={removing}
+                                icon={<Trash2 size={13} />}
+                                onClick={() => {
+                                  if (confirm(`¿Quitar la relación de ${rel.fromDatasetName}.${rel.fromColumnName}?\n\nLa columna volverá a ser de tipo "text" (los datos se conservan).`)) {
+                                    removeMut.mutate(rel);
+                                  }
+                                }}
+                              >
+                                {removing ? "Quitando…" : "Quitar"}
+                              </Btn>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </>
+          )}
 
-        {tab === "bridges" && (
-          <BridgesList
-            datasets={datasets}
-            colsByDsId={new Map(datasets.map((d, i) => [d.id, colQueries[i]?.data ?? []]))}
-            onChanged={() => qc.invalidateQueries({ queryKey: ["datasets"] })}
-          />
-        )}
+          {tab === "bridges" && (
+            <BridgesList
+              datasets={datasets}
+              colsByDsId={new Map(datasets.map((d, i) => [d.id, colQueries[i]?.data ?? []]))}
+              onChanged={() => qc.invalidateQueries({ queryKey: ["datasets"] })}
+            />
+          )}
 
-        {tab === "create_nn" && (
-          <CreateNNRelation
-            datasets={datasets}
-            workspaceId={workspaceId}
-            onCreated={() => {
-              qc.invalidateQueries({ queryKey: ["datasets"] });
-              setTab("bridges");
-              toast("✓ Tabla intermedia creada", "success");
-            }}
-          />
-        )}
+          {tab === "create_nn" && (
+            <CreateNNRelation
+              datasets={datasets}
+              workspaceId={workspaceId}
+              onCreated={() => {
+                qc.invalidateQueries({ queryKey: ["datasets"] });
+                setTab("bridges");
+                toast("✓ Tabla intermedia creada", "success");
+              }}
+            />
+          )}
+        </div>
       </div>
 
       <RelationScanModal
@@ -308,6 +325,23 @@ export default function RelationsManagerModal({ open, onClose, workspaceId }: Pr
         }}
         workspaceId={workspaceId}
       />
+    </div>
+  );
+}
+
+// ── Estilos de tabla ──────────────────────────────────────────────────────────
+const thSt: CSSProperties = {
+  textAlign: "left", padding: "10px 14px", font: "600 11.5px var(--font-sans)",
+  color: "var(--text-mute)", textTransform: "uppercase", letterSpacing: ".04em", whiteSpace: "nowrap",
+};
+const tdSt: CSSProperties = {
+  padding: "10px 14px", color: "var(--text)", verticalAlign: "middle",
+};
+
+function EmptyState({ children }: { children: ReactNode }) {
+  return (
+    <div style={{ padding: "56px 24px", textAlign: "center", font: "400 13.5px var(--font-sans)", color: "var(--text-mute)", lineHeight: 1.6 }}>
+      {children}
     </div>
   );
 }
@@ -384,25 +418,22 @@ function CreateNNRelation({
     const q = filter.trim().toLowerCase();
     const list = q ? visibleDs.filter((d) => d.name.toLowerCase().includes(q) && d.id !== exclude) : visibleDs.filter((d) => d.id !== exclude);
     return (
-      <div style={{
-        maxHeight: 200, overflowY: "auto",
-        border: "1px solid var(--color-border)", borderRadius: 6,
-        background: "var(--color-surface)",
-      }}>
+      <div style={{ maxHeight: 200, overflowY: "auto", border: "1px solid var(--border)", borderRadius: "var(--r-2)", background: "var(--surface)" }}>
         {list.length === 0 ? (
-          <p style={{ padding: "10px 12px", fontSize: 12, color: "var(--color-text-muted)", margin: 0 }}>
+          <p style={{ padding: "10px 12px", font: "400 12.5px var(--font-sans)", color: "var(--text-mute)", margin: 0 }}>
             {q ? `Sin resultados para "${filter}"` : "No hay datasets disponibles"}
           </p>
         ) : list.map((d) => (
-          <button key={d.id} onClick={() => onPick(d.id)}
+          <button
+            key={d.id}
+            onClick={() => onPick(d.id)}
+            className="og-menu-item"
             style={{
-              width: "100%", textAlign: "left", background: "none", border: "none",
-              padding: "7px 12px", fontSize: 13, cursor: "pointer",
-              borderBottom: "1px solid var(--color-border-light)",
-              color: "var(--color-text)",
+              width: "100%", textAlign: "left", background: undefined, border: "none",
+              padding: "8px 12px", font: "400 13px var(--font-sans)", cursor: "pointer",
+              borderBottom: "1px solid var(--border)", color: "var(--text)",
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-primary-bg)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
+          >
             {d.name}
           </button>
         ))}
@@ -410,36 +441,27 @@ function CreateNNRelation({
     );
   };
 
+  const code = (txt: ReactNode) => (
+    <span className="mono" style={{ font: "400 12px var(--font-mono)", background: "var(--surface-alt)", padding: "1px 5px", borderRadius: 4, color: "var(--accent-rel)" }}>{txt}</span>
+  );
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", flex: 1 }}>
-      <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
-        Todas las relaciones del sistema son <strong>N:N</strong> por defecto: una columna
-        <code style={{ background: "var(--color-bg)", padding: "0 4px", borderRadius: 3, margin: "0 3px" }}>relation</code>
-        puede guardar varios valores. <strong>No hace falta una tabla intermedia para tener N:N.</strong>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, overflowY: "auto", flex: 1 }}>
+      <p style={{ margin: 0, font: "400 12.5px var(--font-sans)", color: "var(--text-soft)", lineHeight: 1.6 }}>
+        Todas las relaciones del sistema son <strong style={{ color: "var(--text)" }}>N:N</strong> por defecto: una columna {code("relation")} puede
+        guardar varios valores. <strong style={{ color: "var(--text)" }}>No hace falta una tabla intermedia para tener N:N.</strong>
         <br /><br />
-        Usa este wizard <strong>solo</strong> si necesitás guardar <strong>atributos del vínculo</strong>
-        (ej. en la conexión Operación↔Inversionista querés guardar el monto aportado por cada
+        Usa este wizard <strong style={{ color: "var(--text)" }}>solo</strong> si necesitás guardar <strong style={{ color: "var(--text)" }}>atributos del vínculo</strong>
+        {" "}(ej. en la conexión Operación↔Inversionista querés guardar el monto aportado por cada
         inversionista, la fecha, %). En ese caso la tabla intermedia es el lugar para esos campos.
       </p>
 
-      {/* Dataset A */}
+      {/* Dataset A / B */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <div>
-          <label style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: 0.5 }}>
-            Dataset A
-          </label>
+          <div style={labelSt}>Dataset A</div>
           {dsA ? (
-            <div style={{
-              marginTop: 4, padding: "8px 12px", border: "1.5px solid var(--color-primary)",
-              borderRadius: 6, background: "var(--color-primary-bg)",
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-            }}>
-              <span style={{ fontSize: 14, fontWeight: 600 }}>{dsA.name}</span>
-              <button onClick={() => { setDsAId(""); setDsAFilter(""); }}
-                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "var(--color-text-muted)", textDecoration: "underline" }}>
-                Cambiar
-              </button>
-            </div>
+            <SelectedDs name={dsA.name} onClear={() => { setDsAId(""); setDsAFilter(""); }} />
           ) : (
             <>
               <input
@@ -447,32 +469,17 @@ function CreateNNRelation({
                 placeholder="Buscar dataset…"
                 value={dsAFilter}
                 onChange={(e) => setDsAFilter(e.target.value)}
-                style={{
-                  width: "100%", fontSize: 12, padding: "5px 9px",
-                  border: "1px solid var(--color-border)", borderRadius: 6,
-                  marginTop: 4, marginBottom: 4,
-                }} />
+                style={{ ...inputSt, height: 34, fontSize: 12.5, marginBottom: 6 }}
+              />
               {filterAndShow(dsAFilter, dsBId, setDsAId)}
             </>
           )}
         </div>
 
         <div>
-          <label style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: 0.5 }}>
-            Dataset B
-          </label>
+          <div style={labelSt}>Dataset B</div>
           {dsB ? (
-            <div style={{
-              marginTop: 4, padding: "8px 12px", border: "1.5px solid var(--color-primary)",
-              borderRadius: 6, background: "var(--color-primary-bg)",
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-            }}>
-              <span style={{ fontSize: 14, fontWeight: 600 }}>{dsB.name}</span>
-              <button onClick={() => { setDsBId(""); setDsBFilter(""); }}
-                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "var(--color-text-muted)", textDecoration: "underline" }}>
-                Cambiar
-              </button>
-            </div>
+            <SelectedDs name={dsB.name} onClear={() => { setDsBId(""); setDsBFilter(""); }} />
           ) : (
             <>
               <input
@@ -480,11 +487,8 @@ function CreateNNRelation({
                 placeholder="Buscar dataset…"
                 value={dsBFilter}
                 onChange={(e) => setDsBFilter(e.target.value)}
-                style={{
-                  width: "100%", fontSize: 12, padding: "5px 9px",
-                  border: "1px solid var(--color-border)", borderRadius: 6,
-                  marginTop: 4, marginBottom: 4,
-                }} />
+                style={{ ...inputSt, height: 34, fontSize: 12.5, marginBottom: 6 }}
+              />
               {filterAndShow(dsBFilter, dsAId, setDsBId)}
             </>
           )}
@@ -493,50 +497,65 @@ function CreateNNRelation({
 
       {dsA && dsB && (
         <>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: 0.5 }}>
-              Nombre de la tabla intermedia
-            </label>
+          <label style={{ display: "block" }}>
+            <div style={labelSt}>Nombre de la tabla intermedia</div>
             <input
               type="text"
               placeholder={defaultName}
               value={bridgeName}
               onChange={(e) => setBridgeName(e.target.value)}
-              style={{
-                width: "100%", fontSize: 14, padding: "8px 12px",
-                border: "1px solid var(--color-border)", borderRadius: 6,
-                marginTop: 4,
-              }} />
-            <p style={{ margin: "4px 0 0", fontSize: 11, color: "var(--color-text-muted)" }}>
-              Por defecto: <code>{defaultName}</code>
+              style={inputSt}
+            />
+            <p style={{ margin: "6px 0 0", font: "400 11.5px var(--font-sans)", color: "var(--text-mute)" }}>
+              Por defecto: {code(defaultName)}
             </p>
-          </div>
+          </label>
 
           <div style={{
-            padding: "12px 14px", borderRadius: 8,
-            background: "var(--color-bg)", border: "1px dashed var(--color-border)",
-            fontSize: 12, color: "var(--color-text-secondary)",
+            padding: "14px 16px", borderRadius: "var(--r-3)",
+            background: "var(--rel-soft)", border: "1px dashed color-mix(in srgb, var(--accent-rel) 35%, transparent)",
+            font: "400 12.5px var(--font-sans)", color: "var(--text-soft)",
           }}>
-            <strong>Se creará:</strong>
-            <ul style={{ margin: "6px 0 0", paddingLeft: 20, lineHeight: 1.7 }}>
-              <li>Dataset <strong>{effectiveName}</strong> marcado como <em>tabla intermedia</em></li>
-              <li>Columna <code style={{ background: "var(--color-surface)", padding: "0 4px", borderRadius: 3 }}>{fkA}</code> tipo relation → {dsA.name}</li>
-              <li>Columna <code style={{ background: "var(--color-surface)", padding: "0 4px", borderRadius: 3 }}>{fkB}</code> tipo relation → {dsB.name}</li>
+            <strong style={{ color: "var(--text)" }}>Se creará:</strong>
+            <ul style={{ margin: "8px 0 0", paddingLeft: 20, lineHeight: 1.8 }}>
+              <li>Dataset <strong style={{ color: "var(--text)" }}>{effectiveName}</strong> marcado como <em>tabla intermedia</em></li>
+              <li>Columna {code(fkA)} tipo relation → {dsA.name}</li>
+              <li>Columna {code(fkB)} tipo relation → {dsB.name}</li>
             </ul>
-            <p style={{ margin: "8px 0 0", fontSize: 11, color: "var(--color-text-muted)" }}>
+            <p style={{ margin: "10px 0 0", font: "400 11.5px var(--font-sans)", color: "var(--text-mute)" }}>
               Luego podrás agregar columnas extras (cantidad, fecha, monto, %, etc.) editando la tabla intermedia.
             </p>
           </div>
 
-          <button
-            className="btn btn-primary"
+          <Btn
+            variant="primary"
+            tone="rel"
+            icon={<Plus size={15} />}
             disabled={creating || !effectiveName}
             onClick={handleCreate}
-            style={{ alignSelf: "flex-start", padding: "8px 18px", fontSize: 13 }}>
+            style={{ alignSelf: "flex-start" }}
+          >
             {creating ? "Creando…" : "Crear tabla intermedia"}
-          </button>
+          </Btn>
         </>
       )}
+    </div>
+  );
+}
+
+function SelectedDs({ name, onClear }: { name: string; onClear: () => void }) {
+  return (
+    <div style={{
+      padding: "9px 13px", border: "1.5px solid var(--accent-rel)", borderRadius: "var(--r-2)",
+      background: "var(--rel-soft)", display: "flex", justifyContent: "space-between", alignItems: "center",
+    }}>
+      <span style={{ font: "600 13.5px var(--font-sans)", color: "var(--text)" }}>{name}</span>
+      <button
+        onClick={onClear}
+        style={{ background: "none", border: "none", cursor: "pointer", font: "500 11.5px var(--font-sans)", color: "var(--accent-rel)", textDecoration: "underline" }}
+      >
+        Cambiar
+      </button>
     </div>
   );
 }
@@ -584,18 +603,18 @@ function BridgesList({
 
   if (bridges.length === 0) {
     return (
-      <div style={{ padding: 48, textAlign: "center", color: "var(--color-text-muted)" }}>
+      <EmptyState>
         No hay tablas intermedias todavía.
         <br />
         <span style={{ fontSize: 12 }}>Usa "Crear relación N:N" para conectar 2 datasets con una tabla puente.</span>
-      </div>
+      </EmptyState>
     );
   }
 
   return (
-    <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: 10 }}>
-      <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-secondary)" }}>
-        Las tablas intermedias están <strong>ocultas</strong> de la lista principal de datasets,
+    <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: 12 }}>
+      <p style={{ margin: 0, font: "400 12.5px var(--font-sans)", color: "var(--text-soft)", lineHeight: 1.6 }}>
+        Las tablas intermedias están <strong style={{ color: "var(--text)" }}>ocultas</strong> de la lista principal de datasets,
         pero podés abrirlas desde aquí para agregar registros, editar columnas o ver sus datos.
       </p>
 
@@ -605,60 +624,48 @@ function BridgesList({
         const connects = relCols.map((c) => datasetById.get(c.rules!.related_dataset_id!)?.name ?? "(?)").join(" ↔ ");
         const isWorking = working === b.id;
         return (
-          <div key={b.id} style={{
-            border: "1px solid var(--color-border)", borderRadius: 10, padding: "12px 14px",
-            background: "var(--color-surface)",
-            opacity: isWorking ? 0.6 : 1, transition: "opacity 0.15s",
-          }}>
+          <div
+            key={b.id}
+            className="og-card"
+            style={{
+              border: "1px solid var(--border)", borderRadius: "var(--r-3)", padding: "14px 16px",
+              background: "var(--surface)", boxShadow: "var(--shadow-1)",
+              opacity: isWorking ? 0.6 : 1, transition: "opacity var(--t-fast)",
+            }}
+          >
             <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
-                  <span style={{ display: "inline-flex", color: "var(--pm-violet-600)" }}><IcBridge size={16} /></span>
-                  <Link to={`/datasets/${b.id}`}
-                    style={{ fontSize: 15, fontWeight: 700, color: "var(--color-primary)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                  <span style={{ display: "inline-flex", color: "var(--violet)" }}><Network size={16} /></span>
+                  <Link to={`/datasets/${b.id}`} style={{ font: "700 15px var(--font-sans)", color: "var(--text)", textDecoration: "none" }}>
                     {b.name}
                   </Link>
-                  <span style={{
-                    fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 99,
-                    background: "#7C3AED20", color: "#7C3AED", textTransform: "uppercase", letterSpacing: 0.5,
-                  }}>intermedia</span>
+                  <Badge tone="violet">intermedia</Badge>
                 </div>
                 {connects && (
-                  <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 6 }}>
-                    Conecta: <strong>{connects}</strong>
+                  <div style={{ font: "400 12.5px var(--font-sans)", color: "var(--text-soft)", marginBottom: 6 }}>
+                    Conecta: <strong style={{ color: "var(--text)" }}>{connects}</strong>
                   </div>
                 )}
                 {b.description && (
-                  <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginBottom: 6 }}>
+                  <div style={{ font: "400 11.5px var(--font-sans)", color: "var(--text-mute)", marginBottom: 6 }}>
                     {b.description}
                   </div>
                 )}
-                <div style={{ fontSize: 11, color: "var(--color-text-muted)" }}>
+                <div style={{ font: "400 11.5px var(--font-sans)", color: "var(--text-mute)" }}>
                   {cols.length} columna{cols.length !== 1 ? "s" : ""} · {relCols.length} FKs
                 </div>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0 }}>
-                <Link to={`/datasets/${b.id}`}
-                  className="btn btn-primary"
-                  style={{ fontSize: 12, padding: "5px 12px", whiteSpace: "nowrap", textDecoration: "none" }}>
-                  Abrir tabla
+              <div style={{ display: "flex", flexDirection: "column", gap: 7, flexShrink: 0, alignItems: "stretch" }}>
+                <Link to={`/datasets/${b.id}`} style={{ textDecoration: "none" }}>
+                  <Btn variant="primary" size="sm" full icon={<ExternalLink size={13} />}>Abrir tabla</Btn>
                 </Link>
-                <button onClick={() => handleUnmark(b)} disabled={isWorking}
-                  style={{
-                    fontSize: 11, padding: "4px 10px", borderRadius: 6,
-                    border: "1px solid var(--color-border)", background: "var(--color-surface)",
-                    color: "var(--color-text-secondary)", cursor: isWorking ? "wait" : "pointer", whiteSpace: "nowrap",
-                  }}>
-                  ↑ Desmarcar
-                </button>
-                <button onClick={() => handleDelete(b)} disabled={isWorking}
-                  style={{
-                    fontSize: 11, padding: "4px 10px", borderRadius: 6,
-                    border: "1px solid #DC2626", background: "#fff",
-                    color: "#DC2626", cursor: isWorking ? "wait" : "pointer", whiteSpace: "nowrap",
-                  }}>
+                <Btn variant="soft" size="sm" disabled={isWorking} icon={<ArrowUpFromLine size={13} />} onClick={() => handleUnmark(b)}>
+                  Desmarcar
+                </Btn>
+                <Btn variant="danger" size="sm" disabled={isWorking} icon={<Trash2 size={13} />} onClick={() => handleDelete(b)}>
                   Eliminar
-                </button>
+                </Btn>
               </div>
             </div>
           </div>

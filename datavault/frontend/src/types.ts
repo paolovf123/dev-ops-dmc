@@ -21,6 +21,9 @@ export interface ColumnDefinition {
     | "url" | "email" | "phone" | "long_text" | "multiselect" | "rating" | "currency" | "percent";
   rules: {
     required?: boolean;
+    unique?: boolean;
+    regex?: string;
+    regex_message?: string;
     min?: number;
     max?: number;
     options?: string[];

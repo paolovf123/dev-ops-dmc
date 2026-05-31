@@ -14,7 +14,7 @@ import { buildExtraColumn } from "../components/datagridJoins";
 import { IcSearch, IcLink, IcTable, IcBridge, IcPalette } from "../components/ui/icons";
 import {
   Table2, Kanban, BarChart3, Trash2, Pencil, Search as IconSearch,
-  Filter, Columns3, Upload, Download, MoreHorizontal, Plus, Network,
+  Filter, Columns3, Upload, Download, MoreHorizontal, Plus, ChevronLeft, FunctionSquare,
 } from "lucide-react";
 import AddColumnModal from "../components/AddColumnModal";
 import ColumnPanel from "../components/ColumnPanel";
@@ -594,47 +594,51 @@ export default function DatasetView() {
       {/* ── Main ── */}
       <main className="page" style={{ overflowY: "auto", maxWidth: "none", width: "100%" }}>
         {currentDataset && (
-          <section className="dv-header" style={{ margin: "0 0 16px", padding: 0, background: "transparent", border: 0 }}>
-            <div className="dv-header__top">
+          <section style={{ margin: "0 0 16px" }}>
+            <button onClick={() => navigate("/")} style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "none", background: "transparent", cursor: "pointer", color: "var(--text-soft)", font: "500 13px/1 var(--font-sans)", padding: 0, marginBottom: 14 }}>
+              <ChevronLeft size={16} /> Volver a Datasets
+            </button>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
               <div>
-                <div className="dv-header__title-row">
-                  <h1>{currentDataset.name}</h1>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{
+                    display: "grid", placeItems: "center", width: 40, height: 40, borderRadius: "var(--r-2)", flex: "none",
+                    background: currentDataset.is_computed ? "var(--calc-soft)" : "var(--pri-soft)",
+                    color: currentDataset.is_computed ? "var(--accent-calc)" : "var(--accent-pri)",
+                  }}>
+                    {currentDataset.is_computed ? <FunctionSquare size={21} /> : <Table2 size={21} />}
+                  </span>
+                  <h1 style={{ margin: 0, font: "700 26px/1.1 var(--font-sans)", letterSpacing: "-.02em" }}>{currentDataset.name}</h1>
                   {effectiveIsAdmin && (
-                    <button className="dv-header__title-edit" title="Editar nombre y descripción" onClick={() => setEditingDataset(true)}>
-                      <Pencil size={13} />
+                    <button className="og-iconbtn" title="Editar nombre y descripción" onClick={() => setEditingDataset(true)}
+                      style={{ width: 30, height: 30, display: "grid", placeItems: "center", border: "none", background: "transparent", borderRadius: "var(--r-2)", cursor: "pointer", color: "var(--text-mute)" }}>
+                      <Pencil size={15} />
                     </button>
                   )}
-                  {wsConnected && <span className="dv-live">Live</span>}
+                  {wsConnected && (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: "var(--r-pill)", background: "var(--success-soft)", color: "var(--success)", font: "600 11.5px/1 var(--font-sans)" }}>
+                      <span className="og-live" style={{ width: 7, height: 7, borderRadius: 9, background: "var(--success)" }} /> Live
+                    </span>
+                  )}
                 </div>
-                <div className="dv-header__meta">
-                  <span><b>{visibleColumns.length}</b> columnas</span>
-                  <span className="dot" />
-                  <span><b>{filteredRecords.length}</b> filas</span>
-                  {formulaCols.length > 0 && <>
-                    <span className="dot" />
-                    <span><b>{formulaCols.length}</b> ƒ</span>
-                  </>}
-                  {joinedCols.length > 0 && <>
-                    <span className="dot" />
-                    <span><b>{joinedCols.length}</b> vínculos</span>
-                  </>}
+                <div style={{ font: "400 13.5px/1 var(--font-sans)", color: "var(--text-soft)", marginTop: 8, marginLeft: 52, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <span><b style={{ color: "var(--text)" }}>{visibleColumns.length}</b> columnas</span>
+                  <span style={{ color: "var(--text-mute)" }}>·</span>
+                  <span><b style={{ color: "var(--text)" }}>{filteredRecords.length}</b> filas</span>
+                  {formulaCols.length > 0 && <><span style={{ color: "var(--text-mute)" }}>·</span><span className="mono" style={{ color: "var(--accent-calc)" }}>ƒ{formulaCols.length}</span></>}
+                  {joinedCols.length > 0 && <><span style={{ color: "var(--text-mute)" }}>·</span><span style={{ color: "var(--accent-rel)" }}>⛓{joinedCols.length}</span></>}
                 </div>
               </div>
-              <div className="dv-header__right">
-                <button className="btn btn--secondary btn--sm" onClick={() => setShowSchema(true)}
-                  disabled={columns.length === 0} title="Ver diagrama de relaciones">
-                  <Network size={14} /> Diagrama
-                </button>
-              </div>
-            </div>
-            <div className="dv-header__tabs">
-              <div className="tabs">
+              {/* View tabs (segmentado) */}
+              <div style={{ display: "flex", gap: 2, background: "var(--surface-alt)", padding: 3, borderRadius: "var(--r-2)", border: "1px solid var(--border)" }}>
                 {VIEW_MODES.map((vm) => (
-                  <span key={vm.key}
-                    className={`tab${viewMode === vm.key ? " is-active" : ""}`}
-                    onClick={() => setViewMode(vm.key)}>
-                    {vm.icon} {vm.label}
-                  </span>
+                  <button key={vm.key} onClick={() => setViewMode(vm.key)} style={{
+                    display: "inline-flex", alignItems: "center", gap: 7, font: "600 13px/1 var(--font-sans)", padding: "7px 12px",
+                    borderRadius: 6, border: "none", cursor: "pointer",
+                    background: viewMode === vm.key ? "var(--surface)" : "transparent",
+                    color: viewMode === vm.key ? "var(--text)" : "var(--text-soft)",
+                    boxShadow: viewMode === vm.key ? "var(--shadow-1)" : "none",
+                  }}>{vm.icon} {vm.label}</button>
                 ))}
               </div>
             </div>

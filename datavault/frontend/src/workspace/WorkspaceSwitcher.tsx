@@ -1,39 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ChevronDown, Check, Plus, LayoutGrid } from "lucide-react";
 import { useWorkspace } from "./WorkspaceContext";
 import type { Workspace } from "./WorkspaceContext";
 import { useAuth } from "../auth/AuthContext";
 import api from "../api/client";
+import { Avatar, Badge, type Tone } from "../components/ui/kit";
 
-const WS_COLORS = [
-  ["#6366F1","#818CF8"], ["#8B5CF6","#A78BFA"], ["#EC4899","#F472B6"],
-  ["#F59E0B","#FCD34D"], ["#10B981","#34D399"], ["#0EA5E9","#38BDF8"],
-  ["#EF4444","#F87171"], ["#0EA5E9","#34D399"],
-];
-function wsColor(name: string) {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % WS_COLORS.length;
-  return WS_COLORS[h];
-}
-
-const ROLE_STYLE: Record<string, { bg: string; color: string }> = {
-  owner:    { bg: "#EDE9FE", color: "#7C3AED" },
-  admin_ws: { bg: "#E0F2FE", color: "#0284C7" },
-  member:   { bg: "#F0FDF4", color: "#15803D" },
-};
-
-function WsAvatar({ name, size = 22 }: { name: string; size?: number }) {
-  const [from, to] = wsColor(name);
-  return (
-    <div style={{
-      width: size, height: size, borderRadius: size * 0.3,
-      background: `linear-gradient(135deg, ${from}, ${to})`,
-      display: "flex", alignItems: "center", justifyContent: "center",
-      color: "#fff", fontWeight: 700, fontSize: size * 0.44, flexShrink: 0,
-    }}>
-      {name.slice(0, 1).toUpperCase()}
-    </div>
-  );
+function roleTone(role?: string | null): Tone {
+  return role === "owner" ? "violet" : role === "admin_ws" ? "primary" : "success";
 }
 
 export default function WorkspaceSwitcher() {
@@ -49,10 +24,7 @@ export default function WorkspaceSwitcher() {
 
   useEffect(() => {
     function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-        setCreating(false);
-      }
+      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setCreating(false); }
     }
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -61,11 +33,8 @@ export default function WorkspaceSwitcher() {
   const handleSelect = (ws: Workspace) => {
     setOpen(false);
     const role = ws.my_role;
-    if (isAdmin || role === "owner" || role === "admin_ws") {
-      navigate(`/ws/${ws.id}`);
-    } else {
-      setCurrent(ws);
-    }
+    if (isAdmin || role === "owner" || role === "admin_ws") navigate(`/ws/${ws.id}`);
+    else setCurrent(ws);
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -75,193 +44,104 @@ export default function WorkspaceSwitcher() {
     try {
       await api.post("/workspaces", { name: newName.trim(), description: newDesc.trim() || null });
       await reload();
-      setCreating(false);
-      setNewName("");
-      setNewDesc("");
-    } finally {
-      setSaving(false);
-    }
+      setCreating(false); setNewName(""); setNewDesc("");
+    } finally { setSaving(false); }
   };
 
-  const [_fromC] = current ? wsColor(current.name) : ["#0EA5E9"];
+  const menuItem: React.CSSProperties = {
+    display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
+    borderRadius: "var(--r-2)", cursor: "pointer", border: "none", background: "transparent",
+    width: "100%", textAlign: "left",
+  };
 
   return (
     <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
       {/* Trigger */}
       <button
+        className="og-wsbtn"
         onClick={() => setOpen((v) => !v)}
         style={{
-          display: "flex", alignItems: "center", gap: 8,
-          padding: "5px 10px 5px 7px",
-          background: open ? "var(--color-border-light)" : "transparent",
-          border: "1.5px solid " + (open ? "var(--color-border)" : "transparent"),
-          borderRadius: 8, cursor: "pointer", transition: "all 0.15s",
-          maxWidth: 220,
+          display: "flex", alignItems: "center", gap: 9, padding: "5px 9px 5px 6px",
+          borderRadius: "var(--r-2)", border: "1px solid var(--border)", background: "var(--surface)",
+          cursor: "pointer", color: "var(--text)", boxShadow: "var(--shadow-1)", maxWidth: 240,
         }}
-        onMouseEnter={(e) => { if (!open) { (e.currentTarget as HTMLElement).style.background = "var(--color-border-light)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)"; } }}
-        onMouseLeave={(e) => { if (!open) { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.borderColor = "transparent"; } }}
       >
         {current ? (
-          <WsAvatar name={current.name} size={22} />
+          <Avatar name={current.name} size={26} square />
         ) : (
-          <div style={{
-            width: 22, height: 22, borderRadius: 6,
-            background: "linear-gradient(135deg, #0EA5E9, #0284C7)",
-            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-          }}>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-              <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-              <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
-            </svg>
-          </div>
+          <span style={{
+            width: 26, height: 26, borderRadius: 8, display: "grid", placeItems: "center", flex: "none",
+            background: "linear-gradient(135deg, var(--accent-pri), var(--accent-calc))", color: "#fff",
+          }}><LayoutGrid size={14} /></span>
         )}
-        <span style={{
-          fontSize: 13, fontWeight: 600, color: "var(--color-text)",
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 140,
-        }}>
+        <span style={{ font: "600 14px/1 var(--font-sans)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 140 }}>
           {current ? current.name : isAdmin ? "Todos" : "Sin workspace"}
         </span>
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2.5"
-          style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
-          <polyline points="6 9 12 15 18 9"/>
-        </svg>
+        {current?.my_role && <Badge tone={roleTone(current.my_role)}>{current.my_role}</Badge>}
+        <ChevronDown size={15} style={{ color: "var(--text-mute)", flex: "none", transform: open ? "rotate(180deg)" : "none", transition: "transform var(--t-mid)" }} />
       </button>
 
       {/* Dropdown */}
       {open && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 8px)", left: 0, minWidth: 260,
-          background: "var(--color-surface)", border: "1.5px solid var(--color-border)",
-          borderRadius: 12, zIndex: 1000, boxShadow: "0 12px 36px rgba(0,0,0,0.14)",
-          overflow: "hidden",
+        <div className="og-pop" style={{
+          position: "absolute", top: "calc(100% + 8px)", left: 0, minWidth: 270, zIndex: 1000,
+          background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-3)",
+          boxShadow: "var(--shadow-3)", padding: 6,
         }}>
-          {/* Header */}
-          <div style={{ padding: "10px 14px 8px", borderBottom: "1px solid var(--color-border-light)" }}>
-            <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "var(--color-text-muted)", letterSpacing: 0.6, textTransform: "uppercase" }}>
-              Workspaces
-            </p>
+          {isAdmin && (
+            <button className="og-menu-item" onClick={() => { setCurrent(null); setOpen(false); navigate("/"); }}
+              style={{ ...menuItem, color: !current ? "var(--accent-pri)" : "var(--text)", background: !current ? "var(--pri-soft)" : undefined }}>
+              <span style={{ width: 28, height: 28, borderRadius: 8, display: "grid", placeItems: "center", flex: "none", background: !current ? "var(--accent-pri)" : "var(--surface-alt)", color: !current ? "#fff" : "var(--text-soft)" }}>
+                <LayoutGrid size={15} />
+              </span>
+              <span style={{ flex: 1, font: "600 13.5px/1 var(--font-sans)" }}>Dashboard general</span>
+              {!current && <Check size={16} style={{ color: "var(--accent-pri)" }} />}
+            </button>
+          )}
+
+          <div style={{ padding: "7px 10px 6px", font: "600 11px/1 var(--font-sans)", letterSpacing: ".06em", color: "var(--text-mute)", textTransform: "uppercase" }}>
+            Workspaces
           </div>
-
           <div style={{ maxHeight: 280, overflowY: "auto" }}>
-            {/* Ver todos (admin) */}
-            {isAdmin && (
-              <button
-                onClick={() => { setCurrent(null); setOpen(false); navigate("/"); }}
-                style={{
-                  width: "100%", padding: "9px 14px", background: !current ? "var(--color-primary-bg, #E0F2FE)" : "transparent",
-                  border: "none", cursor: "pointer", textAlign: "left",
-                  display: "flex", alignItems: "center", gap: 10, transition: "background 0.1s",
-                }}
-                onMouseEnter={(e) => { if (current) (e.currentTarget as HTMLElement).style.background = "var(--color-border-light)"; }}
-                onMouseLeave={(e) => { if (current) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-              >
-                <div style={{
-                  width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-                  background: !current ? "var(--color-primary, #0EA5E9)" : "var(--color-border)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-                    <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-                    <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
-                  </svg>
-                </div>
-                <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: !current ? "var(--color-primary, #0EA5E9)" : "var(--color-text)" }}>
-                  Dashboard general
-                </span>
-                {!current && (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary, #0EA5E9)" strokeWidth="2.5">
-                    <polyline points="20 6 9 17 4 12"/>
-                  </svg>
-                )}
-              </button>
-            )}
-
-            {/* Workspaces list */}
             {workspaces.map((ws) => {
-              const role = ws.my_role;
-              const rs = (role ? ROLE_STYLE[role] : null) ?? { bg: "#F1F5F9", color: "#64748B" };
               const isActive = current?.id === ws.id;
               return (
-                <button
-                  key={ws.id}
-                  onClick={() => handleSelect(ws)}
-                  style={{
-                    width: "100%", padding: "9px 14px",
-                    background: isActive ? "var(--color-primary-bg, #E0F2FE)" : "transparent",
-                    border: "none", cursor: "pointer", textAlign: "left",
-                    display: "flex", alignItems: "center", gap: 10, transition: "background 0.1s",
-                  }}
-                  onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.background = "var(--color-border-light)"; }}
-                  onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-                >
-                  <WsAvatar name={ws.name} size={22} />
-                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "var(--color-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {ws.name}
-                  </span>
-                  {isActive && (
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary, #0EA5E9)" strokeWidth="2.5">
-                      <polyline points="20 6 9 17 4 12"/>
-                    </svg>
-                  )}
-                  {role && (
-                    <span style={{
-                      fontSize: 10, padding: "1px 7px", borderRadius: 99, fontWeight: 700,
-                      background: rs.bg, color: rs.color, flexShrink: 0,
-                    }}>{role}</span>
-                  )}
+                <button key={ws.id} className="og-menu-item" onClick={() => handleSelect(ws)}
+                  style={{ ...menuItem, background: isActive ? "var(--pri-soft)" : undefined }}>
+                  <Avatar name={ws.name} size={28} square />
+                  <span style={{ flex: 1, font: "600 13.5px/1 var(--font-sans)", color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ws.name}</span>
+                  {ws.my_role && <Badge tone={roleTone(ws.my_role)}>{ws.my_role}</Badge>}
+                  {isActive && <Check size={16} style={{ color: "var(--accent-pri)", flex: "none" }} />}
                 </button>
               );
             })}
           </div>
 
-          {/* Footer: crear */}
           {isAdmin && (
-            <div style={{ borderTop: "1px solid var(--color-border-light)", padding: 10 }}>
+            <>
+              <div style={{ height: 1, background: "var(--border)", margin: "6px 0" }} />
               {!creating ? (
-                <button
-                  onClick={() => setCreating(true)}
-                  style={{
-                    width: "100%", padding: "7px 12px", display: "flex", alignItems: "center", gap: 7,
-                    background: "transparent", border: "1.5px dashed var(--color-border)",
-                    borderRadius: 8, cursor: "pointer", color: "var(--color-primary, #0EA5E9)",
-                    fontSize: 13, fontWeight: 600, transition: "all 0.15s",
-                  }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--color-primary-bg, #E0F2FE)"; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-                >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path d="M12 5v14M5 12h14"/>
-                  </svg>
-                  Nuevo workspace
+                <button className="og-menu-item" onClick={() => setCreating(true)}
+                  style={{ ...menuItem, color: "var(--accent-pri)", font: "600 13.5px/1 var(--font-sans)" }}>
+                  <Plus size={16} /> Nuevo workspace
                 </button>
               ) : (
-                <form onSubmit={handleCreate} style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                  <input
-                    autoFocus value={newName} onChange={(e) => setNewName(e.target.value)}
-                    placeholder="Nombre del equipo *"
-                    style={{ padding: "7px 10px", borderRadius: 7, border: "1.5px solid var(--color-border)", background: "var(--color-bg)", color: "var(--color-text)", fontSize: 13 }}
-                  />
-                  <input
-                    value={newDesc} onChange={(e) => setNewDesc(e.target.value)}
-                    placeholder="Descripción (opcional)"
-                    style={{ padding: "7px 10px", borderRadius: 7, border: "1.5px solid var(--color-border)", background: "var(--color-bg)", color: "var(--color-text)", fontSize: 13 }}
-                  />
+                <form onSubmit={handleCreate} style={{ display: "flex", flexDirection: "column", gap: 7, padding: 4 }}>
+                  <input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Nombre del equipo *"
+                    style={{ padding: "7px 10px", borderRadius: "var(--r-2)", border: "1px solid var(--border)", background: "var(--surface-2)", color: "var(--text)", font: "400 13px/1 var(--font-sans)", outline: "none" }} />
+                  <input value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="Descripción (opcional)"
+                    style={{ padding: "7px 10px", borderRadius: "var(--r-2)", border: "1px solid var(--border)", background: "var(--surface-2)", color: "var(--text)", font: "400 13px/1 var(--font-sans)", outline: "none" }} />
                   <div style={{ display: "flex", gap: 6 }}>
                     <button type="submit" disabled={saving || !newName.trim()}
-                      style={{
-                        flex: 1, padding: "7px", background: "var(--color-primary, #0EA5E9)",
-                        border: "none", borderRadius: 7, color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600,
-                      }}>
+                      style={{ flex: 1, padding: "7px", background: "var(--accent-pri)", border: "none", borderRadius: "var(--r-2)", color: "#fff", cursor: "pointer", font: "600 13px/1 var(--font-sans)" }}>
                       {saving ? "Creando…" : "Crear"}
                     </button>
                     <button type="button" onClick={() => setCreating(false)}
-                      style={{ padding: "7px 12px", background: "transparent", border: "1.5px solid var(--color-border)", borderRadius: 7, color: "var(--color-text-muted)", cursor: "pointer", fontSize: 13 }}>
-                      ✕
-                    </button>
+                      style={{ padding: "7px 12px", background: "transparent", border: "1px solid var(--border)", borderRadius: "var(--r-2)", color: "var(--text-mute)", cursor: "pointer", font: "500 13px/1 var(--font-sans)" }}>✕</button>
                   </div>
                 </form>
               )}
-            </div>
+            </>
           )}
         </div>
       )}

@@ -1,14 +1,16 @@
 import { useState, useRef } from "react";
+import type { CSSProperties } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowLeft, Plus, Circle, Link2, Hash, CircleDollarSign, Percent,
-  Calendar, ChevronDown, FileText, Type, ToggleLeft, Mail, Phone, Link, Star, Check,
+  ChevronLeft, Plus, Table2, Link2, Hash, CircleDollarSign, Percent,
+  Calendar, ChevronDown, ChevronRight, FileText, Type, ToggleLeft, Mail, Phone, Link, Star, Check,
 } from "lucide-react";
 import { getDatasets, getColumns, getRecords, createRecord, deleteRecord } from "../api/datasets";
 import type { ColumnDefinition, Record as DRecord } from "../types";
 import { useWorkspace } from "../workspace/WorkspaceContext";
 import AppShell from "../components/chrome/AppShell";
+import { Badge, Btn } from "../components/ui/kit";
 
 // ─── Type metadata (icon + label for the field "ty" badge) ─────────────────────
 const TYPE_META: Record<
@@ -29,6 +31,24 @@ const TYPE_META: Record<
   phone:       { Icon: Phone,            label: "teléfono" },
   url:         { Icon: Link,             label: "enlace" },
   relation:    { Icon: Link2,            label: "relación" },
+};
+
+// ─── Shared inline styles (token-driven, fiel al prototipo) ────────────────────
+const inputStyle: CSSProperties = {
+  width: "100%", height: 38, padding: "0 11px", boxSizing: "border-box",
+  borderRadius: "var(--r-2)", border: "1px solid var(--border)", background: "var(--surface)",
+  font: "400 13.5px/1 var(--font-sans)", color: "var(--text)", outline: "none",
+  transition: "border-color var(--t-fast), box-shadow var(--t-fast)",
+};
+const textareaStyle: CSSProperties = {
+  ...inputStyle, height: "auto", minHeight: 72, padding: "9px 11px",
+  resize: "vertical", lineHeight: 1.45,
+};
+const labelStyle: CSSProperties = {
+  display: "block", font: "500 12.5px/1 var(--font-sans)", color: "var(--text-soft)", marginBottom: 6,
+};
+const errorRing: CSSProperties = {
+  borderColor: "var(--danger)", boxShadow: "0 0 0 3px var(--danger-soft)",
 };
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -339,9 +359,7 @@ export default function RecordForm() {
     // If true, this is inside a child/grandchild form (no "create new" toggle)
     nested = false
   ) => {
-    const baseStyle: React.CSSProperties = hasError
-      ? { borderColor: "var(--pm-red-500)", boxShadow: "0 0 0 3px rgba(229,62,62,.1)" }
-      : {};
+    const baseStyle: CSSProperties = { ...inputStyle, ...(hasError ? errorRing : {}) };
 
     if (col.data_type !== "relation") return null; // handled by inputFor below
 
@@ -349,58 +367,68 @@ export default function RecordForm() {
     const relCols    = relColsMap[col.rules.related_dataset_id!] ?? [];
     const df         = col.rules.display_field;
     const inCreateMode = !nested && !!relCreateMode[col.field_key];
+    const relName = datasets.find((d) => d.id === col.rules.related_dataset_id)?.name ?? "tabla";
 
     return (
       <div>
-        {/* Toggle button */}
-        {!nested && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-            <button
-              type="button"
-              onClick={() => toggleRelCreate(col.field_key)}
-              style={{
-                fontSize: 11, padding: "2px 8px", borderRadius: 99, cursor: "pointer",
-                background: inCreateMode ? "#DB277718" : "var(--color-bg-secondary)",
-                border: `1px solid ${inCreateMode ? "#DB2777" : "var(--color-border)"}`,
-                color: inCreateMode ? "#DB2777" : "var(--color-text-muted)",
-                fontWeight: 600,
-              }}
-            >
-              {inCreateMode ? "← Seleccionar existente" : "+ Crear nuevo"}
-            </button>
-          </div>
-        )}
-
         {/* Dropdown mode */}
         {!inCreateMode && (
-          <select className="input" value={value} onChange={(e) => onChange(e.target.value)} style={baseStyle}>
-            <option value="">— Seleccionar —</option>
-            {relRecords.map((r) => (
-              <option key={r.id} value={r.id}>
-                {df && r.data[df] ? String(r.data[df]) : r.id}
-              </option>
-            ))}
-          </select>
+          <div style={{ display: "flex", gap: 9, alignItems: "center" }}>
+            <select
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              style={{ ...baseStyle, flex: 1, cursor: "pointer", appearance: "auto" }}
+            >
+              <option value="">— Seleccionar —</option>
+              {relRecords.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {df && r.data[df] ? String(r.data[df]) : r.id}
+                </option>
+              ))}
+            </select>
+            {!nested && (
+              <Btn
+                variant="tint" tone="rel" size="md"
+                icon={<Plus size={15} />}
+                onClick={() => toggleRelCreate(col.field_key)}
+                style={{ flex: "none" }}
+              >
+                Crear nuevo
+              </Btn>
+            )}
+          </div>
         )}
 
         {/* Inline create mode */}
         {inCreateMode && (
           <div style={{
-            padding: "12px 14px", borderRadius: 8, marginTop: 2,
-            border: "1.5px dashed #DB2777",
-            background: "#DB277708",
+            padding: "13px 14px", borderRadius: "var(--r-2)", marginTop: 2,
+            border: "1.5px dashed var(--accent-rel)", background: "var(--rel-soft)",
           }}>
-            <p style={{ margin: "0 0 10px", fontSize: 11.5, color: "#DB2777", fontWeight: 600 }}>
-              Nuevo registro en {datasets.find((d) => d.id === col.rules.related_dataset_id)?.name}
-            </p>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "0 16px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 11 }}>
+              <span style={{ font: "600 12px/1 var(--font-sans)", color: "var(--accent-rel)" }}>
+                Nuevo registro en {relName}
+              </span>
+              <button
+                type="button"
+                onClick={() => toggleRelCreate(col.field_key)}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 5, border: "none",
+                  background: "transparent", cursor: "pointer", color: "var(--text-soft)",
+                  font: "600 11.5px/1 var(--font-sans)", padding: 0,
+                }}
+              >
+                <ChevronLeft size={13} /> Seleccionar existente
+              </button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "12px 16px" }}>
               {relCols.map((rc) => (
-                <div key={rc.id} className="form-group" style={{ marginBottom: 10 }}>
-                  <label className="form-label" style={{ fontSize: 11 }}>
+                <div key={rc.id}>
+                  <label style={{ ...labelStyle, fontSize: 11.5 }}>
                     {rc.name}
-                    {rc.rules.required && <span style={{ color: "var(--pm-red-500)", marginLeft: 2 }}>*</span>}
+                    {rc.rules.required && <span style={{ color: "var(--danger)", marginLeft: 2 }}>*</span>}
                     {rc.data_type === "number" && (rc.rules.min !== undefined || rc.rules.max !== undefined) && (
-                      <span style={{ fontWeight: 400, color: "var(--color-text-muted)", marginLeft: 4 }}>
+                      <span style={{ fontWeight: 400, color: "var(--text-mute)", marginLeft: 4 }}>
                         ({rc.rules.min ?? ""}–{rc.rules.max ?? ""})
                       </span>
                     )}
@@ -416,13 +444,16 @@ export default function RecordForm() {
               ))}
             </div>
             {relCreateErrors[col.field_key]?.length > 0 && (
-              <div style={{ marginTop: 8, padding: "6px 10px", borderRadius: 6, background: "var(--pm-red-50, #fef2f2)", border: "1px solid var(--pm-red-200, #fecaca)" }}>
+              <div style={{
+                marginTop: 10, padding: "7px 11px", borderRadius: "var(--r-2)",
+                background: "var(--danger-soft)", border: "1px solid color-mix(in srgb, var(--danger) 30%, transparent)",
+              }}>
                 {relCreateErrors[col.field_key].map((e, i) => (
-                  <p key={i} style={{ margin: 0, fontSize: 12, color: "var(--pm-red-500)" }}>{e}</p>
+                  <p key={i} style={{ margin: 0, font: "500 12px/1.5 var(--font-sans)", color: "var(--danger)" }}>{e}</p>
                 ))}
               </div>
             )}
-            <p style={{ margin: "6px 0 0", fontSize: 11, color: "var(--color-text-muted)" }}>
+            <p style={{ margin: "9px 0 0", font: "400 11.5px/1.5 var(--font-sans)", color: "var(--text-mute)" }}>
               Este registro se creará automáticamente al guardar, y su ID quedará vinculado aquí.
             </p>
           </div>
@@ -439,16 +470,14 @@ export default function RecordForm() {
     hasError: boolean,
     nested = false
   ): React.ReactNode => {
-    const baseStyle: React.CSSProperties = hasError
-      ? { borderColor: "var(--pm-red-500)", boxShadow: "0 0 0 3px rgba(229,62,62,.1)" }
-      : {};
+    const baseStyle: CSSProperties = { ...inputStyle, ...(hasError ? errorRing : {}) };
 
     if (col.data_type === "relation") {
       return renderRelationField(col, value, onChange, hasError, nested);
     }
     if (col.data_type === "enum") {
       return (
-        <select className="input" value={value} onChange={(e) => onChange(e.target.value)} style={baseStyle}>
+        <select value={value} onChange={(e) => onChange(e.target.value)} style={{ ...baseStyle, cursor: "pointer", appearance: "auto" }}>
           <option value="">— Seleccionar —</option>
           {(col.rules.options ?? []).map((o) => (
             <option key={o} value={o}>{o}</option>
@@ -458,7 +487,7 @@ export default function RecordForm() {
     }
     if (col.data_type === "boolean") {
       return (
-        <select className="input" value={value} onChange={(e) => onChange(e.target.value)} style={baseStyle}>
+        <select value={value} onChange={(e) => onChange(e.target.value)} style={{ ...baseStyle, cursor: "pointer", appearance: "auto" }}>
           <option value="">— Seleccionar —</option>
           <option value="true">Sí</option>
           <option value="false">No</option>
@@ -468,19 +497,17 @@ export default function RecordForm() {
     if (col.data_type === "long_text") {
       return (
         <textarea
-          className="input"
           rows={3}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={col.rules.required ? "Requerido" : "Opcional"}
-          style={baseStyle}
+          style={{ ...textareaStyle, ...(hasError ? errorRing : {}) }}
         />
       );
     }
     const type = col.data_type === "number" ? "number" : col.data_type === "date" ? "date" : "text";
     return (
       <input
-        className="input"
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -496,33 +523,35 @@ export default function RecordForm() {
   const inputFor = (col: ColumnDefinition) =>
     renderInputByType(col, formData[col.field_key] ?? "", (v) => setValue(col.field_key, v), !!errors[col.field_key]);
 
-  // Renders one column as a `.form-field` row (label column + control column),
-  // reusing inputFor() for the actual control markup.
+  // Renders one column as a field (label + control), reusing inputFor() for the control.
   const renderField = (col: ColumnDefinition) => {
     const meta = TYPE_META[col.data_type];
     const TyIcon = meta.Icon;
     return (
-      <div key={col.id} className="form-field">
-        <div className="form-field__lbl">
-          <span className="name">
+      <div key={col.id} style={{ marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+          <span style={{ font: "500 12.5px/1 var(--font-sans)", color: "var(--text-soft)" }}>
             {col.name}
-            {col.rules.required && <span className="req"> *</span>}
+            {col.rules.required && <span style={{ color: "var(--danger)" }}> *</span>}
           </span>
-          <span className="ty"><TyIcon /> {meta.label}</span>
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: 4,
+            font: "500 11px/1 var(--font-sans)", color: "var(--text-mute)",
+          }}>
+            <TyIcon size={12} /> {meta.label}
+          </span>
           {col.data_type === "number" && (col.rules.min !== undefined || col.rules.max !== undefined) && (
-            <span className="help">
+            <span style={{ font: "400 11px/1 var(--font-sans)", color: "var(--text-mute)" }}>
               Rango: {col.rules.min ?? "—"} a {col.rules.max ?? "—"}
             </span>
           )}
         </div>
-        <div className="form-field__ctrl">
-          {inputFor(col)}
-          {errors[col.field_key] && (
-            <span style={{ fontSize: 12, color: "var(--accent-rel)", marginTop: 4, display: "block" }}>
-              {errors[col.field_key]}
-            </span>
-          )}
-        </div>
+        {inputFor(col)}
+        {errors[col.field_key] && (
+          <span style={{ display: "block", font: "500 12px/1 var(--font-sans)", color: "var(--danger)", marginTop: 5 }}>
+            {errors[col.field_key]}
+          </span>
+        )}
       </div>
     );
   };
@@ -532,13 +561,16 @@ export default function RecordForm() {
     data: Record<string, string>,
     onSet: (key: string, val: string) => void
   ) => (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "0 24px" }}>
+    <div style={{
+      display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: "13px 16px",
+      padding: 14, borderRadius: "var(--r-2)", background: "var(--surface-alt)",
+    }}>
       {cols.map((col) => (
-        <div key={col.id} className="form-group">
-          <label className="form-label">
+        <div key={col.id}>
+          <label style={labelStyle}>
             {col.name}
-            {col.rules.required && <span style={{ color: "var(--pm-red-500)", marginLeft: 2 }}>*</span>}
-            <span style={{ fontWeight: 400, color: "var(--color-text-muted)", marginLeft: 6, textTransform: "none", letterSpacing: 0 }}>
+            {col.rules.required && <span style={{ color: "var(--danger)", marginLeft: 2 }}>*</span>}
+            <span style={{ fontWeight: 400, color: "var(--text-mute)", marginLeft: 6 }}>
               {col.data_type}
             </span>
           </label>
@@ -548,165 +580,206 @@ export default function RecordForm() {
     </div>
   );
 
+  const dsName = dataset?.name ?? "Dataset";
+
   // ── Loading ──────────────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <AppShell>
+      <AppShell active="home">
         <main className="form-main">
-          <div className="form-shell" style={{ padding: 40, color: "var(--text-mute)", textAlign: "center" }}>
-            Cargando campos…
+          <div style={{ maxWidth: 820, margin: "0 auto", padding: "28px 32px 110px" }}>
+            <div style={{
+              padding: 40, textAlign: "center", borderRadius: "var(--r-3)",
+              border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "var(--shadow-1)",
+              font: "400 14px/1 var(--font-sans)", color: "var(--text-mute)",
+            }}>
+              Cargando campos…
+            </div>
           </div>
         </main>
       </AppShell>
     );
   }
 
-  const nativeCols   = columns.filter((c) => c.data_type !== "relation");
+  const nativeCols     = columns.filter((c) => c.data_type !== "relation");
   const relationFields = columns.filter((c) => c.data_type === "relation");
-  const dsName = dataset?.name ?? "Dataset";
+
+  // ── Section card wrapper (fiel al prototipo "Sec") ─────────────────────────
+  const SectionCard = ({
+    Icon, color, title, count, children,
+  }: {
+    Icon: typeof Hash; color: string; title: string; count: string; children: React.ReactNode;
+  }) => (
+    <section style={{
+      background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-3)",
+      padding: 18, boxShadow: "var(--shadow-1)", marginBottom: 16,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+        <Icon size={17} color={color} />
+        <span style={{ font: "600 14px/1 var(--font-sans)", color: "var(--text)" }}>{title}</span>
+        <span style={{ font: "400 12px/1 var(--font-sans)", color: "var(--text-mute)" }}>· {count}</span>
+      </div>
+      {children}
+    </section>
+  );
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <AppShell>
+    <AppShell active="home">
       <main className="form-main">
-        <div className="form-shell">
+        <div style={{ maxWidth: 820, margin: "0 auto", padding: "28px 32px 110px" }}>
 
-          <a
-            href={`/datasets/${datasetId}`}
-            className="form-back"
-            onClick={(e) => { e.preventDefault(); navigate(`/datasets/${datasetId}`); }}
+          <button
+            onClick={() => navigate(`/datasets/${datasetId}`)}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6, border: "none",
+              background: "transparent", cursor: "pointer", color: "var(--text-soft)",
+              font: "500 13px/1 var(--font-sans)", padding: 0, marginBottom: 14,
+            }}
           >
-            <ArrowLeft /> Volver a {dsName}
-          </a>
+            <ChevronLeft size={16} /> Volver a {dsName}
+          </button>
 
-          <div className="form-head">
-            <div>
-              <h1>Nuevo registro · {dsName}</h1>
-              <p className="form-head__sub">
-                Crea una fila nueva en <b>{dsName}</b>. Los campos marcados con <span className="req">*</span> son obligatorios.
-              </p>
-            </div>
-            <span className="form-head__pill"><Plus /> Nuevo</span>
-          </div>
+          <h1 style={{ margin: "0 0 22px", font: "700 24px/1.1 var(--font-sans)", letterSpacing: "-.02em", color: "var(--text)" }}>
+            Nuevo registro · {dsName}
+          </h1>
 
           {/* ── Campos nativos ─────────────────────────────────────────── */}
           {nativeCols.length > 0 && (
-            <section className="form-section">
-              <div className="form-section__head">
-                <span className="form-section__label is-native">
-                  <Circle /> {dsName} · {nativeCols.length} {nativeCols.length === 1 ? "campo" : "campos"}
-                </span>
-                <span className="form-section__count">propios de esta tabla</span>
-              </div>
+            <SectionCard
+              Icon={Table2} color="var(--accent-pri)" title={dsName}
+              count={`${nativeCols.length} ${nativeCols.length === 1 ? "campo" : "campos"} · propios de esta tabla`}
+            >
               {nativeCols.map(renderField)}
-            </section>
+            </SectionCard>
           )}
 
           {/* ── Relaciones ─────────────────────────────────────────────── */}
           {relationFields.length > 0 && (
-            <section className="form-section">
-              <div className="form-section__head">
-                <span className="form-section__label is-rel">
-                  <Link2 /> Relaciones · {relationFields.length} {relationFields.length === 1 ? "campo" : "campos"}
-                </span>
-                <span className="form-section__count">apuntan a otras tablas</span>
-              </div>
+            <SectionCard
+              Icon={Link2} color="var(--accent-rel)" title="Relaciones"
+              count={`${relationFields.length} ${relationFields.length === 1 ? "campo" : "campos"} · apuntan a otras tablas`}
+            >
               {relationFields.map(renderField)}
-            </section>
+            </SectionCard>
           )}
 
           {saveError && (
-            <p style={{ marginTop: 16, color: "var(--accent-rel)", fontSize: 13, textAlign: "right" }}>
+            <p style={{
+              margin: "0 0 16px", padding: "9px 13px", borderRadius: "var(--r-2)",
+              background: "var(--danger-soft)", border: "1px solid color-mix(in srgb, var(--danger) 30%, transparent)",
+              font: "500 13px/1.5 var(--font-sans)", color: "var(--danger)",
+            }}>
               {saveError}
             </p>
           )}
 
-        {/* ── Child dataset sections ───────────────────────────────────── */}
-        {childDatasets.length > 0 && (
-          <div style={{ marginTop: 20 }}>
-            <p style={{ fontSize: 12, color: "var(--color-text-muted)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>
-              Tablas relacionadas (opcional)
-            </p>
-            <p style={{ fontSize: 12, color: "var(--color-text-muted)", marginBottom: 16 }}>
-              Puedes crear registros vinculados en estos datasets al mismo tiempo. La FK se asigna automáticamente.
-            </p>
+          {/* ── Child dataset sections ───────────────────────────────────── */}
+          {childDatasets.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ font: "400 13px/1.4 var(--font-sans)", color: "var(--text-soft)", margin: "4px 4px 12px" }}>
+                Puedes crear registros vinculados en estas tablas al mismo tiempo (la FK se asigna sola):
+              </div>
 
-            {childDatasets.map((child) => {
-              const isOpen = !!childOpen[child.datasetId];
-              return (
-                <div key={child.datasetId} className="card" style={{ marginBottom: 12, overflow: "hidden" }}>
-                  <button type="button"
-                    onClick={() => setChildOpen((prev) => ({ ...prev, [child.datasetId]: !isOpen }))}
-                    style={{ width: "100%", display: "flex", alignItems: "center", gap: 10,
-                      padding: "14px 20px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
-                    <span style={{ fontSize: 13, transform: isOpen ? "rotate(90deg)" : "none",
-                      transition: "transform 0.15s", color: "var(--color-text-muted)", display: "inline-block", lineHeight: 1 }}>▶</span>
-                    <span style={{ fontWeight: 600, fontSize: 14 }}>{child.datasetName}</span>
-                    <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 10,
-                      background: isOpen ? "var(--pm-violet-50)" : "var(--color-bg-secondary)",
-                      color: isOpen ? "var(--pm-violet-600)" : "var(--color-text-muted)", marginLeft: "auto" }}>
-                      {isOpen ? "Se creará" : "Omitir"}
-                    </span>
-                  </button>
+              {childDatasets.map((child) => {
+                const isOpen = !!childOpen[child.datasetId];
+                return (
+                  <div key={child.datasetId} style={{
+                    background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-3)",
+                    boxShadow: "var(--shadow-1)", overflow: "hidden", marginBottom: 12,
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => setChildOpen((prev) => ({ ...prev, [child.datasetId]: !isOpen }))}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 10, width: "100%",
+                        padding: "14px 18px", border: "none", background: "transparent", cursor: "pointer", textAlign: "left",
+                      }}
+                    >
+                      {isOpen
+                        ? <ChevronDown size={16} color="var(--text-mute)" />
+                        : <ChevronRight size={16} color="var(--text-mute)" />}
+                      <Link2 size={16} color="var(--accent-rel)" />
+                      <span style={{ font: "600 14px/1 var(--font-sans)", color: "var(--text)" }}>{child.datasetName}</span>
+                      <div style={{ flex: 1 }} />
+                      {isOpen
+                        ? <Badge tone="success">Se creará</Badge>
+                        : <Badge tone="neutral">Omitir</Badge>}
+                    </button>
 
-                  {isOpen && (
-                    <div style={{ padding: "0 20px 20px" }}>
-                      {renderChildForm(child.columns, childData[child.datasetId] ?? {}, (key, val) => setChildValue(child.datasetId, key, val))}
+                    {isOpen && (
+                      <div style={{ padding: "0 18px 18px" }}>
+                        {renderChildForm(child.columns, childData[child.datasetId] ?? {}, (key, val) => setChildValue(child.datasetId, key, val))}
 
-                      {child.grandchildren.length > 0 && (
-                        <div style={{ marginTop: 16 }}>
-                          <p style={{ fontSize: 11.5, color: "var(--color-text-muted)", marginBottom: 10,
-                            textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>
-                            Sub-tablas de {child.datasetName}
-                          </p>
-                          {child.grandchildren.map((gc) => {
-                            const gcIsOpen = !!gcOpen[gc.datasetId];
-                            return (
-                              <div key={gc.datasetId} style={{ border: "1px solid var(--color-border-light)", borderRadius: 8, marginBottom: 8, overflow: "hidden" }}>
-                                <button type="button"
-                                  onClick={() => setGcOpen((prev) => ({ ...prev, [gc.datasetId]: !gcIsOpen }))}
-                                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 8,
-                                    padding: "10px 16px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
-                                  <span style={{ fontSize: 11, transform: gcIsOpen ? "rotate(90deg)" : "none",
-                                    transition: "transform 0.15s", color: "var(--color-text-muted)", display: "inline-block", lineHeight: 1 }}>▶</span>
-                                  <span style={{ fontWeight: 600, fontSize: 13 }}>{gc.datasetName}</span>
-                                  <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 10,
-                                    background: gcIsOpen ? "var(--pm-violet-50)" : "var(--color-bg-secondary)",
-                                    color: gcIsOpen ? "var(--pm-violet-600)" : "var(--color-text-muted)", marginLeft: "auto" }}>
-                                    {gcIsOpen ? "Se creará" : "Omitir"}
-                                  </span>
-                                </button>
-                                {gcIsOpen && (
-                                  <div style={{ padding: "0 16px 16px" }}>
-                                    {renderChildForm(gc.columns, gcData[gc.datasetId] ?? {}, (key, val) => setGcValue(gc.datasetId, key, val))}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-          {/* ── Footer de acciones ───────────────────────────────────── */}
-          <div className="form-foot">
-            <div className="form-foot__meta">
-              Guardando en <b>{dsName}</b> · cambios sin guardar
+                        {child.grandchildren.length > 0 && (
+                          <div style={{ marginTop: 16 }}>
+                            <div style={{
+                              font: "600 11.5px/1 var(--font-sans)", color: "var(--text-mute)", marginBottom: 10,
+                              textTransform: "uppercase", letterSpacing: "0.05em",
+                            }}>
+                              Sub-tablas de {child.datasetName}
+                            </div>
+                            {child.grandchildren.map((gc) => {
+                              const gcIsOpen = !!gcOpen[gc.datasetId];
+                              return (
+                                <div key={gc.datasetId} style={{
+                                  border: "1px solid var(--border)", borderRadius: "var(--r-2)",
+                                  marginBottom: 8, overflow: "hidden", background: "var(--surface)",
+                                }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setGcOpen((prev) => ({ ...prev, [gc.datasetId]: !gcIsOpen }))}
+                                    style={{
+                                      display: "flex", alignItems: "center", gap: 8, width: "100%",
+                                      padding: "10px 16px", border: "none", background: "transparent", cursor: "pointer", textAlign: "left",
+                                    }}
+                                  >
+                                    {gcIsOpen
+                                      ? <ChevronDown size={14} color="var(--text-mute)" />
+                                      : <ChevronRight size={14} color="var(--text-mute)" />}
+                                    <span style={{ font: "600 13px/1 var(--font-sans)", color: "var(--text)" }}>{gc.datasetName}</span>
+                                    <div style={{ flex: 1 }} />
+                                    {gcIsOpen
+                                      ? <Badge tone="success">Se creará</Badge>
+                                      : <Badge tone="neutral">Omitir</Badge>}
+                                  </button>
+                                  {gcIsOpen && (
+                                    <div style={{ padding: "0 16px 16px" }}>
+                                      {renderChildForm(gc.columns, gcData[gc.datasetId] ?? {}, (key, val) => setGcValue(gc.datasetId, key, val))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-            <div className="form-foot__actions">
-              <button className="btn btn--secondary" onClick={() => navigate(`/datasets/${datasetId}`)}>
-                Cancelar
-              </button>
-              <button className="btn btn--primary" onClick={() => createMut.mutate()} disabled={createMut.isPending}>
-                <Check /> {createMut.isPending ? "Guardando…" : "Guardar registro"}
-              </button>
-            </div>
+          )}
+
+          {/* ── Sticky footer ───────────────────────────────────────────── */}
+          <div style={{
+            position: "sticky", bottom: 0, marginTop: 8, display: "flex", alignItems: "center", gap: 12,
+            padding: "14px 18px", borderRadius: "var(--r-3)", background: "var(--surface)",
+            border: "1px solid var(--border)", boxShadow: "var(--shadow-3)",
+          }}>
+            <span style={{ font: "400 13px/1.4 var(--font-sans)", color: "var(--text-soft)" }}>
+              Guardando en <strong style={{ color: "var(--text)" }}>{dsName}</strong> · cambios sin guardar
+            </span>
+            <div style={{ flex: 1 }} />
+            <Btn variant="ghost" onClick={() => navigate(`/datasets/${datasetId}`)}>Cancelar</Btn>
+            <Btn
+              variant="primary"
+              icon={<Check size={16} />}
+              disabled={createMut.isPending}
+              onClick={() => createMut.mutate()}
+            >
+              {createMut.isPending ? "Guardando…" : "Guardar registro"}
+            </Btn>
           </div>
 
         </div>

@@ -2,13 +2,17 @@ import { useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
+import {
+  ChevronLeft, Upload, ArrowRight, Sparkles, Plus, Trash2, Check,
+  Link2, Lock,
+} from "lucide-react";
 import { createDataset, createColumn } from "../api/datasets";
 import client from "../api/client";
 import type { ColumnDefinition } from "../types";
 import ImportExcelModal from "../components/ImportExcelModal";
 import { useWorkspace } from "../workspace/WorkspaceContext";
-import { IcUpload } from "../components/ui/icons";
 import AppShell from "../components/chrome/AppShell";
+import { Badge, Btn, Toggle } from "../components/ui/kit";
 
 interface ColDraft {
   uid: string;
@@ -22,29 +26,22 @@ interface ColDraft {
   locked?: boolean;
 }
 
-const DATA_TYPES: { value: ColumnDefinition["data_type"]; label: string; icon: string; group: string }[] = [
-  { value: "text",        label: "Texto",       icon: "Aa", group: "Texto"     },
-  { value: "long_text",   label: "Texto largo",  icon: "¶",  group: "Texto"     },
-  { value: "url",         label: "Enlace",       icon: "⎋",  group: "Texto"     },
-  { value: "email",       label: "Email",        icon: "",  group: "Texto"     },
-  { value: "phone",       label: "Teléfono",     icon: "",  group: "Texto"     },
-  { value: "number",      label: "Número",       icon: "#",  group: "Número"    },
-  { value: "currency",    label: "Moneda",       icon: "$",  group: "Número"    },
-  { value: "percent",     label: "Porcentaje",   icon: "%",  group: "Número"    },
-  { value: "rating",      label: "Calificación", icon: "★",  group: "Número"    },
-  { value: "enum",        label: "Lista",        icon: "≡",  group: "Selección" },
-  { value: "multiselect", label: "Multi-lista",  icon: "☰",  group: "Selección" },
-  { value: "boolean",     label: "Sí / No",      icon: "✓",  group: "Selección" },
-  { value: "date",        label: "Fecha",        icon: "▦",  group: "Especial"  },
-  { value: "relation",    label: "Relación",     icon: "⇢",  group: "Especial"  },
+const DATA_TYPES: { value: ColumnDefinition["data_type"]; label: string }[] = [
+  { value: "text",        label: "Texto"        },
+  { value: "long_text",   label: "Texto largo"  },
+  { value: "url",         label: "Enlace"       },
+  { value: "email",       label: "Email"        },
+  { value: "phone",       label: "Teléfono"     },
+  { value: "number",      label: "Número"       },
+  { value: "currency",    label: "Moneda"       },
+  { value: "percent",     label: "Porcentaje"   },
+  { value: "rating",      label: "Calificación" },
+  { value: "enum",        label: "Lista"        },
+  { value: "multiselect", label: "Multi-lista"  },
+  { value: "boolean",     label: "Sí / No"      },
+  { value: "date",        label: "Fecha"        },
+  { value: "relation",    label: "Relación"     },
 ];
-
-const TYPE_COLORS: Partial<Record<ColumnDefinition["data_type"], string>> = {
-  text: "#64748B", long_text: "#475569", url: "#0891B2", email: "#0284C7", phone: "#0369A1",
-  number: "#2563EB", currency: "#16A34A", percent: "#7C3AED", rating: "#D97706",
-  enum: "#EA580C", multiselect: "#C2410C", boolean: "#059669",
-  date: "#9333EA", relation: "#DB2777",
-};
 
 function slugify(v: string) {
   return v.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
@@ -73,7 +70,7 @@ interface Template {
 
 const TEMPLATES: Template[] = [
   {
-    id: "clientes", emoji: "", name: "Clientes",
+    id: "clientes", emoji: "📇", name: "Clientes",
     description: "CRM básico: contacto, empresa, estado",
     columns: [
       { name: "Nombre", data_type: "text", required: true },
@@ -86,7 +83,7 @@ const TEMPLATES: Template[] = [
     ],
   },
   {
-    id: "productos", emoji: "", name: "Productos",
+    id: "productos", emoji: "📦", name: "Productos",
     description: "Catálogo con precio, stock y categoría",
     columns: [
       { name: "Nombre", data_type: "text", required: true },
@@ -99,7 +96,7 @@ const TEMPLATES: Template[] = [
     ],
   },
   {
-    id: "tareas", emoji: "", name: "Tareas",
+    id: "tareas", emoji: "📊", name: "Tareas",
     description: "Lista de pendientes con estado y prioridad",
     columns: [
       { name: "Tarea", data_type: "text", required: true },
@@ -111,7 +108,7 @@ const TEMPLATES: Template[] = [
     ],
   },
   {
-    id: "inventario", emoji: "", name: "Inventario",
+    id: "inventario", emoji: "🗃️", name: "Inventario",
     description: "Stock por ubicación con última revisión",
     columns: [
       { name: "Producto", data_type: "text", required: true },
@@ -123,7 +120,7 @@ const TEMPLATES: Template[] = [
     ],
   },
   {
-    id: "presupuesto", emoji: "", name: "Presupuesto mensual",
+    id: "presupuesto", emoji: "💰", name: "Presupuesto mensual",
     description: "Ingresos y gastos categorizados",
     columns: [
       { name: "Fecha", data_type: "date", required: true },
@@ -136,7 +133,7 @@ const TEMPLATES: Template[] = [
     ],
   },
   {
-    id: "contactos", emoji: "", name: "Contactos",
+    id: "contactos", emoji: "👥", name: "Contactos",
     description: "Agenda con tags y cumpleaños",
     columns: [
       { name: "Nombre", data_type: "text", required: true },
@@ -368,107 +365,130 @@ export default function CreateDataset() {
     } catch { setSaving(false); }
   };
 
+  // ── Indicador de pasos (wizard) ─────────────────────────────────────────
+  const StepHeader = () => (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0 24px" }}>
+      {["Elegir origen", "Configurar columnas"].map((label, i) => {
+        const n = i + 1;
+        const cur = step === "choose" ? 1 : 2;
+        const on = cur === n;
+        const done = cur > n;
+        return (
+          <div key={label} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8, font: `${on ? 600 : 500} 13px/1 var(--font-sans)`, color: on ? "var(--text)" : "var(--text-mute)" }}>
+              <span style={{
+                display: "grid", placeItems: "center", width: 24, height: 24, borderRadius: "var(--r-pill)",
+                background: on || done ? "var(--accent-pri)" : "var(--surface-alt)",
+                color: on || done ? "#fff" : "var(--text-mute)", font: "700 12px/1 var(--font-sans)",
+              }}>{done ? <Check size={13} /> : n}</span>
+              {label}
+            </span>
+            {i === 0 && <span style={{ flex: "0 0 40px", height: 2, background: "var(--border)" }} />}
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  // ── Píldoras de contexto (relacionado / plantilla / filas importadas) ────
+  const ContextPills = () => (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      {linkedName && <Badge tone="rel" dot>Relacionado con {linkedName}</Badge>}
+      {appliedTemplate && <Badge tone="primary">Plantilla: {TEMPLATES.find((t) => t.id === appliedTemplate)?.name}</Badge>}
+      {importedRows.length > 0 && <Badge tone="warn">{importedRows.length} filas listas para importar</Badge>}
+    </div>
+  );
+
   // ── Render: choose step ────────────────────────────────────────────────
   if (step === "choose") {
     return (
       <>
-        <AppShell>
-        <header className="app-header" style={{ display: "none" }}>
-          <button className="btn btn-ghost" onClick={() => navigate("/")} style={{ padding: "5px 8px", fontSize: 18 }}>←</button>
-          <button className="app-brand-btn" onClick={() => navigate("/")}>
-            <div className="app-header-logo" style={{ width: 28, height: 28, fontSize: 13, borderRadius: "var(--radius-xs)" }}>T</div>
-            <span className="app-header-name">Trans<em>Excel</em></span>
-          </button>
-          <div style={{ width: 1, height: 20, background: "var(--color-border)", margin: "0 6px" }} />
-          <span style={{ fontWeight: 600, fontSize: 15 }}>Nuevo dataset</span>
-        </header>
+        <AppShell active="home">
+          <main className="home-main" style={{ overflowY: "auto", padding: 0 }}>
+            <div style={{ maxWidth: 880, margin: "0 auto", padding: "28px 32px 80px" }}>
+              <button onClick={() => navigate("/")} style={{
+                display: "inline-flex", alignItems: "center", gap: 6, border: "none", background: "transparent",
+                cursor: "pointer", color: "var(--text-soft)", font: "500 13px/1 var(--font-sans)", padding: 0, marginBottom: 14,
+              }}><ChevronLeft size={16} /> Volver a Datasets</button>
 
-        <main className="page" style={{ maxWidth: 920, overflowY: "auto", width: "100%" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-            <button className="btn btn-ghost" onClick={() => navigate("/")} style={{ padding: "5px 8px", fontSize: 18 }}>←</button>
-            <span style={{ fontWeight: 600, fontSize: 15 }}>Nuevo dataset</span>
-          </div>
-          {/* Import zone */}
-          <div className="card"
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={onDrop}
-            style={{
-              padding: "28px 32px",
-              marginBottom: 20,
-              border: dragOver ? "2px dashed var(--color-primary)" : "2px dashed var(--color-border)",
-              background: dragOver ? "var(--color-primary-bg)" : undefined,
-              textAlign: "center",
-              transition: "background 0.12s",
-            }}>
-            <div style={{ display: "flex", justifyContent: "center", marginBottom: 8, color: "var(--color-text-muted)" }}><IcUpload size={28} /></div>
-            <h3 style={{ margin: "0 0 6px" }}>Importa desde Excel o CSV</h3>
-            <p style={{ color: "var(--color-text-muted)", fontSize: 13, margin: "0 0 14px" }}>
-              Arrastrá un archivo <strong>.xlsx</strong>, <strong>.xls</strong> o <strong>.csv</strong> acá,
-              o usá el botón. Detectamos columnas y tipos de datos automáticamente.
-            </p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
-              style={{ display: "none" }}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleFile(f);
-              }}
-            />
-            <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()}>
-              Elegir archivo
-            </button>
-            {importStatus && (
-              <p style={{ marginTop: 10, fontSize: 12, color: "var(--color-text-secondary)" }}>{importStatus}</p>
-            )}
-          </div>
+              <h1 style={{ margin: 0, font: "700 26px/1.1 var(--font-sans)", letterSpacing: "-.02em", color: "var(--text)" }}>Nuevo dataset</h1>
 
-          {/* Templates */}
-          <div className="card" style={{ padding: "20px 24px", marginBottom: 20 }}>
-            <h3 style={{ margin: "0 0 6px" }}>O empezá desde una plantilla</h3>
-            <p style={{ color: "var(--color-text-muted)", fontSize: 13, margin: "0 0 14px" }}>
-              Cada plantilla viene con columnas y tipos pre-configurados. Las podés ajustar después.
-            </p>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
-              {TEMPLATES.map((t) => (
-                <button key={t.id}
-                  onClick={() => applyTemplate(t)}
-                  style={{
-                    textAlign: "left",
-                    padding: "12px 14px",
-                    border: "1.5px solid var(--color-border)",
-                    borderRadius: 8,
-                    background: "var(--color-surface)",
-                    cursor: "pointer",
-                    display: "flex",
-                    gap: 10,
-                    alignItems: "flex-start",
-                    transition: "border-color 0.12s, background 0.12s",
+              <StepHeader />
+
+              {/* Drop zone */}
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={onDrop}
+                style={{
+                  border: `2px dashed ${dragOver ? "var(--accent-pri)" : "var(--border-strong)"}`,
+                  borderRadius: "var(--r-3)", padding: "36px 20px", textAlign: "center",
+                  background: dragOver ? "var(--pri-soft)" : "var(--surface)", cursor: "pointer",
+                  transition: "all var(--t-fast)",
+                }}>
+                <span style={{
+                  display: "grid", placeItems: "center", width: 52, height: 52, margin: "0 auto 14px",
+                  borderRadius: "var(--r-3)", background: "var(--pri-soft)", color: "var(--accent-pri)",
+                }}><Upload size={24} /></span>
+                <div style={{ font: "600 15px/1 var(--font-sans)", color: "var(--text)" }}>Arrastra un Excel o CSV aquí</div>
+                <div style={{ font: "400 13px/1.4 var(--font-sans)", color: "var(--text-mute)", marginTop: 5 }}>
+                  .xlsx · .xls · .csv · hasta 10 MB · detección de tipos automática
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleFile(f);
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--color-primary)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }}>
-                  <span style={{ fontSize: 22, lineHeight: 1 }}>{t.emoji}</span>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <strong style={{ display: "block", fontSize: 14 }}>{t.name}</strong>
-                    <span style={{ fontSize: 11.5, color: "var(--color-text-muted)", display: "block", marginTop: 2 }}>{t.description}</span>
-                    <span style={{ fontSize: 10, color: "var(--color-text-muted)", display: "block", marginTop: 4 }}>
-                      {t.columns.length} columnas
-                    </span>
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
+                />
+              </div>
+              {importStatus && (
+                <p style={{ margin: "10px 2px 0", font: "400 12.5px/1.4 var(--font-sans)", color: "var(--text-soft)" }}>{importStatus}</p>
+              )}
 
-          {/* From scratch */}
-          <div style={{ textAlign: "center" }}>
-            <button className="btn btn-ghost" onClick={() => setStep("form")}>
-              o empezá desde cero →
-            </button>
-          </div>
-        </main>
+              {/* Separador */}
+              <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "26px 0 16px" }}>
+                <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+                <span style={{ font: "500 12px/1 var(--font-sans)", color: "var(--text-mute)" }}>o elige una plantilla</span>
+                <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+              </div>
+
+              {/* Galería de plantillas */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(232px, 1fr))", gap: 12 }}>
+                {TEMPLATES.map((t) => (
+                  <button key={t.id} className="og-card" onClick={() => applyTemplate(t)} style={{
+                    textAlign: "left", display: "flex", gap: 11, padding: 14, borderRadius: "var(--r-3)",
+                    border: "1px solid var(--border)", background: "var(--surface)", cursor: "pointer",
+                    boxShadow: "var(--shadow-1)", transition: "all var(--t-fast)",
+                  }}>
+                    <span style={{ fontSize: 26, lineHeight: 1, flex: "none" }}>{t.emoji}</span>
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: "block", font: "600 14px/1.2 var(--font-sans)", color: "var(--text)" }}>{t.name}</span>
+                      <span style={{ display: "block", font: "400 12px/1.4 var(--font-sans)", color: "var(--text-mute)", marginTop: 2 }}>
+                        {t.description} · {t.columns.length} col
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Acciones */}
+              <div style={{ display: "flex", alignItems: "center", gap: 18, marginTop: 22, flexWrap: "wrap" }}>
+                <button onClick={() => setStep("form")} style={{
+                  display: "inline-flex", alignItems: "center", gap: 7, border: "none", background: "transparent",
+                  cursor: "pointer", color: "var(--accent-pri)", font: "600 14px/1 var(--font-sans)",
+                }}>o empieza desde cero <ArrowRight size={16} /></button>
+                <span style={{
+                  display: "inline-flex", alignItems: "center", gap: 7, color: "var(--text-soft)",
+                  font: "600 14px/1 var(--font-sans)",
+                }}><Sparkles size={15} /> Detección de tipos automática</span>
+              </div>
+            </div>
+          </main>
         </AppShell>
 
         <ImportExcelModal
@@ -492,206 +512,235 @@ export default function CreateDataset() {
     );
   }
 
-  // ── Render: form step (original UI) ────────────────────────────────────
+  // ── Render: form step (Configurar columnas) ─────────────────────────────
+  const validColCount = cols.filter((c) => c.name).length;
+  const submitLabel = (() => {
+    const colsPart = validColCount > 0 ? ` con ${validColCount} columna${validColCount !== 1 ? "s" : ""}` : "";
+    const rowsPart = importedRows.length > 0 ? ` + ${importedRows.length} fila${importedRows.length !== 1 ? "s" : ""}` : "";
+    return `Crear dataset${colsPart}${rowsPart}`;
+  })();
+
   return (
     <>
-      <AppShell>
-      <header className="app-header" style={{ display: "none" }}>
-        <button className="btn btn-ghost" onClick={() => navigate("/")} style={{ padding: "5px 8px", fontSize: 18 }}>←</button>
-        <button className="app-brand-btn" onClick={() => navigate("/")}>
-          <div className="app-header-logo" style={{ width: 28, height: 28, fontSize: 13, borderRadius: "var(--radius-xs)" }}><img src="/opsgrid-logo.svg" alt="OpsGrid" style={{ width: "100%", height: "100%" }} /></div>
-          <span className="app-header-name">Ops<em>Grid</em></span>
-        </button>
-        <div style={{ width: 1, height: 20, background: "var(--color-border)", margin: "0 6px" }} />
-        <span style={{ fontWeight: 600, fontSize: 15 }}>Nuevo dataset</span>
-        {linkedName && (
-          <span style={{ fontSize: 12, padding: "3px 10px", borderRadius: 20, background: "var(--color-primary-bg)", color: "var(--pm-green-600)", fontWeight: 600, border: "1px solid var(--color-primary-border)", marginLeft: 6 }}>
-            Relacionado con {linkedName}
-          </span>
-        )}
-        {appliedTemplate && (
-          <span style={{ fontSize: 12, padding: "3px 10px", borderRadius: 20, background: "var(--color-primary-bg)", color: "var(--color-primary)", fontWeight: 600, border: "1px solid var(--color-primary-border)", marginLeft: 6 }}>
-            Plantilla: {TEMPLATES.find((t) => t.id === appliedTemplate)?.name}
-          </span>
-        )}
-        {importedRows.length > 0 && (
-          <span style={{ fontSize: 12, padding: "3px 10px", borderRadius: 20, background: "#FEF3C7", color: "#92400E", fontWeight: 600, border: "1px solid #FDE68A", marginLeft: 6 }}>
-            {importedRows.length} filas listas para importar
-          </span>
-        )}
-        {!linkedName && (
-          <button className="btn btn-ghost" onClick={() => setStep("choose")} style={{ marginLeft: "auto", fontSize: 12 }}>
-            ← Cambiar plantilla
-          </button>
-        )}
-      </header>
-
-      <main className="page" style={{ maxWidth: 820, overflowY: "auto", width: "100%" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-          <button className="btn btn-ghost" onClick={() => navigate("/")} style={{ padding: "5px 8px", fontSize: 18 }}>←</button>
-          <span style={{ fontWeight: 600, fontSize: 15 }}>Nuevo dataset</span>
-          {linkedName && (
-            <span style={{ fontSize: 12, padding: "3px 10px", borderRadius: 20, background: "var(--color-primary-bg)", color: "var(--pm-green-600)", fontWeight: 600, border: "1px solid var(--color-primary-border)" }}>
-              Relacionado con {linkedName}
-            </span>
-          )}
-          {appliedTemplate && (
-            <span style={{ fontSize: 12, padding: "3px 10px", borderRadius: 20, background: "var(--color-primary-bg)", color: "var(--color-primary)", fontWeight: 600, border: "1px solid var(--color-primary-border)" }}>
-              Plantilla: {TEMPLATES.find((t) => t.id === appliedTemplate)?.name}
-            </span>
-          )}
-          {importedRows.length > 0 && (
-            <span style={{ fontSize: 12, padding: "3px 10px", borderRadius: 20, background: "#FEF3C7", color: "#92400E", fontWeight: 600, border: "1px solid #FDE68A" }}>
-              {importedRows.length} filas listas para importar
-            </span>
-          )}
-          {!linkedName && (
-            <button className="btn btn-ghost" onClick={() => setStep("choose")} style={{ marginLeft: "auto", fontSize: 12 }}>
-              ← Cambiar plantilla
+      <AppShell active="home">
+        <main className="home-main" style={{ overflowY: "auto", padding: 0 }}>
+          <div style={{ maxWidth: 880, margin: "0 auto", padding: "28px 32px 80px" }}>
+            <button
+              onClick={() => (linkedName ? navigate("/") : setStep("choose"))}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 6, border: "none", background: "transparent",
+                cursor: "pointer", color: "var(--text-soft)", font: "500 13px/1 var(--font-sans)", padding: 0, marginBottom: 14,
+              }}>
+              <ChevronLeft size={16} /> {linkedName ? "Volver a Datasets" : "Cambiar origen"}
             </button>
-          )}
-        </div>
-        <div className="card" style={{ padding: "28px 32px" }}>
-          <h2 style={{ marginBottom: 20 }}>Crear dataset</h2>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "0 20px" }}>
-            <div className="form-group">
-              <label className="form-label">Nombre <span style={{ color: "var(--pm-red-500)" }}>*</span></label>
-              <input placeholder="Ej. Clientes 2025" value={dsName} autoFocus
-                onChange={(e) => { setDsName(e.target.value); setNameError(""); }}
-                style={nameError ? { borderColor: "var(--pm-red-500)" } : undefined} />
-              {nameError && <span style={{ fontSize: 12, color: "var(--pm-red-500)" }}>{nameError}</span>}
+            <h1 style={{ margin: 0, font: "700 26px/1.1 var(--font-sans)", letterSpacing: "-.02em", color: "var(--text)" }}>Nuevo dataset</h1>
+
+            <StepHeader />
+
+            {(linkedName || appliedTemplate || importedRows.length > 0) && (
+              <div style={{ marginBottom: 20 }}><ContextPills /></div>
+            )}
+
+            {/* Nombre + descripción */}
+            <div style={{ display: "flex", gap: 14, marginBottom: 22, flexWrap: "wrap" }}>
+              <label style={{ flex: 1, minWidth: 220 }}>
+                <div style={{ font: "500 13px/1 var(--font-sans)", color: "var(--text-soft)", marginBottom: 6 }}>
+                  Nombre <span style={{ color: "var(--danger)" }}>*</span>
+                </div>
+                <input
+                  placeholder="Ej. Clientes 2025" value={dsName} autoFocus
+                  onChange={(e) => { setDsName(e.target.value); setNameError(""); }}
+                  style={{
+                    width: "100%", height: 40, padding: "0 12px", boxSizing: "border-box",
+                    borderRadius: "var(--r-2)", background: "var(--surface)", outline: "none",
+                    color: "var(--text)", font: "500 14px/1 var(--font-sans)",
+                    border: `1px solid ${nameError ? "var(--danger)" : "var(--accent-pri)"}`,
+                    boxShadow: nameError ? "none" : "var(--shadow-focus)",
+                  }} />
+                {nameError && <span style={{ font: "400 12px/1 var(--font-sans)", color: "var(--danger)", display: "block", marginTop: 5 }}>{nameError}</span>}
+              </label>
+              <label style={{ flex: 1, minWidth: 220 }}>
+                <div style={{ font: "500 13px/1 var(--font-sans)", color: "var(--text-soft)", marginBottom: 6 }}>Descripción</div>
+                <input
+                  placeholder="Opcional" value={dsDesc} onChange={(e) => setDsDesc(e.target.value)}
+                  style={{
+                    width: "100%", height: 40, padding: "0 12px", boxSizing: "border-box",
+                    borderRadius: "var(--r-2)", border: "1px solid var(--border)", background: "var(--surface)",
+                    outline: "none", color: "var(--text)", font: "400 14px/1 var(--font-sans)",
+                  }} />
+              </label>
             </div>
-            <div className="form-group">
-              <label className="form-label">Descripción</label>
-              <input placeholder="Opcional" value={dsDesc} onChange={(e) => setDsDesc(e.target.value)} />
+
+            <div style={{ font: "600 14px/1 var(--font-sans)", color: "var(--text)", marginBottom: 10 }}>Columnas</div>
+
+            {/* Tabla de columnas */}
+            <div style={{ border: "1px solid var(--border)", borderRadius: "var(--r-3)", overflow: "hidden", background: "var(--surface)", boxShadow: "var(--shadow-1)" }}>
+              {/* Header */}
+              <div style={{
+                display: "grid", gridTemplateColumns: "1.3fr 1.1fr 1.2fr 90px 44px", padding: "10px 14px",
+                background: "var(--surface-2)", borderBottom: "1px solid var(--border)",
+                font: "600 12px/1 var(--font-sans)", color: "var(--text-mute)", gap: 8,
+              }}>
+                <span>Nombre</span><span>field_key</span><span>Tipo</span><span>Requerido</span><span />
+              </div>
+
+              {cols.map((col, i) => (
+                <ColRow key={col.uid} col={col} linkedName={linkedName} isLast={i === cols.length - 1}
+                  onChange={(patch) => updateCol(col.uid, patch)}
+                  onRemove={() => setCols((p) => p.filter((c) => c.uid !== col.uid))} />
+              ))}
+
+              <button onClick={() => setCols((p) => [...p, newCol()])} style={{
+                display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "11px 14px",
+                border: "none", borderTop: cols.length > 0 ? "1px solid var(--border)" : "none",
+                background: "transparent", cursor: "pointer", color: "var(--accent-pri)", font: "600 13px/1 var(--font-sans)",
+              }}><Plus size={15} /> Añadir columna</button>
+            </div>
+
+            {cols.length === 0 && (
+              <p style={{ font: "400 13px/1.4 var(--font-sans)", color: "var(--text-mute)", textAlign: "center", padding: "16px 0" }}>
+                Sin columnas — puedes agregar más tarde desde el dataset.
+              </p>
+            )}
+
+            {/* Acciones */}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22 }}>
+              <Btn variant="ghost" onClick={() => navigate("/")}>Cancelar</Btn>
+              <Btn variant="primary" icon={<Check size={16} />} onClick={handleSubmit}
+                disabled={saving || !dsName.trim()}>
+                {saving ? "Creando…" : submitLabel}
+              </Btn>
             </div>
           </div>
-
-          <div style={{ height: 1, background: "var(--color-border-light)", margin: "20px 0" }} />
-
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <p className="section-title" style={{ margin: 0 }}>Columnas</p>
-            <button className="btn btn-secondary" onClick={() => setCols((p) => [...p, newCol()])} style={{ fontSize: 12, padding: "4px 12px" }}>
-              + Agregar columna
-            </button>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {cols.map((col) => (
-              <ColRow key={col.uid} col={col} linkedName={linkedName}
-                onChange={(patch) => updateCol(col.uid, patch)}
-                onRemove={() => setCols((p) => p.filter((c) => c.uid !== col.uid))} />
-            ))}
-          </div>
-
-          {cols.length === 0 && (
-            <p style={{ color: "var(--color-text-muted)", fontSize: 13, textAlign: "center", padding: "16px 0" }}>
-              Sin columnas — puedes agregar más tarde desde el dataset.
-            </p>
-          )}
-
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 28, paddingTop: 20, borderTop: "1px solid var(--color-border-light)" }}>
-            <button className="btn btn-secondary" onClick={() => navigate("/")}>Cancelar</button>
-            <button className="btn btn-primary" onClick={handleSubmit} disabled={saving || !dsName.trim()}>
-              {saving ? "Creando..." : (() => {
-                const n = cols.filter(c => c.name).length;
-                const colsPart = n > 0 ? ` con ${n} columna${n !== 1 ? "s" : ""}` : "";
-                const rowsPart = importedRows.length > 0 ? ` + ${importedRows.length} fila${importedRows.length !== 1 ? "s" : ""}` : "";
-                return `Crear dataset${colsPart}${rowsPart}`;
-              })()}
-            </button>
-          </div>
-        </div>
-      </main>
+        </main>
       </AppShell>
     </>
   );
 }
 
-function ColRow({ col, linkedName, onChange, onRemove }: {
-  col: ColDraft; linkedName: string;
+function ColRow({ col, linkedName, isLast, onChange, onRemove }: {
+  col: ColDraft; linkedName: string; isLast: boolean;
   onChange: (p: Partial<ColDraft>) => void;
   onRemove: () => void;
 }) {
-  const color = TYPE_COLORS[col.data_type] ?? "#64748B";
+  const border = isLast ? "none" : "1px solid var(--border)";
 
+  // FK preset (relacionado): fila bloqueada en tono relación.
   if (col.locked) {
     return (
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1.5fr 130px 64px 32px", gap: 8, alignItems: "start",
-        background: "var(--color-primary-bg)", borderRadius: 8, padding: "8px 10px",
-        margin: "0 -10px", border: "1px solid var(--color-primary-border)" }}>
-        <div>
-          <p style={{ margin: 0, fontWeight: 600, fontSize: 13, color: "var(--pm-green-600)" }}>{col.name}</p>
-          <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--color-text-muted)" }}>Clave foránea — apunta a {linkedName}</p>
-        </div>
-        <code style={{ fontSize: 12, padding: "5px 0", display: "block", color: "var(--color-text-secondary)" }}>{col.field_key}</code>
-        <span style={{ fontSize: 12, padding: "5px 0", color: "var(--color-text-muted)" }}>Texto</span>
-        <span style={{ fontSize: 12, padding: "5px 0", color: "var(--pm-green-600)", textAlign: "center" }}>✓</span>
+      <div style={{
+        display: "grid", gridTemplateColumns: "1.3fr 1.1fr 1.2fr 90px 44px", alignItems: "center",
+        padding: "9px 14px", gap: 8, borderBottom: border, background: "var(--rel-soft)",
+      }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+          <Lock size={13} style={{ color: "var(--accent-rel)", flex: "none" }} />
+          <span style={{ font: "600 13.5px/1.2 var(--font-sans)", color: "var(--accent-rel)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{col.name}</span>
+        </span>
+        <span className="mono" style={{ font: "400 12px/1 var(--font-mono)", color: "var(--text-mute)", overflow: "hidden", textOverflow: "ellipsis" }}>{col.field_key}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 6, font: "500 12.5px/1 var(--font-sans)", color: "var(--text-soft)" }}>
+          <Link2 size={13} style={{ color: "var(--accent-rel)" }} /> FK → {linkedName}
+        </span>
+        <span style={{ display: "flex", justifyContent: "center" }}><Check size={15} style={{ color: "var(--accent-rel)" }} /></span>
         <span />
       </div>
     );
   }
 
+  const isRelation = col.data_type === "relation";
+
   return (
-    <div style={{ border: "1.5px solid var(--color-border)", borderRadius: 8, overflow: "hidden" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1.5fr 130px 64px 32px", gap: 8, alignItems: "start", padding: "8px 10px" }}>
-        <input placeholder="Nombre de columna" value={col.name}
-          onChange={(e) => onChange({ name: e.target.value })} />
-        <input className="mono" placeholder="field_key" value={col.field_key}
-          onChange={(e) => onChange({ field_key: slugify(e.target.value) })} />
+    <div style={{ borderBottom: border }}>
+      <div style={{
+        display: "grid", gridTemplateColumns: "1.3fr 1.1fr 1.2fr 90px 44px", alignItems: "center",
+        padding: "9px 14px", gap: 8,
+      }}>
+        <input
+          placeholder="Nombre de columna" value={col.name}
+          onChange={(e) => onChange({ name: e.target.value })}
+          style={{
+            height: 32, padding: "0 9px", boxSizing: "border-box", borderRadius: 6,
+            border: "1px solid var(--border)", background: "var(--surface)", outline: "none",
+            color: "var(--text)", font: "500 13.5px/1 var(--font-sans)",
+          }} />
+        <input
+          className="mono" placeholder="field_key" value={col.field_key}
+          onChange={(e) => onChange({ field_key: slugify(e.target.value) })}
+          style={{
+            height: 32, padding: "0 9px", boxSizing: "border-box", borderRadius: 6,
+            border: "1px solid var(--border)", background: "var(--surface)", outline: "none",
+            color: "var(--text-mute)", font: "400 12px/1 var(--font-mono)",
+          }} />
+        <select
+          value={col.data_type}
+          onChange={(e) => onChange({ data_type: e.target.value as ColumnDefinition["data_type"] })}
+          style={{
+            height: 32, padding: "0 8px", boxSizing: "border-box", borderRadius: 6,
+            border: `1px solid ${isRelation ? "color-mix(in srgb, var(--accent-rel) 45%, transparent)" : "var(--border)"}`,
+            background: "var(--surface)", outline: "none",
+            color: isRelation ? "var(--accent-rel)" : "var(--text)",
+            font: "500 12.5px/1 var(--font-mono)", cursor: "pointer",
+          }}>
+          {DATA_TYPES.map((t) => (
+            <option key={t.value} value={t.value}>{t.label}</option>
+          ))}
+        </select>
 
-        {/* Type selector */}
-        <div style={{ position: "relative" }}>
-          <select value={col.data_type} onChange={(e) => onChange({ data_type: e.target.value as ColumnDefinition["data_type"] })}
-            style={{ paddingLeft: 28, borderColor: color, color }}>
-            {DATA_TYPES.map((t) => (
-              <option key={t.value} value={t.value}>{t.icon} {t.label}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Required checkbox */}
-        {col.data_type !== "relation" && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", paddingTop: 7 }}>
-            <label className="checkbox-row" style={{ gap: 4 }}>
-              <input type="checkbox" checked={col.required} onChange={(e) => onChange({ required: e.target.checked })} />
-              <span style={{ fontSize: 12 }}>Sí</span>
-            </label>
+        {col.data_type !== "relation" ? (
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <Toggle on={col.required} onChange={(v) => onChange({ required: v })} size={0.85} />
           </div>
+        ) : (
+          <span style={{ display: "flex", justifyContent: "center", font: "400 11px/1 var(--font-sans)", color: "var(--text-mute)" }}>—</span>
         )}
 
-        <button className="btn btn-danger-ghost" onClick={onRemove}
-          style={{ padding: "4px 6px", marginTop: 2 }} title="Quitar columna">×</button>
+        <button onClick={onRemove} title="Quitar columna" className="og-iconbtn" style={{
+          width: 30, height: 30, display: "grid", placeItems: "center", border: "none",
+          background: "transparent", borderRadius: 6, cursor: "pointer", color: "var(--text-mute)",
+        }}><Trash2 size={15} /></button>
       </div>
 
-      {/* Type-specific extras */}
+      {/* Extras por tipo */}
       {(col.data_type === "enum" || col.data_type === "multiselect") && (
-        <div style={{ padding: "0 10px 8px", borderTop: "1px solid var(--color-border-light)" }}>
-          <input placeholder="Opciones separadas por coma: Activo, Inactivo, Pendiente"
+        <div style={{ padding: "0 14px 10px 14px" }}>
+          <input
+            placeholder="Opciones separadas por coma: Activo, Inactivo, Pendiente"
             value={col.options} onChange={(e) => onChange({ options: e.target.value })}
-            style={{ fontSize: 13, background: "var(--color-bg)" }} />
+            style={{
+              width: "100%", height: 32, padding: "0 9px", boxSizing: "border-box", borderRadius: 6,
+              border: "1px solid var(--border)", background: "var(--surface-alt)", outline: "none",
+              color: "var(--text)", font: "400 13px/1 var(--font-sans)",
+            }} />
         </div>
       )}
       {col.data_type === "currency" && (
-        <div style={{ padding: "0 10px 8px", borderTop: "1px solid var(--color-border-light)", display: "flex", gap: 8, alignItems: "center" }}>
-          <span style={{ fontSize: 12, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>Símbolo:</span>
-          <input value={col.currency_symbol} onChange={(e) => onChange({ currency_symbol: e.target.value })}
-            placeholder="$" maxLength={5} style={{ width: 60, fontSize: 13 }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 14px 10px 14px" }}>
+          <span style={{ font: "400 12px/1 var(--font-sans)", color: "var(--text-mute)", whiteSpace: "nowrap" }}>Símbolo:</span>
+          <input
+            value={col.currency_symbol} onChange={(e) => onChange({ currency_symbol: e.target.value })}
+            placeholder="$" maxLength={5}
+            style={{
+              width: 64, height: 32, padding: "0 9px", boxSizing: "border-box", borderRadius: 6,
+              border: "1px solid var(--border)", background: "var(--surface-alt)", outline: "none",
+              color: "var(--text)", font: "400 13px/1 var(--font-sans)",
+            }} />
         </div>
       )}
       {col.data_type === "rating" && (
-        <div style={{ padding: "0 10px 8px", borderTop: "1px solid var(--color-border-light)", display: "flex", gap: 8, alignItems: "center" }}>
-          <span style={{ fontSize: 12, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>Escala:</span>
-          {[3, 5, 10].map((n) => (
-            <button key={n} type="button" onClick={() => onChange({ max_rating: n })}
-              style={{ padding: "2px 10px", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1.5px solid",
-                background: col.max_rating === n ? "#D97706" : "transparent",
-                color: col.max_rating === n ? "#fff" : "var(--color-text-secondary)",
-                borderColor: col.max_rating === n ? "#D97706" : "var(--color-border)" }}>
-              ★ {n}
-            </button>
-          ))}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 14px 10px 14px" }}>
+          <span style={{ font: "400 12px/1 var(--font-sans)", color: "var(--text-mute)", whiteSpace: "nowrap" }}>Escala:</span>
+          {[3, 5, 10].map((n) => {
+            const on = col.max_rating === n;
+            return (
+              <button key={n} type="button" onClick={() => onChange({ max_rating: n })} style={{
+                padding: "3px 11px", borderRadius: "var(--r-pill)", font: "600 12px/1 var(--font-sans)",
+                cursor: "pointer", border: "1px solid",
+                background: on ? "var(--warning)" : "transparent",
+                color: on ? "#fff" : "var(--text-soft)",
+                borderColor: on ? "var(--warning)" : "var(--border)",
+              }}>★ {n}</button>
+            );
+          })}
         </div>
       )}
     </div>

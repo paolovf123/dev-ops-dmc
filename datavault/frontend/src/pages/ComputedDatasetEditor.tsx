@@ -4,11 +4,13 @@ import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/rea
 import Editor, { type OnMount } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import {
-  FunctionSquare, Sparkles, Play, Save, X, CheckCircle2, Clock, AlertTriangle,
+  FunctionSquare, Sparkles, Play, Save, X, CheckCircle2,
+  Database, ArrowRight,
 } from "lucide-react";
 import { getDatasets, getColumns, computeDataset, createDataset, updateDataset } from "../api/datasets";
 import { useToast } from "../components/Toast";
 import AppShell from "../components/chrome/AppShell";
+import { Btn, Kbd } from "../components/ui/kit";
 import type { Dataset, ColumnDefinition } from "../types";
 
 const EXAMPLE_CODE = `# ── Entorno disponible ────────────────────────────────────────────────────────
@@ -39,7 +41,7 @@ interface ComputeError {
   traceback?: string;
 }
 
-// Tipo de columna → glifo corto que se muestra en el chip (estilo mockup)
+// Tipo de columna → glifo corto que se muestra en el chip
 function colTypeGlyph(t: ColumnDefinition["data_type"]): string {
   switch (t) {
     case "number": case "rating": return "#";
@@ -212,15 +214,15 @@ export default function ComputedDatasetEditor() {
         { token: "variable", foreground: "c8d3f5" },
       ],
       colors: {
-        "editor.background":              "#0e111a",
-        "editor.foreground":              "#c8d3f5",
-        "editor.lineHighlightBackground": "#1f2148",
+        "editor.background":              "#0f1320",
+        "editor.foreground":              "#c8d3e6",
+        "editor.lineHighlightBackground": "#1b2336",
         "editor.selectionBackground":     "#3a3d7a88",
-        "editorLineNumber.foreground":    "#3d4270",
+        "editorLineNumber.foreground":    "#4a5568",
         "editorLineNumber.activeForeground": "#7080c4",
         "editorCursor.foreground":        "#82aaff",
-        "editorWhitespace.foreground":    "#2a2d5a",
-        "editorIndentGuide.background1":  "#2a2d5a",
+        "editorWhitespace.foreground":    "#232a3a",
+        "editorIndentGuide.background1":  "#232a3a",
         "editorIndentGuide.activeBackground1": "#4a5080",
         "editor.findMatchBackground":     "#4a5af040",
         "editorBracketMatch.background":  "#3a3d7a60",
@@ -321,6 +323,13 @@ export default function ComputedDatasetEditor() {
   const isRunning = computeMut.isPending;
   const hasOutput = !!(lastResult || computeError);
 
+  // ── Colores fijos del chrome del editor (idénticos al prototipo: superficie oscura) ──
+  const EDITOR_BG = "#0f1320";
+  const EDITOR_BAR = "#121728";
+  const EDITOR_LINE = "#232a3a";
+  const EDITOR_TEXT = "#c8d3e6";
+  const EDITOR_MUTE = "#6b7689";
+
   return (
     <AppShell active="scripts">
       <main
@@ -333,178 +342,246 @@ export default function ComputedDatasetEditor() {
         }}
       >
         {/* ─────────────── LEFT: fuentes de datos ─────────────── */}
-        <aside className="se-sources">
-          <div className="se-sources__head">
-            <span className="se-sources__title">Fuentes de datos</span>
+        <aside style={{
+          borderRight: "1px solid var(--border)", background: "var(--surface)",
+          overflow: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 12,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+            <Database size={16} style={{ color: "var(--accent-pri)", flex: "none" }} />
+            <span style={{ font: "600 13px/1 var(--font-sans)", color: "var(--text)" }}>Fuentes de datos</span>
+            <div style={{ flex: 1 }} />
             <button
-              className="dv-topbar__icon-btn"
+              className="og-iconbtn"
               title="Generar plantilla"
               onClick={generateTemplate}
               disabled={sourceIds.length === 0}
-              style={{ opacity: sourceIds.length === 0 ? 0.4 : 1 }}
+              style={{
+                display: "grid", placeItems: "center", width: 30, height: 30, borderRadius: "var(--r-2)",
+                border: "none", background: undefined, color: "var(--text-soft)",
+                cursor: sourceIds.length === 0 ? "not-allowed" : "pointer",
+                opacity: sourceIds.length === 0 ? 0.4 : 1,
+              }}
             >
-              <Sparkles />
+              <Sparkles size={16} />
             </button>
           </div>
 
           {/* Formulario de nombre para script nuevo */}
           {isNew && (
-            <div className="se-source" style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
-              <span className="se-sources__title" style={{ fontSize: "var(--fs-11)" }}>Nombre del script</span>
+            <div style={{
+              display: "flex", flexDirection: "column", gap: 8, padding: "12px 12px",
+              borderRadius: "var(--r-2)", background: "var(--surface-2)", border: "1px solid var(--border)",
+            }}>
+              <span style={{ font: "600 11.5px/1 var(--font-sans)", color: "var(--text-soft)" }}>Nombre del script</span>
               <input
                 placeholder="Ej. Resumen de ventas"
                 value={dsName}
                 onChange={(e) => setDsName(e.target.value)}
                 autoFocus
+                style={{
+                  height: 34, padding: "0 10px", borderRadius: "var(--r-2)",
+                  border: "1px solid var(--border)", background: "var(--surface)",
+                  color: "var(--text)", font: "400 13px/1 var(--font-sans)", outline: "none",
+                }}
               />
               <input
                 placeholder="Descripción (opcional)"
                 value={dsDesc}
                 onChange={(e) => setDsDesc(e.target.value)}
+                style={{
+                  height: 34, padding: "0 10px", borderRadius: "var(--r-2)",
+                  border: "1px solid var(--border)", background: "var(--surface)",
+                  color: "var(--text)", font: "400 13px/1 var(--font-sans)", outline: "none",
+                }}
               />
             </div>
           )}
 
-          {availableSources.length === 0 ? (
-            <div className="se-source">
-              <p style={{ margin: 0, fontSize: "var(--fs-12)", color: "var(--text-mute)" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {availableSources.length === 0 ? (
+              <p style={{ margin: 0, font: "400 12px/1.5 var(--font-sans)", color: "var(--text-mute)" }}>
                 No hay datasets disponibles.
               </p>
-            </div>
-          ) : (
-            availableSources.map((d) => {
-              const vn = varName(d);
-              const selected = sourceIds.includes(d.id);
-              const cols = colsByDataset[d.id] ?? [];
-              const glyph = d.name.charAt(0).toUpperCase();
-              return (
-                <div
-                  key={d.id}
-                  className="se-source"
-                  onClick={() => toggleSource(d.id)}
-                  style={{
-                    cursor: "pointer",
-                    background: selected ? "var(--accent-calc-soft)" : undefined,
-                  }}
-                >
-                  <div className="se-source__head">
-                    <span className="glyph" style={selected ? { background: "var(--accent-calc)" } : undefined}>
-                      {glyph}
-                    </span>
-                    {d.name}
-                    {selected && cols.length > 0 && (
-                      <span className="se-source__count">{cols.length} cols</span>
+            ) : (
+              availableSources.map((d) => {
+                const vn = varName(d);
+                const selected = sourceIds.includes(d.id);
+                const cols = colsByDataset[d.id] ?? [];
+                return (
+                  <div
+                    key={d.id}
+                    onClick={() => toggleSource(d.id)}
+                    style={{
+                      border: `1px solid ${selected ? "color-mix(in srgb, var(--accent-pri) 35%, transparent)" : "var(--border)"}`,
+                      background: selected ? "var(--pri-soft)" : "var(--surface)",
+                      borderRadius: "var(--r-2)", padding: "10px 11px", cursor: "pointer",
+                      transition: "border-color var(--t-fast), background var(--t-fast)",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        readOnly
+                        tabIndex={-1}
+                        style={{ accentColor: "var(--accent-pri)", width: 15, height: 15, pointerEvents: "none" }}
+                      />
+                      <span style={{ font: "600 13px/1.2 var(--font-sans)", color: "var(--text)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</span>
+                      {selected && cols.length > 0 && (
+                        <span style={{ font: "500 10.5px/1 var(--font-sans)", color: "var(--text-mute)" }}>{cols.length} cols</span>
+                      )}
+                    </div>
+                    {selected ? (
+                      <>
+                        <code className="mono" style={{ display: "block", font: "400 11px/1 var(--font-mono)", color: "var(--accent-pri)", marginTop: 6 }}>{vn}</code>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 }}>
+                          <span className="mono" style={{
+                            font: "400 10.5px/1 var(--font-mono)", padding: "2px 6px", borderRadius: 5,
+                            background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-soft)",
+                          }}>__id__ <span style={{ color: "var(--text-mute)" }}>#</span></span>
+                          {cols.map((c) => (
+                            <span
+                              key={c.id}
+                              className="mono"
+                              style={{
+                                font: "400 10.5px/1 var(--font-mono)", padding: "2px 6px", borderRadius: 5,
+                                background: c.data_type === "relation" ? "var(--rel-soft)" : "var(--surface)",
+                                border: `1px solid ${c.data_type === "relation" ? "color-mix(in srgb, var(--accent-rel) 30%, transparent)" : "var(--border)"}`,
+                                color: c.data_type === "relation" ? "var(--accent-rel)" : "var(--text-soft)",
+                              }}
+                            >
+                              {c.field_key} <span style={{ color: "var(--text-mute)" }}>{colTypeGlyph(c.data_type)}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <p style={{ margin: "6px 0 0", font: "400 11px/1.4 var(--font-sans)", color: "var(--text-mute)" }}>
+                        Click para usar como DataFrame
+                      </p>
                     )}
                   </div>
-                  {selected ? (
-                    <>
-                      <code style={{ fontSize: "var(--fs-11)", color: "var(--accent-calc)", fontFamily: "var(--font-mono)" }}>{vn}</code>
-                      <div className="se-source__cols" style={{ marginTop: "var(--sp-1)" }}>
-                        <span className="se-source__col">__id__ <span className="ty">#</span></span>
-                        {cols.map((c) => (
-                          <span
-                            key={c.id}
-                            className={`se-source__col${c.data_type === "relation" ? " is-rel" : ""}`}
-                          >
-                            {c.field_key} <span className="ty">{colTypeGlyph(c.data_type)}</span>
-                          </span>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <p style={{ margin: 0, fontSize: "var(--fs-11)", color: "var(--text-mute)" }}>
-                      Click para usar como DataFrame
-                    </p>
-                  )}
-                </div>
-              );
-            })
-          )}
+                );
+              })
+            )}
+          </div>
 
           {/* Salida del script (columnas calculadas) — tras una ejecución */}
           {lastResult && !computeError && (
-            <div className="se-source" style={{ background: "var(--surface-alt)" }}>
-              <div className="se-source__head">
-                <span className="glyph" style={{ background: "var(--accent-calc)" }}>ƒ</span>
-                Salida del script
+            <div style={{
+              marginTop: 6, padding: 13, borderRadius: "var(--r-2)", background: "var(--calc-soft)",
+              border: "1px solid color-mix(in srgb, var(--accent-calc) 30%, transparent)",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, font: "600 12.5px/1 var(--font-sans)", color: "var(--accent-calc)" }}>
+                <span className="mono">ƒ</span> Salida del script
               </div>
-              <p style={{ margin: 0, fontSize: "var(--fs-11)", color: "var(--text-soft)", lineHeight: 1.5 }}>
-                Última corrida: <b style={{ color: "var(--accent-calc)" }}>{lastResult.records.toLocaleString()}</b> filas ·{" "}
-                <b style={{ color: "var(--accent-calc)" }}>{lastResult.columns}</b> columnas calculadas.
-              </p>
+              <div style={{ font: "400 12px/1.4 var(--font-sans)", color: "var(--text-soft)", marginTop: 5 }}>
+                Última corrida · <b className="mono" style={{ color: "var(--accent-calc)" }}>{lastResult.records.toLocaleString()}</b> filas ·{" "}
+                <b className="mono" style={{ color: "var(--accent-calc)" }}>{lastResult.columns}</b> columnas calculadas.
+              </div>
             </div>
           )}
         </aside>
 
         {/* ─────────────── CENTER: editor de código (Monaco) ─────────────── */}
-        <section className="se-main">
-          <div className="se-tabs">
-            <span className="se-tab is-active">
-              <FunctionSquare /> {fileName}
+        <section style={{ display: "flex", flexDirection: "column", minWidth: 0, background: EDITOR_BG }}>
+          {/* Tab del archivo */}
+          <div style={{ display: "flex", alignItems: "center", gap: 0, padding: "0 8px", background: EDITOR_BAR, borderBottom: `1px solid ${EDITOR_LINE}` }}>
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 7, padding: "11px 12px",
+              font: "500 12.5px/1 var(--font-mono)", color: EDITOR_TEXT,
+              borderBottom: "2px solid var(--accent-calc)",
+            }}>
+              <FunctionSquare size={14} style={{ color: "var(--accent-calc)" }} /> {fileName}
               {!isNew && (
                 <span
-                  className="close"
-                  onClick={() => navigate(`/datasets/${datasetId}`)}
+                  onClick={(e) => { e.stopPropagation(); navigate(`/datasets/${datasetId}`); }}
                   title="Cerrar"
+                  style={{ display: "grid", placeItems: "center", width: 16, height: 16, borderRadius: 4, cursor: "pointer", color: EDITOR_MUTE }}
                 >
-                  <X style={{ width: 11, height: 11 }} />
+                  <X size={11} />
                 </span>
               )}
             </span>
           </div>
 
-          <div className="se-actions">
-            <span className="se-pill"><FunctionSquare /> ƒ Computed dataset</span>
+          {/* Toolbar de acciones */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: `1px solid ${EDITOR_LINE}`, background: EDITOR_BAR }}>
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 11px", borderRadius: "var(--r-pill)",
+              background: "color-mix(in srgb, var(--accent-calc) 22%, transparent)", color: "var(--accent-calc)",
+              font: "600 12px/1 var(--font-sans)",
+            }}>
+              <span className="mono">ƒ</span> Computed dataset
+            </span>
             {sourceIds.length > 0 && (
-              <span style={{ fontSize: "var(--fs-11)", color: "#b5bbc9", fontFamily: "var(--font-mono)" }}>
+              <span className="mono" style={{ font: "400 11.5px/1 var(--font-mono)", color: EDITOR_MUTE, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 Fuentes: {sourceNames.join(", ")}
               </span>
             )}
-            <span className="grow" />
-            <button
-              className="btn btn--secondary btn--sm"
-              style={{ background: "transparent", color: "#d4d8e2", borderColor: "#3a4051" }}
+            <div style={{ flex: 1 }} />
+
+            <Btn
+              variant="ghost"
+              size="sm"
+              icon={<Sparkles size={15} />}
               onClick={generateTemplate}
               disabled={sourceIds.length === 0}
-            >
-              <Sparkles /> Plantilla
-            </button>
+              style={{ color: "#9aa6b5" }}
+            >Plantilla</Btn>
+
             {!isNew && (
-              <button
-                id="btn-save"
-                className="btn btn--secondary btn--sm"
-                style={{ background: "transparent", color: "#d4d8e2", borderColor: "#3a4051" }}
+              <Btn
+                variant="soft"
+                size="sm"
+                icon={<Save size={15} />}
                 onClick={() => saveMut.mutate()}
                 disabled={saveMut.isPending}
-              >
-                <Save /> {saveMut.isPending ? "Guardando…" : "Guardar"}
-              </button>
+                style={{ background: "#1b2336", borderColor: "#2a3550", color: EDITOR_TEXT, boxShadow: "none" }}
+              >{saveMut.isPending ? "Guardando…" : "Guardar"}</Btn>
             )}
+            {/* Hidden anchor para los atajos Ctrl+S / Ctrl+Enter de Monaco */}
+            <button id="btn-save" style={{ display: "none" }} onClick={() => !isNew && !saveMut.isPending && saveMut.mutate()} />
+
             {isNew ? (
-              <button
-                id="btn-run"
-                className="btn btn--primary btn--sm"
-                style={{ background: "var(--accent-calc)", borderColor: "var(--accent-calc)", opacity: !dsName.trim() || sourceIds.length === 0 ? 0.45 : 1 }}
+              <Btn
+                variant="primary"
+                tone="calc"
+                size="sm"
+                icon={<Play size={15} />}
                 onClick={() => createMut.mutate()}
                 disabled={!dsName.trim() || sourceIds.length === 0 || createMut.isPending}
               >
-                <Play /> {createMut.isPending ? "Creando…" : "Crear dataset"}
-              </button>
+                {createMut.isPending ? "Creando…" : <>Crear dataset</>}
+              </Btn>
             ) : (
-              <button
-                id="btn-run"
-                className="btn btn--primary btn--sm"
-                style={{ background: "var(--accent-calc)", borderColor: "var(--accent-calc)", opacity: sourceIds.length === 0 ? 0.45 : 1 }}
+              <Btn
+                variant="primary"
+                tone="calc"
+                size="sm"
+                icon={<Play size={15} />}
                 onClick={() => computeMut.mutate()}
                 disabled={sourceIds.length === 0 || isRunning}
               >
-                <Play /> {isRunning ? "Ejecutando…" : "Ejecutar"}
-              </button>
+                {isRunning ? "Ejecutando…" : <>Ejecutar <Kbd>⌃↵</Kbd></>}
+              </Btn>
             )}
+            {/* Anchor invisible que dispara el botón de ejecutar vía atajo */}
+            <button
+              id="btn-run"
+              style={{ display: "none" }}
+              onClick={() => {
+                if (isNew) {
+                  if (dsName.trim() && sourceIds.length > 0 && !createMut.isPending) createMut.mutate();
+                } else if (sourceIds.length > 0 && !isRunning) {
+                  computeMut.mutate();
+                }
+              }}
+            />
           </div>
 
-          {/* Monaco real ocupa el row 1fr del grid .se-main */}
-          <div style={{ minHeight: 0, overflow: "hidden" }}>
+          {/* Monaco real ocupa el resto */}
+          <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
             <Editor
               height="100%"
               language="python"
@@ -536,111 +613,117 @@ export default function ComputedDatasetEditor() {
             />
           </div>
 
-          <div className="se-foot">
-            <span className="se-foot__item"><CheckCircle2 /> Python 3.11 · pandas · numpy · duckdb</span>
-            {hasOutput && (
-              <span className="se-foot__item">
-                {computeError
-                  ? <><AlertTriangle /> {computeError.error.slice(0, 50)}{computeError.error.length > 50 ? "…" : ""}</>
-                  : <><Clock /> {lastResult!.records.toLocaleString()} filas · {lastResult!.columns} columnas</>}
+          {/* Status bar */}
+          <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "7px 16px", borderTop: `1px solid ${EDITOR_LINE}`, background: EDITOR_BAR, font: "400 11.5px/1 var(--font-mono)", color: EDITOR_MUTE }}>
+            <span>Python 3.11</span><span>pandas</span><span>numpy</span><span>duckdb</span>
+            <div style={{ flex: 1 }} />
+            {hasOutput ? (
+              computeError ? (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "var(--danger)" }}>
+                  <span>●</span> {computeError.error.slice(0, 40)}{computeError.error.length > 40 ? "…" : ""}
+                </span>
+              ) : (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "var(--success)" }}>
+                  <span>●</span> {lastResult!.records.toLocaleString()} filas · {lastResult!.columns} cols
+                </span>
+              )
+            ) : (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "var(--success)" }}>
+                <span>●</span> OK
               </span>
             )}
-            <span className="grow" />
-            <span className="se-foot__item">UTF-8</span>
-            <span className="se-foot__item">Ln {cursorPos.line}, Col {cursorPos.col}</span>
+            <span>Ln {cursorPos.line}, Col {cursorPos.col}</span>
           </div>
         </section>
 
         {/* ─────────────── RIGHT: salida / preview ─────────────── */}
-        <aside className="se-out">
-          <div className="se-out__head">
-            <span className="se-out__title">
-              {computeError
-                ? <><AlertTriangle style={{ color: "var(--accent-rel)" }} /> Resultado</>
-                : <><CheckCircle2 /> Resultado</>}
-            </span>
-            {lastResult && !computeError && (
-              <span style={{ fontSize: "var(--fs-11)", color: "var(--text-mute)" }}>
-                <b style={{ color: "var(--success)", fontFamily: "var(--font-mono)", fontWeight: "var(--fw-semibold)" }}>
-                  {lastResult.records.toLocaleString()} filas
-                </b>
-              </span>
-            )}
+        <aside style={{ borderLeft: "1px solid var(--border)", display: "flex", flexDirection: "column", minHeight: 0, background: "var(--surface)" }}>
+          {/* Tabs */}
+          <div style={{ display: "flex", gap: 2, padding: "10px 12px 0", borderBottom: "1px solid var(--border)", flex: "none" }}>
+            {([["preview", "Resumen"], ["logs", "Logs"]] as const).map(([k, l]) => {
+              const isActive = outTab === k;
+              return (
+                <button
+                  key={k}
+                  onClick={() => setOutTab(k)}
+                  style={{
+                    font: `${isActive ? 600 : 500} 13px var(--font-sans)`, padding: "8px 12px",
+                    border: "none", background: "transparent", cursor: "pointer",
+                    color: isActive ? "var(--text)" : "var(--text-soft)",
+                    borderBottom: isActive ? "2px solid var(--accent-pri)" : "2px solid transparent",
+                    marginBottom: -1,
+                  }}
+                >{l}</button>
+              );
+            })}
           </div>
 
-          <div className="se-out__tabs">
-            <span
-              className={`se-out__tab${outTab === "preview" ? " is-active" : ""}`}
-              onClick={() => setOutTab("preview")}
-            >
-              Resumen
-            </span>
-            <span
-              className={`se-out__tab${outTab === "logs" ? " is-active" : ""}`}
-              onClick={() => setOutTab("logs")}
-            >
-              Logs
-            </span>
-          </div>
-
-          <div className="se-out__body">
+          <div style={{ padding: 16, flex: 1, overflow: "auto" }}>
             {!hasOutput && (
-              <p style={{ fontSize: "var(--fs-12)", color: "var(--text-mute)", lineHeight: 1.6 }}>
+              <p style={{ font: "400 12.5px/1.6 var(--font-sans)", color: "var(--text-mute)", margin: 0 }}>
                 {isNew
                   ? "Crea el dataset para poder ejecutar el script y ver el resultado aquí."
-                  : "Pulsa “Ejecutar” (o Ctrl+↵) para correr el script. Aquí verás las métricas y los logs de la corrida."}
+                  : "Pulsa “Ejecutar” (o ⌃↵) para correr el script. Aquí verás las métricas y los logs de la corrida."}
               </p>
             )}
 
             {/* Resumen / métricas */}
             {outTab === "preview" && lastResult && !computeError && (
               <>
-                <div className="se-out__metric is-success">
-                  <span className="label">Registros generados</span>
-                  <span className="val">{lastResult.records.toLocaleString()}</span>
+                <div style={{
+                  display: "inline-flex", alignItems: "center", gap: 7, padding: "5px 11px", borderRadius: "var(--r-pill)",
+                  background: "var(--success-soft)", color: "var(--success)", font: "600 12px var(--font-sans)", marginBottom: 16,
+                }}>
+                  <CheckCircle2 size={14} /> Ejecutado correctamente
                 </div>
-                <div className="se-out__metric">
-                  <span className="label">Columnas calculadas</span>
-                  <span className="val">{lastResult.columns}</span>
-                </div>
-                <div className="se-out__metric">
-                  <span className="label">Errores</span>
-                  <span className="val" style={{ color: "var(--text-mute)" }}>0</span>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  {([
+                    ["filas", lastResult.records.toLocaleString(), "var(--accent-pri)"],
+                    ["columnas", String(lastResult.columns), "var(--accent-pri)"],
+                    ["errores", "0", "var(--success)"],
+                    ["warnings", "0", "var(--text-soft)"],
+                  ] as const).map(([l, v, c], i) => (
+                    <div key={i} style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--r-2)", padding: "12px 14px" }}>
+                      <div className="mono" style={{ font: "700 22px var(--font-mono)", color: c }}>{v}</div>
+                      <div style={{ font: "400 12px var(--font-sans)", color: "var(--text-mute)" }}>{l}</div>
+                    </div>
+                  ))}
                 </div>
 
                 {!isNew && (
-                  <button
-                    className="btn btn--primary"
-                    style={{ width: "100%", marginTop: "var(--sp-4)", background: "var(--accent-calc)", borderColor: "var(--accent-calc)" }}
-                    onClick={() => navigate(`/datasets/${datasetId}`)}
-                  >
-                    Ver dataset →
-                  </button>
+                  <div style={{ marginTop: 18 }}>
+                    <Btn
+                      variant="tint"
+                      tone="calc"
+                      size="sm"
+                      iconR={<ArrowRight size={15} />}
+                      full
+                      onClick={() => navigate(`/datasets/${datasetId}`)}
+                    >Ver dataset{dataset?.name ? ` ${dataset.name}` : ""}</Btn>
+                  </div>
                 )}
               </>
             )}
 
             {/* Logs / error */}
             {outTab === "logs" && hasOutput && (
-              <div className="se-log">
-                {computeError ? (
-                  <>
-                    <div><span className="warn">⚠</span> Error en la ejecución</div>
-                    <div style={{ color: "#ffb3b3", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{computeError.error}</div>
-                    {computeError.traceback && (
-                      <div style={{ color: "#9aa0ac", whiteSpace: "pre-wrap", wordBreak: "break-word", marginTop: "var(--sp-2)" }}>
-                        {computeError.traceback}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <div><span className="ok">✓</span> Script iniciado · {fileName}</div>
-                    <div>Cargando {sourceNames.length} dataset(s) fuente…</div>
-                    <div><span className="ok">✓</span> {lastResult!.records.toLocaleString()} registros escritos · {lastResult!.columns} columnas</div>
-                  </>
-                )}
-              </div>
+              computeError ? (
+                <pre className="mono" style={{ font: "400 12px/1.7 var(--font-mono)", margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                  <span style={{ color: "var(--danger)" }}>⚠ Error en la ejecución</span>{"\n"}
+                  <span style={{ color: "var(--danger)" }}>{computeError.error}</span>
+                  {computeError.traceback && (
+                    <>{"\n\n"}<span style={{ color: "var(--text-mute)" }}>{computeError.traceback}</span></>
+                  )}
+                </pre>
+              ) : (
+                <pre className="mono" style={{ font: "400 12px/1.7 var(--font-mono)", color: "var(--text-soft)", margin: 0, whiteSpace: "pre-wrap" }}>
+                  <span style={{ color: "var(--success)" }}>✓</span> Script iniciado · {fileName}{"\n"}
+                  Cargando {sourceNames.length} dataset(s) fuente…{"\n"}
+                  <span style={{ color: "var(--success)" }}>✓</span> {lastResult!.records.toLocaleString()} registros escritos · {lastResult!.columns} columnas{"\n"}
+                  <span style={{ color: "var(--success)" }}>✓</span> compute finalizado
+                </pre>
+              )
             )}
           </div>
         </aside>

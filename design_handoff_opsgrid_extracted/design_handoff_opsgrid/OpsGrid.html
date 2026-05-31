@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light" data-palette="citrus" data-density="regular">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpsGrid · Hi-Fi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="opsgrid/tokens.css" />
+<style>
+  h1, h2, h3, p { margin: 0; }
+  input::placeholder { color: var(--text-mute); }
+  button { font-family: var(--font-sans); }
+  @keyframes ogPop { from { transform: translateY(-6px) scale(.99); } to { transform: none; } }
+  .og-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-3); transform: translateY(-2px); }
+  .og-card:focus-visible { box-shadow: var(--shadow-focus); border-color: var(--accent-pri); }
+  .og-newcard:hover { border-color: var(--accent-pri); color: var(--accent-pri); background: var(--pri-soft); }
+  .og-menu-item:hover { background: var(--surface-alt); }
+  .og-btn:hover { filter: brightness(1.04); transform: translateY(-1px); box-shadow: var(--shadow-2); }
+  .og-btn[data-variant="ghost"]:hover { background: var(--surface-alt); transform: none; box-shadow: none; }
+  .og-iconbtn:hover { background: var(--surface-alt); color: var(--text); }
+  .og-heatcell:hover { filter: brightness(1.05); box-shadow: var(--shadow-1); transform: translateY(-1px); }
+  .og-gridrow:hover { background: var(--surface-alt) !important; }
+  .og-rowact { opacity: 0; transition: opacity var(--t-fast); }
+  .og-gridrow:hover .og-rowact { opacity: 1; }
+  .og-rowact .og-iconbtn:hover { background: var(--surface) !important; color: var(--text) !important; }
+  .og-navitem:hover { background: var(--surface-alt); }
+  @keyframes ogPop { from { transform: translateY(-6px) scale(.99); } to { transform: none; } }
+  @keyframes ogLive { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.8); } }
+  .og-live { animation: ogLive 1.6s ease-in-out infinite; }
+  @keyframes ogFade { from { } to { } }
+  @keyframes ogSlide { from { transform: translateX(16px); } to { transform: none; } }
+  .og-bubble { position: absolute; top: calc(100% + 4px); left: 0; z-index: 12; display: flex; align-items: center; gap: 4px; padding: 5px 9px; border-radius: var(--r-2); background: var(--danger); color: #fff; font: 600 11.5px/1.3 var(--font-sans); white-space: nowrap; box-shadow: var(--shadow-2); }
+  @keyframes ogShake { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }
+  .og-shake { animation: ogShake 380ms; }
+  @keyframes ogFlash { from { background-color: var(--success-soft); } to { background-color: transparent; } }
+  .og-flash { animation: ogFlash 650ms ease-out; }
+  .og-shimmer { background: linear-gradient(90deg, var(--surface-alt) 25%, var(--border) 38%, var(--surface-alt) 62%); background-size: 300% 100%; animation: ogShimmer 1.3s ease-in-out infinite; }
+  @keyframes ogShimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+  @keyframes ogRise { from { transform: translateY(10px); } to { transform: none; } }
+  .og-rise { animation: ogRise .42s cubic-bezier(.2,.7,.3,1) both; }
+  html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *::after { transition: background-color .32s ease, border-color .32s ease, color .26s ease, fill .26s ease, box-shadow .32s ease !important; }
+  .og-wsbtn:hover, .og-pop { will-change: transform; }
+  /* palette picker */
+  .og-pal { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .og-pal button { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: var(--r-2); border: 1px solid var(--border); background: var(--surface); cursor: pointer; color: var(--text); transition: all var(--t-fast); }
+  .og-pal button:hover { border-color: var(--border-strong); }
+  .og-pal button[data-on="true"] { border-color: var(--accent-pri); box-shadow: 0 0 0 1px var(--accent-pri) inset; }
+  .og-pal .dots { display: flex; gap: 3px; }
+  .og-pal .dots span { width: 11px; height: 11px; border-radius: 999px; }
+  .og-pal .pname { font: 600 12px/1 var(--font-sans); text-transform: capitalize; }
+</style>
+</head>
+<body>
+<template id="__bundler_thumbnail">
+  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100" height="100" rx="20" fill="#1e4cff"/>
+    <g fill="none" stroke="#fff" stroke-width="4.5" stroke-linejoin="round">
+      <rect x="30" y="30" width="18" height="18" rx="3"/>
+      <rect x="52" y="30" width="18" height="18" rx="3"/>
+      <rect x="30" y="52" width="18" height="18" rx="3"/>
+      <rect x="52" y="52" width="18" height="18" rx="3"/>
+    </g>
+  </svg>
+</template>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="wireframes/tweaks-panel.jsx"></script>
+<script type="text/babel" src="opsgrid/ds.jsx"></script>
+<script type="text/babel" src="opsgrid/shell.jsx"></script>
+<script type="text/babel" src="opsgrid/home.jsx"></script>
+<script type="text/babel" src="opsgrid/matrix.jsx"></script>
+<script type="text/babel" src="opsgrid/datasetview.jsx"></script>
+<script type="text/babel" src="opsgrid/computed.jsx"></script>
+<script type="text/babel" src="opsgrid/billing.jsx"></script>
+<script type="text/babel" src="opsgrid/admin.jsx"></script>
+<script type="text/babel" src="opsgrid/settings.jsx"></script>
+<script type="text/babel" src="opsgrid/flows.jsx"></script>
+<script type="text/babel" src="opsgrid/auth.jsx"></script>
+<script type="text/babel" src="opsgrid/modals.jsx"></script>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const PALETTE_HEX = {
+  citrus:   ["#1e4cff", "#ff6a18", "#e436b6"],
+  electric: ["#4361ff", "#ff4d6d", "#b14dff"],
+  mint:     ["#0ea371", "#ff8a3d", "#c44ddb"],
+  dusk:     ["#7b6cff", "#f0875a", "#d96bb4"],
+  tropic:   ["#0bb3c9", "#ff7a45", "#f25c8a"],
+  y2k:      ["#3b5bff", "#ff5fb0", "#9b6bff"],
+};
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "dark": false,
+  "palette": "y2k",
+  "density": "regular"
+}/*EDITMODE-END*/;
+
+function Placeholder({ route }) {
+  const meta = {
+    workspaces: ["workspaces", "Workspaces", "CRUD de equipos — fuera del alcance de esta maqueta."],
+    audit:      ["audit", "Registro de auditoría", "Línea de tiempo inmutable — fuera del alcance de esta maqueta."],
+  }[route] || ["datasets", "Pantalla", ""];
+  return (
+    <div style={{ display: "grid", placeItems: "center", height: "100%", padding: 40 }}>
+      <div style={{ textAlign: "center", maxWidth: 380 }}>
+        <span style={{ display: "grid", placeItems: "center", width: 64, height: 64, margin: "0 auto 18px", borderRadius: "var(--r-4)", background: "var(--surface-alt)", color: "var(--text-mute)" }}>
+          <Icon name={meta[0]} size={30} />
+        </span>
+        <h2 style={{ font: "700 21px/1.2 var(--font-sans)", color: "var(--text)" }}>{meta[1]}</h2>
+        <p style={{ font: "400 14px/1.5 var(--font-sans)", color: "var(--text-soft)", marginTop: 8 }}>{meta[2]}</p>
+        <p style={{ font: "400 13px/1.5 var(--font-sans)", color: "var(--text-mute)", marginTop: 14 }}>En este hi-fi navegable están <strong style={{ color: "var(--accent-pri)" }}>Datasets</strong>, <strong style={{ color: "var(--accent-pri)" }}>Scripts</strong>, <strong style={{ color: "var(--accent-pri)" }}>Personas</strong> y <strong style={{ color: "var(--accent-pri)" }}>Facturación</strong>.</p>
+      </div>
+    </div>
+  );
+}
+
+function PalettePicker({ value, onChange }) {
+  return (
+    <div className="og-pal" style={{ padding: "4px 2px 6px" }}>
+      {Object.entries(PALETTE_HEX).map(([k, hex]) => (
+        <button key={k} data-on={value === k} onClick={() => onChange(k)}>
+          <span className="dots">{hex.map((c, i) => <span key={i} style={{ background: c }} />)}</span>
+          <span className="pname">{k}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [route, setRoute] = useState("home");
+
+  useEffect(() => {
+    const r = document.documentElement;
+    r.setAttribute("data-theme", t.dark ? "dark" : "light");
+    r.setAttribute("data-palette", t.palette);
+    r.setAttribute("data-density", t.density);
+  }, [t.dark, t.palette, t.density]);
+
+  const first = React.useRef(true);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    const r = document.documentElement;
+    r.classList.add("theme-anim");
+    const id = setTimeout(() => r.classList.remove("theme-anim"), 420);
+    return () => clearTimeout(id);
+  }, [t.dark, t.palette]);
+
+  if (route === "login") return <Login onEnter={() => setRoute("home")} />;
+
+  const screen = (() => {
+    switch (route) {
+      case "home":       return <Home onOpen={() => setRoute("dataset")} onCreate={() => setRoute("create")} />;
+      case "dataset":    return <DatasetView onBack={() => setRoute("home")} onNew={() => setRoute("record")} />;
+      case "create":     return <CreateDataset onBack={() => setRoute("home")} />;
+      case "record":     return <RecordForm onBack={() => setRoute("dataset")} />;
+      case "matrix":     return <Matrix />;
+      case "scriptshub": return <ScriptsHub onEdit={() => setRoute("scripts")} />;
+      case "scripts":    return <ScriptsEditor />;
+      case "workspaces": return <AdminWorkspaces />;
+      case "audit":      return <AdminAudit />;
+      case "settings":   return <Settings />;
+      case "billing":    return <Billing />;
+      default:           return <Placeholder route={route} />;
+    }
+  })();
+
+  return (
+    <React.Fragment>
+      <Shell route={route} setRoute={setRoute} theme={t.dark ? "dark" : "light"} onToggleTheme={() => setTweak("dark", !t.dark)}>
+        {screen}
+      </Shell>
+      <ModalHost />
+
+      <TweaksPanel>
+        <TweakSection label="Tema" />
+        <TweakToggle label="Modo oscuro" value={t.dark} onChange={(v) => setTweak("dark", v)} />
+        <TweakRadio label="Densidad" value={t.density} options={["compact", "regular", "comfy"]} onChange={(v) => setTweak("density", v)} />
+        <TweakSection label="Paleta" />
+        <PalettePicker value={t.palette} onChange={(v) => setTweak("palette", v)} />
+      </TweaksPanel>
+    </React.Fragment>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

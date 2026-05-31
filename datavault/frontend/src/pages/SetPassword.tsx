@@ -1,8 +1,26 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
+import { Lock, Eye, EyeOff, ArrowRight, AlertTriangle } from "lucide-react";
 import api from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import type { AuthUser } from "../auth/AuthContext";
+import { Btn } from "../components/ui/kit";
+
+const fieldLabel: React.CSSProperties = {
+  font: "500 13px/1 var(--font-sans)", color: "var(--text-soft)", marginBottom: 7, display: "block",
+};
+const fieldBox: React.CSSProperties = {
+  display: "flex", alignItems: "center", gap: 8, height: 44, padding: "0 13px",
+  borderRadius: "var(--r-2)", border: "1px solid var(--border)", background: "var(--surface)",
+};
+const fieldInput: React.CSSProperties = {
+  flex: 1, border: "none", background: "transparent", outline: "none",
+  color: "var(--text)", font: "400 14.5px/1 var(--font-sans)",
+};
+const fieldHint: React.CSSProperties = {
+  font: "400 12px/1 var(--font-sans)", color: "var(--danger)", marginTop: 6, display: "block",
+};
 
 export default function SetPassword() {
   const [params] = useSearchParams();
@@ -11,11 +29,12 @@ export default function SetPassword() {
   const token = params.get("token") ?? "";
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
+  const [show, setShow] = useState(false);
 
   const mut = useMutation({
     mutationFn: async () => {
       const { data } = await api.post("/auth/set-password", { token, password: pw });
-      return data as { access_token: string; user: { id: string; email: string; username: string; role: string } };
+      return data as { access_token: string; user: AuthUser };
     },
     onSuccess: (data) => {
       login(data.user);
@@ -38,56 +57,67 @@ export default function SetPassword() {
   }, [tokenInvalid, mut.isError, mut.error]);
 
   return (
-    <div style={{
-      minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
-      background: "var(--color-bg)", padding: 20,
+    <div className="og" style={{
+      minHeight: "100vh", display: "grid", placeItems: "center", background: "var(--bg)", padding: 20,
     }}>
       <div style={{
-        background: "var(--color-surface)", borderRadius: 14, padding: "32px 36px",
-        width: "min(420px, 95vw)", boxShadow: "0 12px 36px rgba(0,0,0,0.12)",
+        background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-4)",
+        padding: "32px 36px", width: "min(420px, 95vw)", boxShadow: "var(--shadow-3)",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
-          <img src="/opsgrid-logo.svg" alt="OpsGrid" style={{ width: 36, height: 36 }} />
-          <div>
-            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>Activa tu cuenta</h1>
-            <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--color-text-muted)" }}>
-              Define una contraseña para empezar
-            </p>
-          </div>
-        </div>
+        <span style={{
+          display: "grid", placeItems: "center", width: 48, height: 48, borderRadius: "var(--r-3)",
+          background: "var(--pri-soft)", color: "var(--accent-pri)", marginBottom: 18,
+        }}><Lock size={22} /></span>
+
+        <h1 style={{ margin: "0 0 6px", font: "700 24px/1.1 var(--font-sans)", letterSpacing: "-.02em" }}>
+          Activa tu cuenta
+        </h1>
+        <p style={{ margin: "0 0 24px", font: "400 14px/1.5 var(--font-sans)", color: "var(--text-soft)" }}>
+          Define una contraseña para empezar.
+        </p>
 
         {error && (
           <div style={{
-            padding: 10, background: "var(--pm-red-50, #fff5f5)",
-            border: "1px solid var(--pm-red-200, #fecaca)", color: "var(--pm-red-600, #b91c1c)",
-            borderRadius: 8, fontSize: 13, marginBottom: 14,
+            display: "flex", alignItems: "center", gap: 8, marginBottom: 16, padding: "10px 12px",
+            borderRadius: "var(--r-2)", background: "var(--danger-soft)", color: "var(--danger)",
+            font: "500 13px/1.4 var(--font-sans)",
           }}>
-            ⚠ {error}
+            <AlertTriangle size={16} style={{ flex: "none" }} /> <span>{error}</span>
           </div>
         )}
 
-        <div className="form-group">
-          <label className="form-label">Nueva contraseña</label>
-          <input type="password" value={pw} onChange={(e) => setPw(e.target.value)}
-            placeholder="Mínimo 8 caracteres" autoFocus
-            disabled={tokenInvalid || mut.isPending} />
-          {pwTooShort && <span style={{ fontSize: 12, color: "var(--pm-red-500)" }}>Mínimo 8 caracteres</span>}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <label style={{ display: "block" }}>
+            <span style={fieldLabel}>Nueva contraseña</span>
+            <div style={fieldBox}>
+              <input type={show ? "text" : "password"} value={pw} placeholder="Mínimo 8 caracteres" autoFocus
+                disabled={tokenInvalid || mut.isPending} onChange={(e) => setPw(e.target.value)} style={fieldInput} />
+              <button type="button" aria-label={show ? "Ocultar" : "Ver"} onClick={() => setShow((s) => !s)}
+                style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--text-mute)", padding: 2, display: "inline-flex" }}>
+                {show ? <EyeOff size={16} strokeWidth={1.75} /> : <Eye size={16} strokeWidth={1.75} />}
+              </button>
+            </div>
+            {pwTooShort && <span style={fieldHint}>Mínimo 8 caracteres</span>}
+          </label>
+
+          <label style={{ display: "block" }}>
+            <span style={fieldLabel}>Confirmar contraseña</span>
+            <div style={fieldBox}>
+              <input type={show ? "text" : "password"} value={pw2} placeholder="••••••••"
+                disabled={tokenInvalid || mut.isPending}
+                onChange={(e) => setPw2(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && canSubmit) mut.mutate(); }}
+                style={fieldInput} />
+            </div>
+            {pwMismatch && <span style={fieldHint}>Las contraseñas no coinciden</span>}
+          </label>
         </div>
 
-        <div className="form-group">
-          <label className="form-label">Confirmar contraseña</label>
-          <input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && canSubmit) mut.mutate(); }}
-            disabled={tokenInvalid || mut.isPending} />
-          {pwMismatch && <span style={{ fontSize: 12, color: "var(--pm-red-500)" }}>Las contraseñas no coinciden</span>}
-        </div>
-
-        <button className="btn btn-primary"
-          disabled={!canSubmit}
-          onClick={() => mut.mutate()}
-          style={{ width: "100%", marginTop: 8 }}>
-          {mut.isPending ? "Activando…" : "Activar cuenta"}
-        </button>
+        <Btn variant="primary" full disabled={!canSubmit} onClick={() => mut.mutate()}
+          iconR={!mut.isPending ? <ArrowRight size={17} /> : undefined}
+          style={{ marginTop: 22, height: 46 }}>
+          {mut.isPending ? "Activando…" : "Activar y entrar"}
+        </Btn>
       </div>
     </div>
   );
